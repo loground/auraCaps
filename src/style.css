@@ -296,39 +296,51 @@ button:disabled {
   height: min(72vh, calc(100vh - 8rem));
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, 1fr);
   gap: 1rem;
 }
 
 .collection-card {
-  background: linear-gradient(180deg, rgba(39, 11, 10, 0.92), rgba(21, 7, 7, 0.92));
-  border: 1px solid rgba(255, 141, 98, 0.45);
-  padding: 0.9rem 0.7rem;
+  background: transparent;
+  border: none;
+  padding: 0.35rem;
+  aspect-ratio: 1 / 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
   min-height: 0;
-}
-
-.collection-card span {
-  color: #ffc8aa;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  perspective: 900px;
 }
 
 .disc-card {
-  width: clamp(84px, 10vmin, 132px);
-  height: clamp(84px, 10vmin, 132px);
+  width: clamp(128px, 16vmin, 208px);
+  height: clamp(128px, 16vmin, 208px);
   border-radius: 50%;
   border: 2px solid rgba(255, 170, 132, 0.65);
   box-shadow: 0 0 0 2px rgba(97, 19, 15, 0.65), 0 16px 30px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   transform-style: preserve-3d;
-  transition: transform 220ms ease;
+  transition: transform 680ms cubic-bezier(0.22, 1, 0.36, 1);
   background: radial-gradient(circle at 35% 30%, #5b1f18, #180607);
   flex: 0 0 auto;
+  position: relative;
+}
+
+.disc-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.disc-face.disc-front {
+  transform: rotateY(0deg) translateZ(0.5px);
+}
+
+.disc-face.disc-back {
+  transform: rotateY(180deg) translateZ(0.5px);
 }
 
 .disc-card img {
@@ -336,28 +348,19 @@ button:disabled {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
+  backface-visibility: hidden;
 }
 
-.collection-card:hover .disc-card {
-  animation: hover-spin 1.2s linear infinite;
-}
-
-@keyframes hover-spin {
-  from {
-    transform: rotateY(0deg) rotateZ(0deg);
-  }
-  to {
-    transform: rotateY(360deg) rotateZ(12deg);
-  }
+.disc-card:hover {
+  transform: rotateY(180deg);
 }
 
 @media (max-width: 640px) {
   .panel {
-    top: auto;
-    bottom: 1rem;
-    left: 1rem;
-    width: calc(100vw - 2rem);
-    max-height: 56vh;
+    top: 0.75rem;
+    left: 0.75rem;
+    width: min(280px, 62vw);
+    max-height: 48vh;
     overflow: auto;
   }
 
@@ -370,10 +373,34 @@ button:disabled {
 
   .menu-btn {
     width: 100%;
+    min-width: 0;
+    font-size: 1.35rem;
+    padding: 0.5rem 0.7rem;
   }
 
   .collection-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    height: min(72vh, calc(100vh - 8rem));
+    width: min(420px, 100%);
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .collection-screen {
+    overflow: auto;
+    padding-inline: 0.9rem;
+  }
+
+  .collection-card {
+    aspect-ratio: auto;
+    min-height: 190px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .mode-play .panel {
+    width: min(250px, 56vw);
+    max-height: 42vh;
   }
 }

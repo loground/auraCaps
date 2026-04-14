@@ -69,6 +69,7 @@ export class DiscDropGame {
 
     this.applyArena(this.activeArenaKey);
     this.buildRoundBodies();
+    this.applyResponsiveCamera();
 
     this.running = true;
     this.animate();
@@ -657,9 +658,21 @@ export class DiscDropGame {
     this.renderer.render(this.scene, this.camera);
   }
 
+  applyResponsiveCamera() {
+    if (window.innerWidth <= 760) {
+      this.camera.position.set(0, 12.4, 19.5);
+    } else {
+      this.camera.position.set(0, 9, 14);
+    }
+    this.controls.target.set(0, 0.35, 0);
+    this.camera.lookAt(0, 0.35, 0);
+    this.controls.update();
+  }
+
   handleResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
+    this.applyResponsiveCamera();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 

@@ -188,6 +188,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
     titleMesh.position.set(0, 8.3, 0.6);
     titleMesh.castShadow = true;
     scene.add(titleMesh);
+    updateResponsiveLayout();
   });
 
   let demon = null;
@@ -309,6 +310,16 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     titleUniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
+    updateResponsiveLayout();
+  };
+
+  const updateResponsiveLayout = () => {
+    if (!titleMesh) {
+      return;
+    }
+    const isMobile = window.innerWidth <= 640;
+    titleMesh.scale.setScalar(isMobile ? 0.58 : 1);
+    titleMesh.position.y = isMobile ? 9.1 : 8.3;
   };
 
   handleResize();

@@ -14,9 +14,13 @@ export function mountCollectionScreen({ app, onBack }) {
     card.className = "collection-card";
     card.innerHTML = `
       <div class="disc-card" aria-label="Aura cap ${capNumber}">
-        <img src="/caps/${capNumber}.png" alt="Aura cap ${capNumber}" />
+        <div class="disc-face disc-front">
+          <img src="/caps/${capNumber}.png" alt="Aura cap ${capNumber}" />
+        </div>
+        <div class="disc-face disc-back">
+          <img src="/caps/back1.png" alt="Aura cap back" />
+        </div>
       </div>
-      <span>cap ${String(capNumber).padStart(2, "0")}</span>
     `;
     grid.appendChild(card);
   }
