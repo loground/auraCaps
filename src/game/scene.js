@@ -13,7 +13,7 @@ export function createRenderer(app) {
 
 export function createWorldScene(renderer) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#0b1021");
+  scene.background = new THREE.Color("#1b0706");
 
   const camera = new THREE.PerspectiveCamera(
     52,
@@ -32,10 +32,10 @@ export function createWorldScene(renderer) {
   controls.maxDistance = 28;
   controls.maxPolarAngle = Math.PI * 0.495;
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+  const ambientLight = new THREE.AmbientLight(0xffccb3, 0.73);
   scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+  const directionalLight = new THREE.DirectionalLight(0xffd2b0, 1.49);
   directionalLight.position.set(8, 14, 8);
   directionalLight.castShadow = true;
   directionalLight.shadow.mapSize.set(1024, 1024);
@@ -71,6 +71,8 @@ export function createWorldScene(renderer) {
     scene,
     camera,
     controls,
+    floorMesh,
+    tableMesh,
     floorMaterial,
     tableMaterial,
   };

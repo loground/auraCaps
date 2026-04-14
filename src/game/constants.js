@@ -1,5 +1,5 @@
 export const FLOOR_RADIUS = 14;
-export const TABLE_RADIUS = 12.5;
+export const TABLE_RADIUS = 10;
 
 export const DISC_RADIUS = 1.25;
 export const DISC_HEIGHT = 0.14;

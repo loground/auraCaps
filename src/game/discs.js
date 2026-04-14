@@ -1,8 +1,8 @@
 import * as THREE from "three";
 
-export function createYinYangTexture(renderer) {
+export function loadDiscTexture(renderer, path) {
   const textureLoader = new THREE.TextureLoader();
-  const texture = textureLoader.load("/yingyang.png");
+  const texture = textureLoader.load(path);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.center.set(0.5, 0.5);
   texture.repeat.set(1, 1);
@@ -11,7 +11,13 @@ export function createYinYangTexture(renderer) {
   return texture;
 }
 
-export function createDiscMesh({ radius, height, sideColor, redFaceTexture }) {
+export function createDiscMesh({
+  radius,
+  height,
+  sideColor,
+  topFaceMap = null,
+  bottomFaceMap = null,
+}) {
   const geometry = new THREE.CylinderGeometry(radius, radius, height, 64);
   const materials = [
     new THREE.MeshStandardMaterial({
@@ -20,13 +26,14 @@ export function createDiscMesh({ radius, height, sideColor, redFaceTexture }) {
       metalness: 0.28,
     }),
     new THREE.MeshStandardMaterial({
-      color: "#29c96f",
+      color: "#ffffff",
+      map: topFaceMap,
       roughness: 0.42,
       metalness: 0.1,
     }),
     new THREE.MeshStandardMaterial({
       color: "#ffffff",
-      map: redFaceTexture,
+      map: bottomFaceMap,
       roughness: 0.42,
       metalness: 0.1,
     }),
@@ -36,4 +43,16 @@ export function createDiscMesh({ radius, height, sideColor, redFaceTexture }) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+export function setDiscFaceTextures({ mesh, topFaceMap, bottomFaceMap }) {
+  const materials = mesh.material;
+  if (!Array.isArray(materials) || materials.length < 3) {
+    return;
+  }
+
+  materials[1].map = topFaceMap;
+  materials[1].needsUpdate = true;
+  materials[2].map = bottomFaceMap;
+  materials[2].needsUpdate = true;
 }

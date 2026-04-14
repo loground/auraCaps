@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+@font-face {
+  font-family: "Hell";
+  src: url("/fonts/hell.ttf") format("truetype");
+  font-display: swap;
+}
+
 html,
 body,
 #app {
@@ -45,6 +51,57 @@ canvas {
   flex-direction: column;
   gap: 0.8rem;
   pointer-events: auto;
+}
+
+.menu-buttons.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.menu-preloader {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-content: center;
+  gap: 1rem;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(98, 20, 16, 0.5), rgba(8, 3, 3, 0.95)),
+    linear-gradient(180deg, rgba(26, 7, 6, 0.9), rgba(7, 2, 2, 0.95));
+  transition: opacity 280ms ease;
+}
+
+.menu-preloader.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.menu-preloader p {
+  margin: 0;
+  color: #ffbf9c;
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.menu-preloader .sigil {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 140, 101, 0.8);
+  border-top-color: rgba(255, 233, 168, 0.95);
+  box-shadow: 0 0 20px rgba(255, 88, 45, 0.5), inset 0 0 14px rgba(255, 90, 50, 0.4);
+  animation: sigil-spin 1.2s linear infinite;
+}
+
+@keyframes sigil-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .menu-btn {
@@ -169,15 +226,65 @@ button:disabled {
 .collection-screen {
   width: 100%;
   height: 100%;
-  padding: 3rem 1.5rem 1.5rem;
+  padding: 2.2rem 1.2rem 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.mode-play {
+  background:
+    radial-gradient(circle at 16% 12%, #5f1812 0%, transparent 34%),
+    radial-gradient(circle at 86% 18%, #320b08 0%, transparent 36%),
+    linear-gradient(180deg, #150403 0%, #080202 100%);
+}
+
+.mode-play .panel {
+  border: 1px solid rgba(255, 118, 84, 0.5);
+  background: rgba(25, 7, 7, 0.82);
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.42), inset 0 0 22px rgba(255, 78, 39, 0.12);
+}
+
+.mode-play .panel h1 {
+  color: #ffb089;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mode-play .panel p {
+  color: #f8b697;
+}
+
+.mode-play .panel label {
+  color: #ffd8c6;
+}
+
+.mode-play .panel input[type="range"] {
+  accent-color: #ff5a2d;
+}
+
+.mode-play .panel select {
+  border: 1px solid rgba(255, 130, 92, 0.65);
+  background: rgba(57, 12, 10, 0.9);
+  color: #ffe4d6;
+}
+
+.mode-play button {
+  border: 1px solid rgba(255, 132, 96, 0.72);
+  background: linear-gradient(180deg, rgba(141, 35, 22, 0.95), rgba(56, 12, 11, 0.95));
+  color: #fff2ec;
+}
+
+.mode-play .back-btn {
+  border: 1px solid rgba(255, 132, 96, 0.72);
+  background: linear-gradient(180deg, rgba(141, 35, 22, 0.95), rgba(56, 12, 11, 0.95));
 }
 
 .collection-screen h2 {
-  margin: 0 0 1.2rem;
+  margin: 0 0 0.7rem;
+  font-family: "Hell", "Teko", sans-serif;
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: clamp(1.8rem, 4vw, 2.8rem);
@@ -185,9 +292,11 @@ button:disabled {
 }
 
 .collection-grid {
-  width: min(980px, 100%);
+  width: min(980px, 96vw);
+  height: min(72vh, calc(100vh - 8rem));
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(3, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -198,7 +307,9 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.7rem;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 0;
 }
 
 .collection-card span {
@@ -208,24 +319,26 @@ button:disabled {
 }
 
 .disc-card {
-  width: clamp(88px, 13vw, 144px);
-  aspect-ratio: 1 / 1;
-  border-radius: 999px;
+  width: clamp(84px, 10vmin, 132px);
+  height: clamp(84px, 10vmin, 132px);
+  border-radius: 50%;
   border: 2px solid rgba(255, 170, 132, 0.65);
   box-shadow: 0 0 0 2px rgba(97, 19, 15, 0.65), 0 16px 30px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   transform-style: preserve-3d;
   transition: transform 220ms ease;
   background: radial-gradient(circle at 35% 30%, #5b1f18, #180607);
+  flex: 0 0 auto;
 }
 
 .disc-card img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
-.disc-card:hover {
+.collection-card:hover .disc-card {
   animation: hover-spin 1.2s linear infinite;
 }
 
@@ -261,5 +374,6 @@ button:disabled {
 
   .collection-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: min(72vh, calc(100vh - 8rem));
   }
 }

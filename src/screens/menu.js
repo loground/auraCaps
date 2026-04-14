@@ -8,6 +8,10 @@ import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 export function mountMenuScreen({ app, onPlay, onCollection }) {
   app.innerHTML = `
     <div class="menu-overlay">
+      <div id="menuPreloader" class="menu-preloader">
+        <div class="sigil"></div>
+        <p>SUMMONING</p>
+      </div>
       <div class="menu-buttons">
         <button id="menuPlay" class="menu-btn" type="button">play</button>
         <button id="menuCollection" class="menu-btn" type="button">collection</button>
@@ -16,6 +20,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   `;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.domElement.style.pointerEvents = "auto";
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -67,6 +72,8 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   const titleUniforms = {
     iTime: { value: 0 },
     iResolution: { value: new THREE.Vector2(1, 1) },
+    iMouse: { value: new THREE.Vector2(0.5, 0.5) },
+    iHover: { value: 0 },
   };
   const titleVertexShader = `
     varying vec2 vUv;
@@ -78,6 +85,8 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   const titleFragmentShader = `
     uniform float iTime;
     uniform vec2 iResolution;
+    uniform vec2 iMouse;
+    uniform float iHover;
     varying vec2 vUv;
 
     float rand(vec2 co){
@@ -126,7 +135,14 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
       vec4 brighterColor = vec4(1.0, 0.65, 0.1, 0.25);
       vec4 darkerColor = vec4(1.0, 0.0, 0.15, 0.0625);
       vec4 middleColor = mix(brighterColor, darkerColor, 0.5);
+
+      float distToMouse = distance(uv, iMouse);
+      float mouseFlare = exp(-distToMouse * 10.0) * iHover * 2.2;
+      brighterColor.rgb += vec3(1.0, 0.35, 0.0) * mouseFlare * 0.8;
+      middleColor.rgb += vec3(1.0, 0.25, 0.05) * mouseFlare * 0.65;
+
       float noiseTexel = pnoise(pos, 10.0, 5, 0.5);
+      noiseTexel += mouseFlare * 0.6;
 
       float firstStep = smoothstep(0.0, noiseTexel, gradient);
       float darkerColorStep = smoothstep(0.0, noiseTexel, gradient - gradientStep);
@@ -135,6 +151,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
       float middleColorStep = smoothstep(0.0, noiseTexel, gradient - 0.4);
       color = mix(color, middleColor, darkerColorStep - middleColorStep);
       color = mix(vec4(0.0), color, firstStep);
+      color.rgb += vec3(1.0, 0.58, 0.2) * mouseFlare * 0.6;
 
       gl_FragColor = color;
     }
@@ -150,6 +167,10 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   });
 
   let titleMesh = null;
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  const titleScreen = new THREE.Vector3();
+  let hoverTarget = 0;
   const loader = new FontLoader();
   loader.load("/fonts/hell.json", (font) => {
     const titleGeometry = new TextGeometry("AURA CAPS", {
@@ -180,35 +201,86 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   gltfLoader.setDRACOLoader(dracoLoader);
   gltfLoader.setKTX2Loader(ktx2Loader);
 
-  gltfLoader.load("/3d/demon.glb", (gltf) => {
-    demon = gltf.scene;
-    demon.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
+  gltfLoader.load(
+    "/3d/demon.glb",
+    (gltf) => {
+      demon = gltf.scene;
+      demon.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
 
-    const bbox = new THREE.Box3().setFromObject(demon);
-    const center = new THREE.Vector3();
-    bbox.getCenter(center);
-    demon.position.sub(center);
+      const bbox = new THREE.Box3().setFromObject(demon);
+      const center = new THREE.Vector3();
+      bbox.getCenter(center);
+      demon.position.sub(center);
 
-    demonPivot = new THREE.Group();
-    demonPivot.position.set(0, 1.5, -1);
-    demonPivot.scale.setScalar(10);
-    demonPivot.rotation.y = -Math.PI * 0.5;
-    demonPivot.add(demon);
-    scene.add(demonPivot);
+      demonPivot = new THREE.Group();
+      demonPivot.position.set(0, 1.5, -1);
+      demonPivot.scale.setScalar(10);
+      demonPivot.rotation.y = -Math.PI * 0.5;
+      demonPivot.add(demon);
+      scene.add(demonPivot);
 
-    demonTopLight.target = demonPivot;
-    scene.add(demonTopLight.target);
-  });
+      demonTopLight.target = demonPivot;
+      scene.add(demonTopLight.target);
+      revealMenu();
+    },
+    undefined,
+    () => {
+      revealMenu();
+    }
+  );
 
   const playButton = app.querySelector("#menuPlay");
   const collectionButton = app.querySelector("#menuCollection");
+  const preloader = app.querySelector("#menuPreloader");
+  const menuButtons = app.querySelector(".menu-buttons");
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
+  menuButtons.classList.add("disabled");
+
+  const revealMenu = () => {
+    preloader.classList.add("hidden");
+    menuButtons.classList.remove("disabled");
+  };
+
+  const onPointerMove = (event) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    if (!titleMesh) {
+      hoverTarget = 0;
+      return;
+    }
+
+    raycaster.setFromCamera(pointerNdc, camera);
+    const hits = raycaster.intersectObject(titleMesh, false);
+    if (hits.length > 0 && hits[0].uv) {
+      hoverTarget = 1;
+      titleUniforms.iMouse.value.copy(hits[0].uv);
+      return;
+    }
+
+    // Fallback: screen-space hover zone around the title.
+    titleScreen.copy(titleMesh.position).project(camera);
+    const sx = (titleScreen.x * 0.5 + 0.5) * rect.width + rect.left;
+    const sy = (-titleScreen.y * 0.5 + 0.5) * rect.height + rect.top;
+    const dx = event.clientX - sx;
+    const dy = event.clientY - sy;
+    const inZone = Math.abs(dx) < 420 && Math.abs(dy) < 140;
+    hoverTarget = inZone ? 1 : 0;
+    if (inZone) {
+      const u = THREE.MathUtils.clamp((dx + 420) / 840, 0, 1);
+      const v = THREE.MathUtils.clamp(1 - (dy + 140) / 280, 0, 1);
+      titleUniforms.iMouse.value.set(u, v);
+    }
+  };
+
+  window.addEventListener("pointermove", onPointerMove);
 
   let rafId = null;
   let running = true;
@@ -220,6 +292,11 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
     rafId = requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     titleUniforms.iTime.value = t;
+    titleUniforms.iHover.value = THREE.MathUtils.lerp(
+      titleUniforms.iHover.value,
+      hoverTarget,
+      0.2
+    );
     if (titleMesh) {
       titleMesh.position.y = 8.3 + Math.sin(t * 1.8) * 0.2;
       titleMesh.rotation.y = Math.sin(t * 0.55) * 0.08;
@@ -246,6 +323,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
     window.removeEventListener("resize", handleResize);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
+    window.removeEventListener("pointermove", onPointerMove);
     dracoLoader.dispose();
     ktx2Loader.dispose();
     renderer.dispose();

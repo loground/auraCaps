@@ -1,12 +1,28 @@
 import "./style.css";
-import { DiscDropGame } from "./game/DiscDropGame.js";
-import { mountCollectionScreen } from "./screens/collection.js";
-import { mountMenuScreen } from "./screens/menu.js";
 
 const app = document.querySelector("#app");
 
 let cleanupScreen = null;
 let game = null;
+let viewVersion = 0;
+let menuModulePromise = null;
+let collectionModulePromise = null;
+let gameModulePromise = null;
+
+function loadMenuModule() {
+  menuModulePromise ??= import("./screens/menu.js");
+  return menuModulePromise;
+}
+
+function loadCollectionModule() {
+  collectionModulePromise ??= import("./screens/collection.js");
+  return collectionModulePromise;
+}
+
+function loadGameModule() {
+  gameModulePromise ??= import("./game/DiscDropGame.js");
+  return gameModulePromise;
+}
 
 function clearCurrentScreen() {
   if (cleanupScreen) {
@@ -34,8 +50,14 @@ function addBackButton(onClick) {
   };
 }
 
-function showMenu() {
+async function showMenu() {
+  const localVersion = ++viewVersion;
   clearCurrentScreen();
+  app.className = "mode-menu";
+  const { mountMenuScreen } = await loadMenuModule();
+  if (localVersion !== viewVersion) {
+    return;
+  }
   cleanupScreen = mountMenuScreen({
     app,
     onPlay: showPlay,
@@ -44,14 +66,29 @@ function showMenu() {
 }
 
 async function showPlay() {
+  const localVersion = ++viewVersion;
   clearCurrentScreen();
+  app.className = "mode-play";
+  const { DiscDropGame } = await loadGameModule();
+  if (localVersion !== viewVersion) {
+    return;
+  }
   game = new DiscDropGame(app);
   await game.init();
+  if (localVersion !== viewVersion) {
+    return;
+  }
   cleanupScreen = addBackButton(showMenu);
 }
 
-function showCollection() {
+async function showCollection() {
+  const localVersion = ++viewVersion;
   clearCurrentScreen();
+  app.className = "mode-collection";
+  const { mountCollectionScreen } = await loadCollectionModule();
+  if (localVersion !== viewVersion) {
+    return;
+  }
   cleanupScreen = mountCollectionScreen({ app, onBack: showMenu });
 }
 

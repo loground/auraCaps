@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./arena-configs.js";
 import {
   DISC_HEIGHT,
@@ -8,7 +11,11 @@ import {
   LOWER_DISC_START_Y,
   TABLE_RADIUS,
 } from "./constants.js";
-import { createDiscMesh, createYinYangTexture } from "./discs.js";
+import {
+  createDiscMesh,
+  loadDiscTexture,
+  setDiscFaceTextures,
+} from "./discs.js";
 import { createRenderer, createWorldScene } from "./scene.js";
 import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 
@@ -35,6 +42,9 @@ export class DiscDropGame {
     this.running = false;
     this.rafId = null;
     this.handleResizeBound = () => this.handleResize();
+    this._wind = { x: 0, y: 0, z: 0 };
+    this._tempQuat = new THREE.Quaternion();
+    this._tempUp = new THREE.Vector3(0, 1, 0);
   }
 
   async init() {
@@ -45,11 +55,14 @@ export class DiscDropGame {
     this.scene = worldView.scene;
     this.camera = worldView.camera;
     this.controls = worldView.controls;
+    this.floorMesh = worldView.floorMesh;
+    this.tableMesh = worldView.tableMesh;
     this.floorMaterial = worldView.floorMaterial;
     this.tableMaterial = worldView.tableMaterial;
 
     await RAPIER.init();
     this.setupWorld();
+    this.setupArenaVisualModel();
     this.setupDiscs();
     this.setupArrow();
     this.setupUIBindings();
@@ -68,7 +81,7 @@ export class DiscDropGame {
     this.world.integrationParameters.maxCcdSubsteps = 8;
 
     const floorBody = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.12, 0)
+      RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.22, 0)
     );
     this.floorCollider = this.world.createCollider(
       RAPIER.ColliderDesc.cylinder(0.22, TABLE_RADIUS)
@@ -88,14 +101,82 @@ export class DiscDropGame {
     );
   }
 
+  setupArenaVisualModel() {
+    this.floorMesh.visible = false;
+    this.tableMesh.visible = false;
+
+    this.arenaVisualRoot = new THREE.Group();
+    this.scene.add(this.arenaVisualRoot);
+
+    this.arenaDracoLoader = new DRACOLoader();
+    this.arenaDracoLoader.setDecoderPath("/draco/");
+    this.arenaKtx2Loader = new KTX2Loader();
+    this.arenaKtx2Loader.setTranscoderPath("/basis/");
+    this.arenaKtx2Loader.detectSupport(this.renderer);
+
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(this.arenaDracoLoader);
+    loader.setKTX2Loader(this.arenaKtx2Loader);
+
+    loader.load(
+      "/3d/hellArena1.glb",
+      (gltf) => {
+        const model = gltf.scene;
+        model.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = false;
+            child.receiveShadow = true;
+          }
+        });
+
+        const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
+        const sourceBox = new THREE.Box3().setFromObject(model);
+        sourceBox.getCenter(center);
+        sourceBox.getSize(size);
+        model.position.sub(center);
+
+        const maxXZ = Math.max(size.x, size.z, 0.001);
+        const targetDiameter = TABLE_RADIUS * 2;
+        const scale = 10;
+
+        this.arenaVisualRoot.clear();
+        this.arenaVisualRoot.add(model);
+        this.arenaVisualRoot.scale.setScalar(scale);
+
+        const fittedBox = new THREE.Box3().setFromObject(this.arenaVisualRoot);
+        this.arenaVisualRoot.position.set(0, -.5, 0);
+      },
+      undefined,
+      () => {
+        // Fallback to procedural visuals if model loading fails.
+        this.floorMesh.visible = true;
+        this.tableMesh.visible = true;
+      }
+    );
+  }
+
   setupDiscs() {
-    const yinYangTexture = createYinYangTexture(this.renderer);
+    this.backFaceTextures = [
+      loadDiscTexture(this.renderer, "/caps/back1.png"),
+      loadDiscTexture(this.renderer, "/caps/back2.png"),
+      loadDiscTexture(this.renderer, "/caps/back3.png"),
+    ];
+    this.capTextures = Array.from({ length: 9 }, (_, idx) =>
+      loadDiscTexture(this.renderer, `/caps/${idx + 1}.png`)
+    );
+
+    this.lowerCapTexture = this.randomCapTexture();
+    this.upperCapTexture = this.randomCapTexture();
+    this.lowerBackTexture = this.randomBackTexture();
+    this.upperBackTexture = this.randomBackTexture();
 
     this.lowerDiscMesh = createDiscMesh({
       radius: DISC_RADIUS,
       height: DISC_HEIGHT,
       sideColor: "#93a1b8",
-      redFaceTexture: yinYangTexture,
+      topFaceMap: this.lowerBackTexture,
+      bottomFaceMap: this.lowerCapTexture,
     });
     this.scene.add(this.lowerDiscMesh);
 
@@ -103,9 +184,33 @@ export class DiscDropGame {
       radius: DISC_RADIUS,
       height: DISC_HEIGHT,
       sideColor: "#dfe7f5",
-      redFaceTexture: yinYangTexture,
+      topFaceMap: this.upperBackTexture,
+      bottomFaceMap: this.upperCapTexture,
     });
     this.scene.add(this.upperDiscMesh);
+  }
+
+  randomCapTexture() {
+    return this.capTextures[Math.floor(Math.random() * this.capTextures.length)];
+  }
+
+  randomBackTexture() {
+    return this.backFaceTextures[
+      Math.floor(Math.random() * this.backFaceTextures.length)
+    ];
+  }
+
+  refreshDiscArt() {
+    setDiscFaceTextures({
+      mesh: this.lowerDiscMesh,
+      topFaceMap: this.lowerBackTexture,
+      bottomFaceMap: this.lowerCapTexture,
+    });
+    setDiscFaceTextures({
+      mesh: this.upperDiscMesh,
+      topFaceMap: this.upperBackTexture,
+      bottomFaceMap: this.upperCapTexture,
+    });
   }
 
   setupArrow() {
@@ -424,14 +529,9 @@ export class DiscDropGame {
 
   topFaceColor(body) {
     const rotation = body.rotation();
-    const quaternion = new THREE.Quaternion(
-      rotation.x,
-      rotation.y,
-      rotation.z,
-      rotation.w
-    );
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
-    return up.y >= 0 ? "green" : "red";
+    this._tempQuat.set(rotation.x, rotation.y, rotation.z, rotation.w);
+    this._tempUp.set(0, 1, 0).applyQuaternion(this._tempQuat);
+    return this._tempUp.y >= 0 ? "red" : "green";
   }
 
   resolveRound() {
@@ -465,14 +565,13 @@ export class DiscDropGame {
     return linearSq < 0.03 && angularSq < 0.08;
   }
 
-  currentWind(time) {
+  currentWind(time, out) {
     const wind = ARENA_CONFIGS[this.activeArenaKey].wind;
     const oscillation = Math.sin(time * wind.freq) * wind.pulse;
-    return {
-      x: wind.x + oscillation,
-      y: 0,
-      z: wind.z + Math.cos(time * wind.freq * 0.7) * wind.pulse * 0.45,
-    };
+    out.x = wind.x + oscillation;
+    out.y = 0;
+    out.z = wind.z + Math.cos(time * wind.freq * 0.7) * wind.pulse * 0.45;
+    return out;
   }
 
   applyWind(body, wind) {
@@ -508,9 +607,9 @@ export class DiscDropGame {
     }
 
     if (this.hasLaunched) {
-      const wind = this.currentWind(this.clock.elapsedTime);
-      this.applyWind(this.upperDiscBody, wind);
-      this.applyWind(this.lowerDiscBody, wind);
+      this.currentWind(this.clock.elapsedTime, this._wind);
+      this.applyWind(this.upperDiscBody, this._wind);
+      this.applyWind(this.lowerDiscBody, this._wind);
     }
 
     this.world.timestep = FIXED_STEP;
@@ -572,6 +671,18 @@ export class DiscDropGame {
     }
     window.removeEventListener("resize", this.handleResizeBound);
     this.controls.dispose();
+    if (this.arenaVisualRoot) {
+      this.scene.remove(this.arenaVisualRoot);
+      this.arenaVisualRoot = null;
+    }
+    if (this.arenaDracoLoader) {
+      this.arenaDracoLoader.dispose();
+      this.arenaDracoLoader = null;
+    }
+    if (this.arenaKtx2Loader) {
+      this.arenaKtx2Loader.dispose();
+      this.arenaKtx2Loader = null;
+    }
     this.clearArenaObstacles();
     this.renderer.dispose();
   }
