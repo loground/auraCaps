@@ -103,6 +103,25 @@ canvas {
   pointer-events: none;
 }
 
+.play-preloader {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 1rem;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(98, 20, 16, 0.5), rgba(8, 3, 3, 0.95)),
+    linear-gradient(180deg, rgba(26, 7, 6, 0.9), rgba(7, 2, 2, 0.95));
+  transition: opacity 280ms ease;
+}
+
+.play-preloader.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .menu-preloader p {
   margin: 0;
   width: 100%;
@@ -113,7 +132,27 @@ canvas {
   text-align: center;
 }
 
+.play-preloader p {
+  margin: 0;
+  width: 100%;
+  color: #ffbf9c;
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
 .menu-preloader .sigil {
+  width: 86px;
+  height: 86px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 140, 101, 0.8);
+  border-top-color: rgba(255, 233, 168, 0.95);
+  box-shadow: 0 0 20px rgba(255, 88, 45, 0.5), inset 0 0 14px rgba(255, 90, 50, 0.4);
+  animation: sigil-spin 1.2s linear infinite;
+}
+
+.play-preloader .sigil {
   width: 86px;
   height: 86px;
   border-radius: 50%;
@@ -232,9 +271,21 @@ button:disabled {
 }
 
 .status {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 6;
   margin: 0;
-  min-height: 2.2rem;
-  line-height: 1.35;
+  min-width: min(90vw, 640px);
+  text-align: center;
+  font-family: "Hell", "Teko", sans-serif;
+  font-size: clamp(1.4rem, 2.4vw, 2.1rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffb08a;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
 .hint {
@@ -293,11 +344,27 @@ button:disabled {
     linear-gradient(180deg, rgba(189, 225, 255, 0.88), rgba(140, 184, 224, 0.94));
 }
 
+.theme-heaven .play-preloader {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(187, 224, 255, 0.6), rgba(152, 198, 236, 0.92)),
+    linear-gradient(180deg, rgba(189, 225, 255, 0.88), rgba(140, 184, 224, 0.94));
+}
+
 .theme-heaven .menu-preloader p {
   color: #1f4b73;
 }
 
+.theme-heaven .play-preloader p {
+  color: #1f4b73;
+}
+
 .theme-heaven .menu-preloader .sigil {
+  border-color: rgba(77, 147, 215, 0.78);
+  border-top-color: rgba(224, 245, 255, 0.98);
+  box-shadow: 0 0 20px rgba(75, 152, 227, 0.42), inset 0 0 14px rgba(120, 185, 241, 0.38);
+}
+
+.theme-heaven .play-preloader .sigil {
   border-color: rgba(77, 147, 215, 0.78);
   border-top-color: rgba(224, 245, 255, 0.98);
   box-shadow: 0 0 20px rgba(75, 152, 227, 0.42), inset 0 0 14px rgba(120, 185, 241, 0.38);
@@ -523,6 +590,12 @@ button:disabled {
 .theme-heaven .inspector-panel {
   border: 1px solid rgba(96, 151, 208, 0.5);
   background: linear-gradient(180deg, rgba(211, 232, 250, 0.95), rgba(177, 209, 239, 0.95));
+}
+
+.theme-heaven .inspector-close {
+  border: 1px solid rgba(95, 148, 205, 0.72);
+  background: linear-gradient(180deg, rgba(224, 241, 255, 0.95), rgba(176, 212, 242, 0.95));
+  color: #1e4263;
 }
 
 @media (max-width: 640px) {

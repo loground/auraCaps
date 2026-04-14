@@ -3,7 +3,6 @@ export const DEFAULT_SETTINGS = {
   posZ: 0,
   height: 4,
   power: 35,
-  spin: 18,
 };
 
 const SLIDER_FORMATTERS = {
@@ -11,7 +10,6 @@ const SLIDER_FORMATTERS = {
   posZ: (value) => value.toFixed(1),
   height: (value) => value.toFixed(1),
   power: (value) => value.toFixed(1),
-  spin: (value) => value.toFixed(1),
 };
 
 const SLIDER_DEFS = [
@@ -19,11 +17,14 @@ const SLIDER_DEFS = [
   { id: "posZ", key: "posZ" },
   { id: "height", key: "height" },
   { id: "power", key: "power" },
-  { id: "spin", key: "spin" },
 ];
 
 export function renderGameUI(app) {
   app.innerHTML = `
+    <div id="playPreloader" class="play-preloader">
+      <div class="sigil"></div>
+      <p>SUMMONING</p>
+    </div>
     <div class="panel">
       <h1>Disc Drop</h1>
       <p>Goal: end with two green faces up. Orbit with mouse drag.</p>
@@ -53,17 +54,12 @@ export function renderGameUI(app) {
         <input id="power" type="range" min="0" max="100" step="0.1" value="35" />
         <span id="powerValue">35.0</span>
       </label>
-      <label>
-        Spin
-        <input id="spin" type="range" min="-40" max="40" step="0.1" value="18" />
-        <span id="spinValue">18.0</span>
-      </label>
       <div class="buttons">
         <button id="launchBtn" type="button">Launch</button>
         <button id="resetBtn" type="button">Reset Round</button>
       </div>
-      <p id="status" class="status">Set your shot and press Launch.</p>
     </div>
+    <p id="status" class="status">choose a position to hit</p>
   `;
 
   const sliders = {};
@@ -82,6 +78,7 @@ export function renderGameUI(app) {
     statusEl: app.querySelector("#status"),
     launchBtn: app.querySelector("#launchBtn"),
     resetBtn: app.querySelector("#resetBtn"),
+    playPreloaderEl: app.querySelector("#playPreloader"),
     sliders,
   };
 }

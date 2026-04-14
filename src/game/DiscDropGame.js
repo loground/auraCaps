@@ -66,7 +66,7 @@ export class DiscDropGame {
 
     await RAPIER.init();
     this.setupWorld();
-    this.setupArenaVisualModel();
+    await this.setupArenaVisualModel();
     this.setupDiscs();
     this.setupArrow();
     this.setupUIBindings();
@@ -77,7 +77,18 @@ export class DiscDropGame {
 
     this.running = true;
     this.animate();
+    this.hidePlayPreloader();
     window.addEventListener("resize", this.handleResizeBound);
+  }
+
+  hidePlayPreloader() {
+    const preloader = this.ui?.playPreloaderEl;
+    if (!preloader) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      preloader.classList.add("hidden");
+    });
   }
 
   setupWorld() {
@@ -110,7 +121,7 @@ export class DiscDropGame {
     if (this.theme === "heaven") {
       this.floorMesh.visible = true;
       this.tableMesh.visible = true;
-      return;
+      return Promise.resolve();
     }
 
     this.floorMesh.visible = false;
@@ -129,42 +140,40 @@ export class DiscDropGame {
     loader.setDRACOLoader(this.arenaDracoLoader);
     loader.setKTX2Loader(this.arenaKtx2Loader);
 
-    loader.load(
-      "/3d/hellArena1.glb",
-      (gltf) => {
-        const model = gltf.scene;
-        model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = false;
-            child.receiveShadow = true;
-          }
-        });
+    return new Promise((resolve) => {
+      loader.load(
+        "/3d/hellArena1.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          model.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = false;
+              child.receiveShadow = true;
+            }
+          });
 
-        const center = new THREE.Vector3();
-        const size = new THREE.Vector3();
-        const sourceBox = new THREE.Box3().setFromObject(model);
-        sourceBox.getCenter(center);
-        sourceBox.getSize(size);
-        model.position.sub(center);
+          const center = new THREE.Vector3();
+          const sourceBox = new THREE.Box3().setFromObject(model);
+          sourceBox.getCenter(center);
+          model.position.sub(center);
 
-        const maxXZ = Math.max(size.x, size.z, 0.001);
-        const targetDiameter = TABLE_RADIUS * 2;
-        const scale = 10;
+          const scale = 10;
 
-        this.arenaVisualRoot.clear();
-        this.arenaVisualRoot.add(model);
-        this.arenaVisualRoot.scale.setScalar(scale);
-
-        const fittedBox = new THREE.Box3().setFromObject(this.arenaVisualRoot);
-        this.arenaVisualRoot.position.set(0, -.5, 0);
-      },
-      undefined,
-      () => {
-        // Fallback to procedural visuals if model loading fails.
-        this.floorMesh.visible = true;
-        this.tableMesh.visible = true;
-      }
-    );
+          this.arenaVisualRoot.clear();
+          this.arenaVisualRoot.add(model);
+          this.arenaVisualRoot.scale.setScalar(scale);
+          this.arenaVisualRoot.position.set(0, -0.5, 0);
+          resolve();
+        },
+        undefined,
+        () => {
+          // Fallback to procedural visuals if model loading fails.
+          this.floorMesh.visible = true;
+          this.tableMesh.visible = true;
+          resolve();
+        }
+      );
+    });
   }
 
   setupDiscs() {
@@ -252,9 +261,7 @@ export class DiscDropGame {
       const nextArena = event.target.value;
       this.applyArena(nextArena);
       this.buildRoundBodies();
-      this.setStatus(
-        `Arena switched to ${ARENA_CONFIGS[nextArena].label}. Set your shot and launch.`
-      );
+      this.setStatus("choose a position to hit");
     });
 
     this.ui.launchBtn.addEventListener("click", () => this.launchRound());
@@ -264,7 +271,6 @@ export class DiscDropGame {
     this.bindSlider("posZ");
     this.bindSlider("height");
     this.bindSlider("power");
-    this.bindSlider("spin");
   }
 
   bindSlider(key) {
@@ -367,10 +373,10 @@ export class DiscDropGame {
       this.tableMaterial.color.set("#bfdcf4");
     } else {
       this.floorMaterial.color.set(
-        key === "iceDrift" ? "#3a77b6" : key === "bumperGarden" ? "#2c2a5d" : "#263049"
+        key === "bumperGarden" ? "#2c2a5d" : "#263049"
       );
       this.tableMaterial.color.set(
-        key === "iceDrift" ? "#16456e" : key === "windTunnel" ? "#1d293f" : "#111827"
+        "#111827"
       );
     }
 
@@ -428,7 +434,7 @@ export class DiscDropGame {
     this.hasResolved = false;
     this.stableFrames = 0;
     this.ui.launchBtn.disabled = false;
-    this.setStatus("Set your shot and press Launch.");
+    this.setStatus("choose a position to hit");
     this.updateLaunchArrow();
   }
 
@@ -497,15 +503,8 @@ export class DiscDropGame {
       toLower.normalize();
     }
 
-    const tangent = new THREE.Vector3(-toLower.z, 0, toLower.x);
-    const spinSign = Math.sign(this.settings.spin || 1);
-
     const power01 = this.settings.power / 100;
-    const direction = new THREE.Vector3(
-      toLower.x * 0.95 + tangent.x * 0.22 * spinSign,
-      0,
-      toLower.z * 0.95 + tangent.z * 0.22 * spinSign
-    ).normalize();
+    const direction = new THREE.Vector3(toLower.x, 0, toLower.z).normalize();
 
     const horizontalSpeed = 2 + power01 * 13;
     const downwardSpeed = 12 + power01 * 40;
@@ -526,23 +525,14 @@ export class DiscDropGame {
         z: toLower.z * this.settings.power * impulseScale,
       },
       {
-        x: this.settings.posX + tangent.x * DISC_RADIUS * 0.35 * spinSign,
+        x: this.settings.posX,
         y: launchY,
-        z: this.settings.posZ + tangent.z * DISC_RADIUS * 0.35 * spinSign,
+        z: this.settings.posZ,
       },
       true
     );
 
-    this.upperDiscBody.applyTorqueImpulse(
-      {
-        x: this.settings.spin * 0.95,
-        y: this.settings.spin * 3.8,
-        z: this.settings.spin * 0.95,
-      },
-      true
-    );
-
-    this.setStatus("In motion...");
+    this.setStatus("in motion");
   }
 
   topFaceColor(body) {
@@ -563,16 +553,16 @@ export class DiscDropGame {
     const greens = Number(upperColor === "green") + Number(lowerColor === "green");
 
     if (greens === 2) {
-      this.setStatus("Win! Both discs ended with green up.");
+      this.setStatus("you won");
       return;
     }
 
     if (greens === 0) {
-      this.setStatus("Lose! Both discs ended with red up.");
+      this.setStatus("you lost");
       return;
     }
 
-    this.setStatus("No score this round: one green and one red.");
+    this.setStatus("tie");
   }
 
   hasSettled(body) {
@@ -689,10 +679,10 @@ export class DiscDropGame {
 
   applyResponsiveCamera() {
     if (window.innerWidth <= 760) {
-      this.camera.position.set(0, 14.2, 22.4);
+      this.camera.position.set(0, 15.2, 24.2);
       this.controls.target.set(0, 0.45, 0);
     } else {
-      this.camera.position.set(0, 9, 14);
+      this.camera.position.set(0, 9.8, 16.4);
       this.controls.target.set(0, 0.35, 0);
     }
     this.camera.lookAt(this.controls.target);

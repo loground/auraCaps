@@ -4,6 +4,7 @@ import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export function mountMenuScreen({
   app,
@@ -50,6 +51,19 @@ export function mountMenuScreen({
     120
   );
   camera.position.set(0, 4.8, 18);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.enablePan = false;
+  controls.enableZoom = false;
+  controls.rotateSpeed = 0.28;
+  controls.target.set(0, 4.2, 0);
+  controls.minPolarAngle = Math.PI * 0.43;
+  controls.maxPolarAngle = Math.PI * 0.57;
+  controls.minAzimuthAngle = -0.22;
+  controls.maxAzimuthAngle = 0.22;
+  controls.update();
 
   const ambient = new THREE.AmbientLight(
     isHeaven ? 0xe6f6ff : 0xffb48a,
@@ -357,6 +371,7 @@ export function mountMenuScreen({
       titleMesh.position.y = 8.3 + Math.sin(t * 1.8) * 0.2;
       titleMesh.rotation.y = Math.sin(t * 0.55) * 0.08;
     }
+    controls.update();
     renderer.render(scene, camera);
   };
 
@@ -392,6 +407,7 @@ export function mountMenuScreen({
     themeHellBtn.removeEventListener("click", onThemeHell);
     themeHeavenBtn.removeEventListener("click", onThemeHeaven);
     window.removeEventListener("pointermove", onPointerMove);
+    controls.dispose();
     dracoLoader.dispose();
     ktx2Loader.dispose();
     renderer.dispose();
