@@ -23,8 +23,8 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   app.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#110504");
-  scene.fog = new THREE.Fog("#110504", 18, 58);
+  scene.background = new THREE.Color("#170807");
+  scene.fog = new THREE.Fog("#170807", 18, 58);
 
   const camera = new THREE.PerspectiveCamera(
     50,
@@ -34,19 +34,19 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   );
   camera.position.set(0, 4.8, 18);
 
-  const ambient = new THREE.AmbientLight(0xffb48a, 0.5);
+  const ambient = new THREE.AmbientLight(0xffb48a, 0.56);
   scene.add(ambient);
 
-  const keyLight = new THREE.DirectionalLight(0xff5b31, 1.45);
+  const keyLight = new THREE.DirectionalLight(0xff5b31, 1.6);
   keyLight.position.set(8, 10, 6);
   keyLight.castShadow = true;
   scene.add(keyLight);
 
-  const fillLight = new THREE.DirectionalLight(0xffda99, 0.65);
+  const fillLight = new THREE.DirectionalLight(0xffda99, 0.72);
   fillLight.position.set(-8, 5, 2);
   scene.add(fillLight);
 
-  const demonTopLight = new THREE.SpotLight(0xffc58f, 2.1, 60, 0.45, 0.35, 1);
+  const demonTopLight = new THREE.SpotLight(0xffc58f, 2.32, 60, 0.45, 0.35, 1);
   demonTopLight.position.set(0, 10, 4);
   demonTopLight.castShadow = true;
   scene.add(demonTopLight);
@@ -54,7 +54,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
     new THREE.MeshStandardMaterial({
-      color: "#1a0908",
+      color: "#24100d",
       roughness: 0.92,
       metalness: 0.02,
     })
@@ -195,8 +195,8 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
     demon.position.sub(center);
 
     demonPivot = new THREE.Group();
-    demonPivot.position.set(0, 0.45, 0);
-    demonPivot.scale.setScalar(7);
+    demonPivot.position.set(0, 1.5, -1);
+    demonPivot.scale.setScalar(10);
     demonPivot.rotation.y = -Math.PI * 0.5;
     demonPivot.add(demon);
     scene.add(demonPivot);
