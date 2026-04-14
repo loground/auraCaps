@@ -20,10 +20,11 @@ import { createRenderer, createWorldScene } from "./scene.js";
 import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 
 export class DiscDropGame {
-  constructor(app) {
+  constructor(app, { theme = "hell" } = {}) {
     this.app = app;
+    this.theme = theme;
     this.settings = { ...DEFAULT_SETTINGS };
-    this.activeArenaKey = DEFAULT_ARENA_KEY;
+    this.activeArenaKey = theme === "heaven" ? "classic" : DEFAULT_ARENA_KEY;
 
     this.hasLaunched = false;
     this.hasResolved = false;
@@ -45,13 +46,14 @@ export class DiscDropGame {
     this._wind = { x: 0, y: 0, z: 0 };
     this._tempQuat = new THREE.Quaternion();
     this._tempUp = new THREE.Vector3(0, 1, 0);
+    this._tempForward = new THREE.Vector3();
   }
 
   async init() {
     this.ui = renderGameUI(this.app);
 
     this.renderer = createRenderer(this.app);
-    const worldView = createWorldScene(this.renderer);
+    const worldView = createWorldScene(this.renderer, { theme: this.theme });
     this.scene = worldView.scene;
     this.camera = worldView.camera;
     this.controls = worldView.controls;
@@ -59,6 +61,8 @@ export class DiscDropGame {
     this.tableMesh = worldView.tableMesh;
     this.floorMaterial = worldView.floorMaterial;
     this.tableMaterial = worldView.tableMaterial;
+    this.skyUniforms = worldView.skyUniforms;
+    this.skyBackdrop = worldView.skyBackdrop;
 
     await RAPIER.init();
     this.setupWorld();
@@ -103,6 +107,12 @@ export class DiscDropGame {
   }
 
   setupArenaVisualModel() {
+    if (this.theme === "heaven") {
+      this.floorMesh.visible = true;
+      this.tableMesh.visible = true;
+      return;
+    }
+
     this.floorMesh.visible = false;
     this.tableMesh.visible = false;
 
@@ -227,7 +237,8 @@ export class DiscDropGame {
   }
 
   setupUIBindings() {
-    const arenaKeys = Object.keys(ARENA_CONFIGS);
+    const arenaKeys =
+      this.theme === "heaven" ? ["classic"] : Object.keys(ARENA_CONFIGS);
     for (const key of arenaKeys) {
       const option = document.createElement("option");
       option.value = key;
@@ -235,6 +246,7 @@ export class DiscDropGame {
       this.ui.arenaSelectEl.appendChild(option);
     }
     this.ui.arenaSelectEl.value = this.activeArenaKey;
+    this.ui.arenaSelectEl.disabled = this.theme === "heaven";
 
     this.ui.arenaSelectEl.addEventListener("change", (event) => {
       const nextArena = event.target.value;
@@ -338,8 +350,8 @@ export class DiscDropGame {
   }
 
   applyArena(key) {
-    this.activeArenaKey = key;
-    const arena = ARENA_CONFIGS[key];
+    this.activeArenaKey = this.theme === "heaven" ? "classic" : key;
+    const arena = ARENA_CONFIGS[this.activeArenaKey];
 
     this.world.gravity = { x: 0, y: arena.gravity, z: 0 };
     this.floorCollider.setFriction(arena.floorFriction);
@@ -350,12 +362,17 @@ export class DiscDropGame {
     this.ui.arenaHintEl.textContent = arena.hint;
     this.ui.arenaTagEl.textContent = arena.label;
 
-    this.floorMaterial.color.set(
-      key === "iceDrift" ? "#3a77b6" : key === "bumperGarden" ? "#2c2a5d" : "#263049"
-    );
-    this.tableMaterial.color.set(
-      key === "iceDrift" ? "#16456e" : key === "windTunnel" ? "#1d293f" : "#111827"
-    );
+    if (this.theme === "heaven") {
+      this.floorMaterial.color.set("#d8ebfb");
+      this.tableMaterial.color.set("#bfdcf4");
+    } else {
+      this.floorMaterial.color.set(
+        key === "iceDrift" ? "#3a77b6" : key === "bumperGarden" ? "#2c2a5d" : "#263049"
+      );
+      this.tableMaterial.color.set(
+        key === "iceDrift" ? "#16456e" : key === "windTunnel" ? "#1d293f" : "#111827"
+      );
+    }
 
     this.clearArenaObstacles();
     for (const def of arena.obstacles) {
@@ -655,17 +672,30 @@ export class DiscDropGame {
     }
 
     this.controls.update();
+
+    if (this.skyBackdrop) {
+      this.camera.getWorldDirection(this._tempForward);
+      this.skyBackdrop.quaternion.copy(this.camera.quaternion);
+      this.skyBackdrop.position
+        .copy(this.camera.position)
+        .addScaledVector(this._tempForward, 120);
+    }
+
     this.renderer.render(this.scene, this.camera);
+    if (this.skyUniforms) {
+      this.skyUniforms.iTime.value += delta;
+    }
   }
 
   applyResponsiveCamera() {
     if (window.innerWidth <= 760) {
-      this.camera.position.set(0, 12.4, 19.5);
+      this.camera.position.set(0, 14.2, 22.4);
+      this.controls.target.set(0, 0.45, 0);
     } else {
       this.camera.position.set(0, 9, 14);
+      this.controls.target.set(0, 0.35, 0);
     }
-    this.controls.target.set(0, 0.35, 0);
-    this.camera.lookAt(0, 0.35, 0);
+    this.camera.lookAt(this.controls.target);
     this.controls.update();
   }
 

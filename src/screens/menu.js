@@ -5,9 +5,19 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 
-export function mountMenuScreen({ app, onPlay, onCollection }) {
+export function mountMenuScreen({
+  app,
+  onPlay,
+  onCollection,
+  theme = "hell",
+  onThemeChange,
+}) {
   app.innerHTML = `
     <div class="menu-overlay">
+      <div class="theme-switch" role="group" aria-label="Theme switcher">
+        <button id="themeHell" class="theme-btn ${theme === "hell" ? "active" : ""}" type="button">hell</button>
+        <button id="themeHeaven" class="theme-btn ${theme === "heaven" ? "active" : ""}" type="button">heaven</button>
+      </div>
       <div id="menuPreloader" class="menu-preloader">
         <div class="sigil"></div>
         <p>SUMMONING</p>
@@ -28,8 +38,10 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   app.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#170807");
-  scene.fog = new THREE.Fog("#170807", 18, 58);
+  const isHeaven = theme === "heaven";
+  const bgColor = isHeaven ? "#8ccfff" : "#170807";
+  scene.background = new THREE.Color(bgColor);
+  scene.fog = new THREE.Fog(bgColor, 18, 58);
 
   const camera = new THREE.PerspectiveCamera(
     50,
@@ -39,19 +51,35 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   );
   camera.position.set(0, 4.8, 18);
 
-  const ambient = new THREE.AmbientLight(0xffb48a, 0.56);
+  const ambient = new THREE.AmbientLight(
+    isHeaven ? 0xe6f6ff : 0xffb48a,
+    isHeaven ? 0.78 : 0.56
+  );
   scene.add(ambient);
 
-  const keyLight = new THREE.DirectionalLight(0xff5b31, 1.6);
+  const keyLight = new THREE.DirectionalLight(
+    isHeaven ? 0xd2ecff : 0xff5b31,
+    isHeaven ? 1.45 : 1.6
+  );
   keyLight.position.set(8, 10, 6);
   keyLight.castShadow = true;
   scene.add(keyLight);
 
-  const fillLight = new THREE.DirectionalLight(0xffda99, 0.72);
+  const fillLight = new THREE.DirectionalLight(
+    isHeaven ? 0xffffff : 0xffda99,
+    isHeaven ? 0.88 : 0.72
+  );
   fillLight.position.set(-8, 5, 2);
   scene.add(fillLight);
 
-  const demonTopLight = new THREE.SpotLight(0xffc58f, 2.32, 60, 0.45, 0.35, 1);
+  const demonTopLight = new THREE.SpotLight(
+    isHeaven ? 0xf2fbff : 0xffc58f,
+    isHeaven ? 2.0 : 2.32,
+    60,
+    0.45,
+    0.35,
+    1
+  );
   demonTopLight.position.set(0, 10, 4);
   demonTopLight.castShadow = true;
   scene.add(demonTopLight);
@@ -59,7 +87,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
     new THREE.MeshStandardMaterial({
-      color: "#24100d",
+      color: isHeaven ? "#d4e8f6" : "#24100d",
       roughness: 0.92,
       metalness: 0.02,
     })
@@ -82,7 +110,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `;
-  const titleFragmentShader = `
+  const hellFragmentShader = `
     uniform float iTime;
     uniform vec2 iResolution;
     uniform vec2 iMouse;
@@ -156,11 +184,32 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
       gl_FragColor = color;
     }
   `;
+  const heavenFragmentShader = `
+    uniform float iTime;
+    uniform vec2 iResolution;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 uv = vUv;
+      vec3 top = vec3(0.23, 0.56, 0.95);
+      vec3 bottom = vec3(0.86, 0.94, 1.0);
+      vec3 sky = mix(bottom, top, clamp(uv.y, 0.0, 1.0));
+
+      // Cheap layered cloud bands.
+      float t = iTime * 0.08;
+      float c1 = sin((uv.x * 7.0 + t) + sin(uv.y * 6.0)) * 0.5 + 0.5;
+      float c2 = sin((uv.x * 12.0 - t * 1.4) + cos(uv.y * 9.0)) * 0.5 + 0.5;
+      float clouds = smoothstep(0.58, 0.9, c1 * 0.62 + c2 * 0.38);
+
+      vec3 color = mix(sky, vec3(0.98, 0.99, 1.0), clouds * 0.5);
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `;
 
   const titleMaterial = new THREE.ShaderMaterial({
     uniforms: titleUniforms,
     vertexShader: titleVertexShader,
-    fragmentShader: titleFragmentShader,
+    fragmentShader: isHeaven ? heavenFragmentShader : hellFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
@@ -203,7 +252,7 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
   gltfLoader.setKTX2Loader(ktx2Loader);
 
   gltfLoader.load(
-    "/3d/demon.glb",
+    isHeaven ? "/3d/heaven.glb" : "/3d/demon.glb",
     (gltf) => {
       demon = gltf.scene;
       demon.traverse((child) => {
@@ -237,10 +286,16 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
 
   const playButton = app.querySelector("#menuPlay");
   const collectionButton = app.querySelector("#menuCollection");
+  const themeHellBtn = app.querySelector("#themeHell");
+  const themeHeavenBtn = app.querySelector("#themeHeaven");
   const preloader = app.querySelector("#menuPreloader");
   const menuButtons = app.querySelector(".menu-buttons");
+  const onThemeHell = () => onThemeChange?.("hell");
+  const onThemeHeaven = () => onThemeChange?.("heaven");
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
+  themeHellBtn.addEventListener("click", onThemeHell);
+  themeHeavenBtn.addEventListener("click", onThemeHeaven);
   menuButtons.classList.add("disabled");
 
   const revealMenu = () => {
@@ -334,6 +389,8 @@ export function mountMenuScreen({ app, onPlay, onCollection }) {
     window.removeEventListener("resize", handleResize);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
+    themeHellBtn.removeEventListener("click", onThemeHell);
+    themeHeavenBtn.removeEventListener("click", onThemeHeaven);
     window.removeEventListener("pointermove", onPointerMove);
     dracoLoader.dispose();
     ktx2Loader.dispose();

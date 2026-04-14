@@ -5,6 +5,7 @@ const app = document.querySelector("#app");
 let cleanupScreen = null;
 let game = null;
 let viewVersion = 0;
+let currentTheme = "hell";
 let menuModulePromise = null;
 let collectionModulePromise = null;
 let gameModulePromise = null;
@@ -50,16 +51,31 @@ function addBackButton(onClick) {
   };
 }
 
+function setViewMode(mode) {
+  app.className = `mode-${mode} theme-${currentTheme}`;
+}
+
+function setTheme(nextTheme) {
+  currentTheme = nextTheme;
+}
+
 async function showMenu() {
   const localVersion = ++viewVersion;
   clearCurrentScreen();
-  app.className = "mode-menu";
+  setViewMode("menu");
   const { mountMenuScreen } = await loadMenuModule();
   if (localVersion !== viewVersion) {
     return;
   }
   cleanupScreen = mountMenuScreen({
     app,
+    theme: currentTheme,
+    onThemeChange: (nextTheme) => {
+      if (nextTheme !== currentTheme) {
+        setTheme(nextTheme);
+        showMenu();
+      }
+    },
     onPlay: showPlay,
     onCollection: showCollection,
   });
@@ -68,12 +84,12 @@ async function showMenu() {
 async function showPlay() {
   const localVersion = ++viewVersion;
   clearCurrentScreen();
-  app.className = "mode-play";
+  setViewMode("play");
   const { DiscDropGame } = await loadGameModule();
   if (localVersion !== viewVersion) {
     return;
   }
-  game = new DiscDropGame(app);
+  game = new DiscDropGame(app, { theme: currentTheme });
   await game.init();
   if (localVersion !== viewVersion) {
     return;
@@ -84,7 +100,7 @@ async function showPlay() {
 async function showCollection() {
   const localVersion = ++viewVersion;
   clearCurrentScreen();
-  app.className = "mode-collection";
+  setViewMode("collection");
   const { mountCollectionScreen } = await loadCollectionModule();
   if (localVersion !== viewVersion) {
     return;
