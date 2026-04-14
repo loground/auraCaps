@@ -9,18 +9,54 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
-  color: #dbe5ff;
+  font-family: "Teko", "Sora", "Avenir Next", "Segoe UI", sans-serif;
+  color: #ffd8c6;
   background:
-    radial-gradient(circle at 16% 15%, #182848 0%, transparent 35%),
-    radial-gradient(circle at 82% 18%, #2b3658 0%, transparent 36%),
-    linear-gradient(180deg, #070b18 0%, #03050d 100%);
+    radial-gradient(circle at 18% 16%, #4a1510 0%, transparent 36%),
+    radial-gradient(circle at 82% 14%, #2d0907 0%, transparent 34%),
+    linear-gradient(180deg, #0f0404 0%, #060203 100%);
 }
 
 canvas {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.menu-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.menu-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.menu-buttons {
+  position: absolute;
+  left: clamp(1rem, 5vw, 4rem);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  pointer-events: auto;
+}
+
+.menu-btn {
+  min-width: 180px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1.7rem;
+  border-radius: 0;
+  border: 2px solid rgba(255, 163, 118, 0.8);
+  background: linear-gradient(180deg, rgba(98, 23, 15, 0.95), rgba(38, 8, 7, 0.95));
+  color: #ffe0d2;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4), inset 0 0 18px rgba(255, 86, 41, 0.18);
 }
 
 .panel {
@@ -61,7 +97,7 @@ canvas {
 .panel input[type="range"] {
   grid-column: 1 / 2;
   width: 100%;
-  accent-color: #7dd3fc;
+  accent-color: #ff7f50;
 }
 
 .panel select {
@@ -69,8 +105,8 @@ canvas {
   width: 100%;
   border-radius: 8px;
   border: 1px solid rgba(138, 174, 245, 0.45);
-  background: rgba(13, 26, 54, 0.9);
-  color: #e7efff;
+  background: rgba(33, 9, 9, 0.9);
+  color: #ffe6d9;
   padding: 0.35rem 0.45rem;
 }
 
@@ -91,8 +127,8 @@ canvas {
 button {
   border: 1px solid rgba(134, 168, 237, 0.42);
   border-radius: 10px;
-  background: rgba(30, 52, 97, 0.85);
-  color: #f8fbff;
+  background: linear-gradient(180deg, rgba(114, 31, 21, 0.9), rgba(49, 12, 11, 0.9));
+  color: #fff4ef;
   font-weight: 600;
   padding: 0.56rem 0.78rem;
   cursor: pointer;
@@ -120,6 +156,88 @@ button:disabled {
   min-height: 1.8rem;
 }
 
+.back-btn {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 6;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 112px;
+}
+
+.collection-screen {
+  width: 100%;
+  height: 100%;
+  padding: 3rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+}
+
+.collection-screen h2 {
+  margin: 0 0 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  color: #ffb08a;
+}
+
+.collection-grid {
+  width: min(980px, 100%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.collection-card {
+  background: linear-gradient(180deg, rgba(39, 11, 10, 0.92), rgba(21, 7, 7, 0.92));
+  border: 1px solid rgba(255, 141, 98, 0.45);
+  padding: 0.9rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.collection-card span {
+  color: #ffc8aa;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.disc-card {
+  width: clamp(88px, 13vw, 144px);
+  aspect-ratio: 1 / 1;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 170, 132, 0.65);
+  box-shadow: 0 0 0 2px rgba(97, 19, 15, 0.65), 0 16px 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  transform-style: preserve-3d;
+  transition: transform 220ms ease;
+  background: radial-gradient(circle at 35% 30%, #5b1f18, #180607);
+}
+
+.disc-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.disc-card:hover {
+  animation: hover-spin 1.2s linear infinite;
+}
+
+@keyframes hover-spin {
+  from {
+    transform: rotateY(0deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateY(360deg) rotateZ(12deg);
+  }
+}
+
 @media (max-width: 640px) {
   .panel {
     top: auto;
@@ -128,5 +246,20 @@ button:disabled {
     width: calc(100vw - 2rem);
     max-height: 56vh;
     overflow: auto;
+  }
+
+  .menu-buttons {
+    top: auto;
+    bottom: 1rem;
+    transform: none;
+    width: calc(100vw - 2rem);
+  }
+
+  .menu-btn {
+    width: 100%;
+  }
+
+  .collection-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

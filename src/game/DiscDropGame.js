@@ -32,6 +32,9 @@ export class DiscDropGame {
     this.minLaunchClearance = LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
 
     this.clock = new THREE.Clock();
+    this.running = false;
+    this.rafId = null;
+    this.handleResizeBound = () => this.handleResize();
   }
 
   async init() {
@@ -54,8 +57,9 @@ export class DiscDropGame {
     this.applyArena(this.activeArenaKey);
     this.buildRoundBodies();
 
+    this.running = true;
     this.animate();
-    window.addEventListener("resize", () => this.handleResize());
+    window.addEventListener("resize", this.handleResizeBound);
   }
 
   setupWorld() {
@@ -530,7 +534,10 @@ export class DiscDropGame {
   }
 
   animate() {
-    requestAnimationFrame(() => this.animate());
+    if (!this.running) {
+      return;
+    }
+    this.rafId = requestAnimationFrame(() => this.animate());
 
     const delta = this.clock.getDelta();
     this.accumulator = Math.min(this.accumulator + delta, 0.25);
@@ -555,5 +562,17 @@ export class DiscDropGame {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  destroy() {
+    this.running = false;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    window.removeEventListener("resize", this.handleResizeBound);
+    this.controls.dispose();
+    this.clearArenaObstacles();
+    this.renderer.dispose();
   }
 }
