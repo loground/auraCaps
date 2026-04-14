@@ -19,6 +19,9 @@ import {
 import { createRenderer, createWorldScene } from "./scene.js";
 import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 
+const ROUND_TIMEOUT_SECONDS = 8;
+const OUT_OF_ARENA_RADIUS = TABLE_RADIUS + 1.1;
+
 export class DiscDropGame {
   constructor(app, { theme = "hell" } = {}) {
     this.app = app;
@@ -29,6 +32,7 @@ export class DiscDropGame {
     this.hasLaunched = false;
     this.hasResolved = false;
     this.stableFrames = 0;
+    this.roundElapsed = 0;
     this.accumulator = 0;
 
     this.lowerDiscBody = null;
@@ -433,6 +437,7 @@ export class DiscDropGame {
     this.hasLaunched = false;
     this.hasResolved = false;
     this.stableFrames = 0;
+    this.roundElapsed = 0;
     this.ui.launchBtn.disabled = false;
     this.setStatus("choose a position to hit");
     this.updateLaunchArrow();
@@ -475,6 +480,7 @@ export class DiscDropGame {
     this.hasLaunched = true;
     this.hasResolved = false;
     this.stableFrames = 0;
+    this.roundElapsed = 0;
     this.ui.launchBtn.disabled = true;
     this.updateLaunchArrow();
 
@@ -548,6 +554,14 @@ export class DiscDropGame {
     }
 
     this.hasResolved = true;
+    if (
+      this.isOutOfArena(this.upperDiscBody) ||
+      this.isOutOfArena(this.lowerDiscBody)
+    ) {
+      this.setStatus("you lost");
+      return;
+    }
+
     const upperColor = this.topFaceColor(this.upperDiscBody);
     const lowerColor = this.topFaceColor(this.lowerDiscBody);
     const greens = Number(upperColor === "green") + Number(lowerColor === "green");
@@ -563,6 +577,11 @@ export class DiscDropGame {
     }
 
     this.setStatus("tie");
+  }
+
+  isOutOfArena(body) {
+    const pos = body.translation();
+    return Math.hypot(pos.x, pos.z) > OUT_OF_ARENA_RADIUS;
   }
 
   hasSettled(body) {
@@ -615,6 +634,7 @@ export class DiscDropGame {
     }
 
     if (this.hasLaunched) {
+      this.roundElapsed += FIXED_STEP;
       this.currentWind(this.clock.elapsedTime, this._wind);
       this.applyWind(this.upperDiscBody, this._wind);
       this.applyWind(this.lowerDiscBody, this._wind);
@@ -636,6 +656,17 @@ export class DiscDropGame {
         }
       } else {
         this.stableFrames = 0;
+      }
+
+      if (
+        this.isOutOfArena(this.upperDiscBody) ||
+        this.isOutOfArena(this.lowerDiscBody)
+      ) {
+        this.resolveRound();
+      }
+
+      if (this.roundElapsed >= ROUND_TIMEOUT_SECONDS) {
+        this.resolveRound();
       }
     }
   }
