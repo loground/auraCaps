@@ -34,28 +34,30 @@ export function renderGameUI(app) {
         <span id="arenaTag">Classic</span>
       </label>
       <p id="arenaHint" class="hint"></p>
-      <label>
-        Position X
-        <input id="posX" type="range" min="-4" max="4" step="0.1" value="0" />
-        <span id="posXValue">0.0</span>
-      </label>
-      <label>
-        Position Z
-        <input id="posZ" type="range" min="-4" max="4" step="0.1" value="0" />
-        <span id="posZValue">0.0</span>
-      </label>
-      <label>
-        Height
-        <input id="height" type="range" min="2" max="8" step="0.1" value="4" />
-        <span id="heightValue">4.0</span>
-      </label>
-      <label>
-        Power
-        <input id="power" type="range" min="0" max="100" step="0.1" value="35" />
-        <span id="powerValue">35.0</span>
-      </label>
+      <div class="play-controls-grid">
+        <label>
+          Position X
+          <input id="posX" type="range" min="-4" max="4" step="0.1" value="0" />
+          <span id="posXValue">0.0</span>
+        </label>
+        <label>
+          Position Z
+          <input id="posZ" type="range" min="-4" max="4" step="0.1" value="0" />
+          <span id="posZValue">0.0</span>
+        </label>
+        <label>
+          Height
+          <input id="height" type="range" min="2" max="8" step="0.1" value="4" />
+          <span id="heightValue">4.0</span>
+        </label>
+        <label>
+          Power
+          <input id="power" type="range" min="0" max="100" step="0.1" value="35" />
+          <span id="powerValue">35.0</span>
+        </label>
+      </div>
       <div class="buttons">
-        <button id="launchBtn" type="button">Launch</button>
+        <button id="launchBtn" type="button">Hit</button>
         <button id="resetBtn" type="button">Reset Round</button>
       </div>
     </div>

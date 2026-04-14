@@ -268,7 +268,13 @@ export class DiscDropGame {
       this.setStatus("choose a position to hit");
     });
 
-    this.ui.launchBtn.addEventListener("click", () => this.launchRound());
+    this.ui.launchBtn.addEventListener("click", () => {
+      if (this.hasResolved) {
+        this.buildRoundBodies();
+        return;
+      }
+      this.launchRound();
+    });
     this.ui.resetBtn.addEventListener("click", () => this.buildRoundBodies());
 
     this.bindSlider("posX");
@@ -439,6 +445,7 @@ export class DiscDropGame {
     this.stableFrames = 0;
     this.roundElapsed = 0;
     this.ui.launchBtn.disabled = false;
+    this.ui.launchBtn.textContent = "Hit";
     this.setStatus("choose a position to hit");
     this.updateLaunchArrow();
   }
@@ -482,6 +489,7 @@ export class DiscDropGame {
     this.stableFrames = 0;
     this.roundElapsed = 0;
     this.ui.launchBtn.disabled = true;
+    this.ui.launchBtn.textContent = "Hit";
     this.updateLaunchArrow();
 
     const launchY = this.safeLaunchHeight();
@@ -554,6 +562,8 @@ export class DiscDropGame {
     }
 
     this.hasResolved = true;
+    this.ui.launchBtn.disabled = false;
+    this.ui.launchBtn.textContent = "Play Again";
     if (
       this.isOutOfArena(this.upperDiscBody) ||
       this.isOutOfArena(this.lowerDiscBody)

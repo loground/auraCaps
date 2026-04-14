@@ -384,12 +384,15 @@ export function mountMenuScreen({
   };
 
   const updateResponsiveLayout = () => {
-    if (!titleMesh) {
-      return;
-    }
     const isMobile = window.innerWidth <= 640;
-    titleMesh.scale.setScalar(isMobile ? 0.58 : 1);
-    titleMesh.position.y = isMobile ? 9.1 : 8.3;
+    if (titleMesh) {
+      titleMesh.scale.setScalar(isMobile ? 0.43 : 1);
+      titleMesh.position.y = isMobile ? 9.25 : 8.3;
+    }
+    if (demonPivot) {
+      demonPivot.scale.setScalar(isMobile ? 8.2 : 10);
+      demonPivot.position.set(0, isMobile ? 1.05 : 1.5, -1);
+    }
   };
 
   handleResize();
