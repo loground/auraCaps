@@ -89,7 +89,8 @@ canvas {
   inset: 0;
   z-index: 4;
   display: grid;
-  place-content: center;
+  justify-items: center;
+  align-content: center;
   gap: 1rem;
   background:
     radial-gradient(circle at 50% 50%, rgba(98, 20, 16, 0.5), rgba(8, 3, 3, 0.95)),
@@ -104,6 +105,7 @@ canvas {
 
 .menu-preloader p {
   margin: 0;
+  width: 100%;
   color: #ffbf9c;
   font-size: 1.25rem;
   letter-spacing: 0.08em;
@@ -448,28 +450,12 @@ button:disabled {
   border: 2px solid rgba(255, 170, 132, 0.65);
   box-shadow: 0 0 0 2px rgba(97, 19, 15, 0.65), 0 16px 30px rgba(0, 0, 0, 0.4);
   overflow: hidden;
-  transform-style: preserve-3d;
-  transition: transform 680ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: filter 180ms ease;
   background: radial-gradient(circle at 35% 30%, #5b1f18, #180607);
   flex: 0 0 auto;
   position: relative;
-}
-
-.disc-face {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  overflow: hidden;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-.disc-face.disc-front {
-  transform: rotateY(0deg) translateZ(0.5px);
-}
-
-.disc-face.disc-back {
-  transform: rotateY(180deg) translateZ(0.5px);
+  cursor: pointer;
+  padding: 0;
 }
 
 .disc-card img {
@@ -477,11 +463,66 @@ button:disabled {
   height: 100%;
   object-fit: cover;
   border-radius: 50%;
-  backface-visibility: hidden;
+  display: block;
 }
 
 .disc-card:hover {
-  transform: rotateY(180deg);
+  transform: none;
+  filter: none;
+}
+
+.inspector-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: grid;
+  place-items: center;
+}
+
+.inspector-modal.hidden {
+  display: none;
+}
+
+.inspector-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 1, 1, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.inspector-panel {
+  position: relative;
+  width: min(860px, calc(100vw - 2rem));
+  height: min(620px, calc(100vh - 3rem));
+  border-radius: 16px;
+  border: 1px solid rgba(255, 137, 99, 0.55);
+  background: linear-gradient(180deg, rgba(43, 10, 8, 0.92), rgba(16, 4, 4, 0.92));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  z-index: 1;
+}
+
+.inspector-canvas-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.inspector-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  min-width: 98px;
+  text-transform: uppercase;
+}
+
+.theme-heaven .inspector-backdrop {
+  background: rgba(18, 49, 78, 0.32);
+}
+
+.theme-heaven .inspector-panel {
+  border: 1px solid rgba(96, 151, 208, 0.5);
+  background: linear-gradient(180deg, rgba(211, 232, 250, 0.95), rgba(177, 209, 239, 0.95));
 }
 
 @media (max-width: 640px) {
