@@ -17,9 +17,9 @@ export function mountMenuScreen({
 }) {
   app.innerHTML = `
     <div class="menu-overlay">
-      <div class="sound-switch" role="group" aria-label="Sound switcher">
-        <button id="soundToggle" class="sound-btn ${soundEnabled ? "active" : ""}" type="button">
-          sound: ${soundEnabled ? "on" : "off"}
+      <div class="menu-mute-switch" role="group" aria-label="Menu mute switcher">
+        <button id="menuMuteToggle" class="menu-mute-btn ${soundEnabled ? "" : "muted"}" type="button">
+          ${soundEnabled ? "mute: off" : "mute: on"}
         </button>
       </div>
       <div class="theme-switch" role="group" aria-label="Theme switcher">
@@ -307,22 +307,22 @@ export function mountMenuScreen({
 
   const playButton = app.querySelector("#menuPlay");
   const collectionButton = app.querySelector("#menuCollection");
-  const soundToggleBtn = app.querySelector("#soundToggle");
+  const menuMuteToggleBtn = app.querySelector("#menuMuteToggle");
   const themeHellBtn = app.querySelector("#themeHell");
   const themeHeavenBtn = app.querySelector("#themeHeaven");
   const preloader = app.querySelector("#menuPreloader");
   const menuButtons = app.querySelector(".menu-buttons");
   const updateSoundButton = (enabled) => {
-    soundToggleBtn.classList.toggle("active", enabled);
-    soundToggleBtn.textContent = `sound: ${enabled ? "on" : "off"}`;
+    menuMuteToggleBtn.classList.toggle("muted", !enabled);
+    menuMuteToggleBtn.textContent = enabled ? "mute: off" : "mute: on";
   };
   const onSoundToggleClick = () => {
-    const enabled = onSoundToggle ? onSoundToggle() : !soundToggleBtn.classList.contains("active");
+    const enabled = onSoundToggle ? onSoundToggle() : menuMuteToggleBtn.classList.contains("muted");
     updateSoundButton(Boolean(enabled));
   };
   const onThemeHell = () => onThemeChange?.("hell");
   const onThemeHeaven = () => onThemeChange?.("heaven");
-  soundToggleBtn.addEventListener("click", onSoundToggleClick);
+  menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
   themeHellBtn.addEventListener("click", onThemeHell);
@@ -424,7 +424,7 @@ export function mountMenuScreen({
     window.removeEventListener("resize", handleResize);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
-    soundToggleBtn.removeEventListener("click", onSoundToggleClick);
+    menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeHellBtn.removeEventListener("click", onThemeHell);
     themeHeavenBtn.removeEventListener("click", onThemeHeaven);
     window.removeEventListener("pointermove", onPointerMove);

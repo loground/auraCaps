@@ -23,6 +23,11 @@ function syncSoundButtonsUI() {
     menuBtn.classList.toggle("active", soundEnabled);
     menuBtn.textContent = `sound: ${soundEnabled ? "on" : "off"}`;
   }
+  const menuMuteBtn = app.querySelector("#menuMuteToggle");
+  if (menuMuteBtn) {
+    menuMuteBtn.classList.toggle("muted", !soundEnabled);
+    menuMuteBtn.textContent = soundEnabled ? "mute: off" : "mute: on";
+  }
   const muteBtn = app.querySelector("#globalMuteBtn");
   if (muteBtn) {
     muteBtn.classList.toggle("muted", !soundEnabled);
@@ -185,7 +190,6 @@ async function showMenu() {
     onPlay: showPlay,
     onCollection: showCollection,
   });
-  cleanupScreen = composeCleanups(cleanupScreen, addGlobalMuteButton());
 }
 
 async function showPlay() {
