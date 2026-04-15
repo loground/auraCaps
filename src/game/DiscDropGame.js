@@ -23,9 +23,10 @@ const ROUND_TIMEOUT_SECONDS = 8;
 const OUT_OF_ARENA_RADIUS = TABLE_RADIUS + 1.1;
 
 export class DiscDropGame {
-  constructor(app, { theme = "hell" } = {}) {
+  constructor(app, { theme = "hell", soundEnabled = true } = {}) {
     this.app = app;
     this.theme = theme;
+    this.soundEnabled = soundEnabled;
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey = theme === "heaven" ? "classic" : DEFAULT_ARENA_KEY;
 
@@ -51,6 +52,19 @@ export class DiscDropGame {
     this._tempQuat = new THREE.Quaternion();
     this._tempUp = new THREE.Vector3(0, 1, 0);
     this._tempForward = new THREE.Vector3();
+    this.throwSfxPaths = [
+      "/sounds/throw.mp3",
+      "/sounds/throw2.mp3",
+      "/sounds/throw3.mp3",
+      "/sounds/throw4.mp3",
+      "/sounds/throw5.mp3",
+    ];
+    this.winSfxPaths = [
+      "/sounds/win1.mp3",
+      "/sounds/win2.mp3",
+      "/sounds/win3.mp3",
+    ];
+    this.lastHitSfxAt = 0;
   }
 
   async init() {
@@ -97,6 +111,7 @@ export class DiscDropGame {
 
   setupWorld() {
     this.world = new RAPIER.World({ x: 0, y: -14, z: 0 });
+    this.eventQueue = new RAPIER.EventQueue(true);
     this.world.maxCcdSubsteps = 8;
     this.world.integrationParameters.maxCcdSubsteps = 8;
 
@@ -413,11 +428,12 @@ export class DiscDropGame {
     this.lowerDiscBody.setAngularDamping(0.003);
     this.lowerDiscBody.enableCcd(true);
     this.lowerDiscBody.setSoftCcdPrediction(0.3);
-    this.world.createCollider(
+    this.lowerDiscCollider = this.world.createCollider(
       RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
         .setFriction(arena.lowerFriction)
         .setRestitution(arena.lowerRestitution)
-        .setDensity(arena.lowerDensity),
+        .setDensity(arena.lowerDensity)
+        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.lowerDiscBody
     );
 
@@ -428,11 +444,12 @@ export class DiscDropGame {
         this.settings.posZ
       )
     );
-    this.world.createCollider(
+    this.upperDiscCollider = this.world.createCollider(
       RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
         .setFriction(arena.upperFriction)
         .setRestitution(arena.upperRestitution)
-        .setDensity(arena.upperDensity),
+        .setDensity(arena.upperDensity)
+        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.upperDiscBody
     );
     this.upperDiscBody.setLinearDamping(0.06);
@@ -448,6 +465,34 @@ export class DiscDropGame {
     this.ui.launchBtn.textContent = "Hit";
     this.setStatus("choose a position to hit");
     this.updateLaunchArrow();
+  }
+
+  playSfx(path, volume = 0.8) {
+    if (!this.soundEnabled) {
+      return;
+    }
+    try {
+      const audio = new Audio(path);
+      audio.volume = volume;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {});
+      }
+    } catch {
+      // Ignore playback errors.
+    }
+  }
+
+  playRandomThrowSfx() {
+    const randomPath =
+      this.throwSfxPaths[Math.floor(Math.random() * this.throwSfxPaths.length)];
+    this.playSfx(randomPath, 0.88);
+  }
+
+  playRandomWinSfx() {
+    const randomPath =
+      this.winSfxPaths[Math.floor(Math.random() * this.winSfxPaths.length)];
+    this.playSfx(randomPath, 0.9);
   }
 
   getLowerTargetPosition() {
@@ -546,6 +591,7 @@ export class DiscDropGame {
       true
     );
 
+    this.playRandomThrowSfx();
     this.setStatus("in motion");
   }
 
@@ -578,6 +624,7 @@ export class DiscDropGame {
 
     if (greens === 2) {
       this.setStatus("you won");
+      this.playRandomWinSfx();
       return;
     }
 
@@ -633,6 +680,35 @@ export class DiscDropGame {
     mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
   }
 
+  isDiscCollisionPair(handleA, handleB) {
+    if (!this.upperDiscCollider || !this.lowerDiscCollider) {
+      return false;
+    }
+    const upper = this.upperDiscCollider.handle;
+    const lower = this.lowerDiscCollider.handle;
+    return (
+      (handleA === upper && handleB === lower) ||
+      (handleA === lower && handleB === upper)
+    );
+  }
+
+  consumeCollisionSfxEvents() {
+    if (!this.eventQueue) {
+      return;
+    }
+    this.eventQueue.drainCollisionEvents((handleA, handleB, started) => {
+      if (!started || !this.isDiscCollisionPair(handleA, handleB)) {
+        return;
+      }
+      const now = performance.now();
+      if (now - this.lastHitSfxAt < 80) {
+        return;
+      }
+      this.lastHitSfxAt = now;
+      this.playSfx("/sounds/hit.mp3", 0.82);
+    });
+  }
+
   stepPhysics() {
     if (!this.hasLaunched && this.upperDiscBody) {
       this.upperDiscBody.setNextKinematicTranslation({
@@ -651,7 +727,8 @@ export class DiscDropGame {
     }
 
     this.world.timestep = FIXED_STEP;
-    this.world.step();
+    this.world.step(this.eventQueue);
+    this.consumeCollisionSfxEvents();
 
     if (
       this.hasLaunched &&

@@ -12,9 +12,16 @@ export function mountMenuScreen({
   onCollection,
   theme = "hell",
   onThemeChange,
+  soundEnabled = true,
+  onSoundToggle,
 }) {
   app.innerHTML = `
     <div class="menu-overlay">
+      <div class="sound-switch" role="group" aria-label="Sound switcher">
+        <button id="soundToggle" class="sound-btn ${soundEnabled ? "active" : ""}" type="button">
+          sound: ${soundEnabled ? "on" : "off"}
+        </button>
+      </div>
       <div class="theme-switch" role="group" aria-label="Theme switcher">
         <button id="themeHell" class="theme-btn ${theme === "hell" ? "active" : ""}" type="button">hell</button>
         <button id="themeHeaven" class="theme-btn ${theme === "heaven" ? "active" : ""}" type="button">heaven</button>
@@ -300,12 +307,22 @@ export function mountMenuScreen({
 
   const playButton = app.querySelector("#menuPlay");
   const collectionButton = app.querySelector("#menuCollection");
+  const soundToggleBtn = app.querySelector("#soundToggle");
   const themeHellBtn = app.querySelector("#themeHell");
   const themeHeavenBtn = app.querySelector("#themeHeaven");
   const preloader = app.querySelector("#menuPreloader");
   const menuButtons = app.querySelector(".menu-buttons");
+  const updateSoundButton = (enabled) => {
+    soundToggleBtn.classList.toggle("active", enabled);
+    soundToggleBtn.textContent = `sound: ${enabled ? "on" : "off"}`;
+  };
+  const onSoundToggleClick = () => {
+    const enabled = onSoundToggle ? onSoundToggle() : !soundToggleBtn.classList.contains("active");
+    updateSoundButton(Boolean(enabled));
+  };
   const onThemeHell = () => onThemeChange?.("hell");
   const onThemeHeaven = () => onThemeChange?.("heaven");
+  soundToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
   themeHellBtn.addEventListener("click", onThemeHell);
@@ -407,6 +424,7 @@ export function mountMenuScreen({
     window.removeEventListener("resize", handleResize);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
+    soundToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeHellBtn.removeEventListener("click", onThemeHell);
     themeHeavenBtn.removeEventListener("click", onThemeHeaven);
     window.removeEventListener("pointermove", onPointerMove);

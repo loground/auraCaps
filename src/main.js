@@ -1,6 +1,106 @@
 import "./style.css";
 
 const app = document.querySelector("#app");
+const hoverSfxTemplate = new Audio("/sounds/menuHover.mp3");
+hoverSfxTemplate.preload = "auto";
+const hoverTargetsSelector = "button, .collection-card, .disc-card";
+let lastHoverSfxAt = 0;
+let soundEnabled = true;
+
+function composeCleanups(...cleanups) {
+  return () => {
+    for (const cleanup of cleanups) {
+      if (typeof cleanup === "function") {
+        cleanup();
+      }
+    }
+  };
+}
+
+function syncSoundButtonsUI() {
+  const menuBtn = app.querySelector("#soundToggle");
+  if (menuBtn) {
+    menuBtn.classList.toggle("active", soundEnabled);
+    menuBtn.textContent = `sound: ${soundEnabled ? "on" : "off"}`;
+  }
+  const muteBtn = app.querySelector("#globalMuteBtn");
+  if (muteBtn) {
+    muteBtn.classList.toggle("muted", !soundEnabled);
+    muteBtn.textContent = soundEnabled ? "mute: off" : "mute: on";
+  }
+}
+
+function addGlobalMuteButton() {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "globalMuteBtn";
+  button.className = "global-mute-btn";
+  app.appendChild(button);
+
+  const onClick = () => {
+    soundEnabled = !soundEnabled;
+    syncSoundButtonsUI();
+  };
+
+  button.addEventListener("click", onClick);
+  syncSoundButtonsUI();
+
+  return () => {
+    button.removeEventListener("click", onClick);
+    button.remove();
+  };
+}
+
+function playHoverSfx() {
+  if (!soundEnabled) {
+    return;
+  }
+  const now = performance.now();
+  if (now - lastHoverSfxAt < 45) {
+    return;
+  }
+  lastHoverSfxAt = now;
+
+  try {
+    const hoverSfx = hoverSfxTemplate.cloneNode();
+    hoverSfx.volume = 0.7;
+    const playPromise = hoverSfx.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {});
+    }
+  } catch {
+    // Ignore autoplay or playback errors.
+  }
+}
+
+app.addEventListener("mouseover", (event) => {
+  if (app.classList.contains("mode-play")) {
+    return;
+  }
+
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const target = event.target.closest(hoverTargetsSelector);
+  if (!target || !app.contains(target)) {
+    return;
+  }
+
+  if (target.matches("button:disabled")) {
+    return;
+  }
+
+  const fromTarget =
+    event.relatedTarget instanceof Element
+      ? event.relatedTarget.closest(hoverTargetsSelector)
+      : null;
+  if (fromTarget === target) {
+    return;
+  }
+
+  playHoverSfx();
+});
 
 let cleanupScreen = null;
 let game = null;
@@ -70,6 +170,12 @@ async function showMenu() {
   cleanupScreen = mountMenuScreen({
     app,
     theme: currentTheme,
+    soundEnabled,
+    onSoundToggle: () => {
+      soundEnabled = !soundEnabled;
+      syncSoundButtonsUI();
+      return soundEnabled;
+    },
     onThemeChange: (nextTheme) => {
       if (nextTheme !== currentTheme) {
         setTheme(nextTheme);
@@ -79,6 +185,7 @@ async function showMenu() {
     onPlay: showPlay,
     onCollection: showCollection,
   });
+  cleanupScreen = composeCleanups(cleanupScreen, addGlobalMuteButton());
 }
 
 async function showPlay() {
@@ -89,12 +196,15 @@ async function showPlay() {
   if (localVersion !== viewVersion) {
     return;
   }
-  game = new DiscDropGame(app, { theme: currentTheme });
+  game = new DiscDropGame(app, {
+    theme: currentTheme,
+    soundEnabled,
+  });
   await game.init();
   if (localVersion !== viewVersion) {
     return;
   }
-  cleanupScreen = addBackButton(showMenu);
+  cleanupScreen = composeCleanups(addBackButton(showMenu), addGlobalMuteButton());
 }
 
 async function showCollection() {
@@ -105,7 +215,10 @@ async function showCollection() {
   if (localVersion !== viewVersion) {
     return;
   }
-  cleanupScreen = mountCollectionScreen({ app, onBack: showMenu });
+  cleanupScreen = composeCleanups(
+    mountCollectionScreen({ app, onBack: showMenu }),
+    addGlobalMuteButton()
+  );
 }
 
 showMenu();
