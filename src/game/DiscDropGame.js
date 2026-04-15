@@ -41,6 +41,9 @@ export class DiscDropGame {
 
     this.arenaObstacleBodies = [];
     this.arenaObstacleMeshes = [];
+    this.arenaSurfaceBodies = [];
+    this.arenaSurfaceColliders = [];
+    this.useArenaMeshFloor = false;
 
     this.minLaunchClearance = LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
 
@@ -140,6 +143,8 @@ export class DiscDropGame {
     if (this.theme === "heaven") {
       this.floorMesh.visible = true;
       this.tableMesh.visible = true;
+      this.useArenaMeshFloor = false;
+      this.floorCollider.setEnabled(true);
       return Promise.resolve();
     }
 
@@ -181,7 +186,8 @@ export class DiscDropGame {
           this.arenaVisualRoot.clear();
           this.arenaVisualRoot.add(model);
           this.arenaVisualRoot.scale.setScalar(scale);
-          this.arenaVisualRoot.position.set(0, -0.5, 0);
+          this.arenaVisualRoot.position.set(0, -0.62, 0);
+          this.createHellArenaSurfacePhysics();
           resolve();
         },
         undefined,
@@ -189,10 +195,77 @@ export class DiscDropGame {
           // Fallback to procedural visuals if model loading fails.
           this.floorMesh.visible = true;
           this.tableMesh.visible = true;
+          this.useArenaMeshFloor = false;
+          this.floorCollider.setEnabled(true);
           resolve();
         }
       );
     });
+  }
+
+  clearArenaSurfacePhysics() {
+    while (this.arenaSurfaceBodies.length > 0) {
+      this.world.removeRigidBody(this.arenaSurfaceBodies.pop());
+    }
+    this.arenaSurfaceColliders.length = 0;
+  }
+
+  createHellArenaSurfacePhysics() {
+    this.clearArenaSurfacePhysics();
+    if (!this.arenaVisualRoot) {
+      this.useArenaMeshFloor = false;
+      this.floorCollider.setEnabled(true);
+      return;
+    }
+
+    this.arenaVisualRoot.updateMatrixWorld(true);
+
+    const tempVec = new THREE.Vector3();
+    this.arenaVisualRoot.traverse((child) => {
+      if (!child.isMesh || !child.geometry?.attributes?.position) {
+        return;
+      }
+
+      const positionAttr = child.geometry.attributes.position;
+      const vertexCount = positionAttr.count;
+      if (vertexCount < 3) {
+        return;
+      }
+
+      const vertices = new Float32Array(vertexCount * 3);
+      for (let i = 0; i < vertexCount; i += 1) {
+        tempVec.fromBufferAttribute(positionAttr, i).applyMatrix4(child.matrixWorld);
+        const offset = i * 3;
+        vertices[offset] = tempVec.x;
+        vertices[offset + 1] = tempVec.y;
+        vertices[offset + 2] = tempVec.z;
+      }
+
+      let indices;
+      if (child.geometry.index) {
+        indices = new Uint32Array(child.geometry.index.array);
+      } else {
+        indices = new Uint32Array(vertexCount);
+        for (let i = 0; i < vertexCount; i += 1) {
+          indices[i] = i;
+        }
+      }
+
+      if (indices.length < 3) {
+        return;
+      }
+
+      const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+      const collider = this.world.createCollider(
+        RAPIER.ColliderDesc.trimesh(vertices, indices),
+        body
+      );
+      this.arenaSurfaceBodies.push(body);
+      this.arenaSurfaceColliders.push(collider);
+    });
+
+    this.useArenaMeshFloor = this.arenaSurfaceColliders.length > 0;
+    this.floorCollider.setEnabled(!this.useArenaMeshFloor);
   }
 
   setupDiscs() {
@@ -389,6 +462,13 @@ export class DiscDropGame {
     this.floorCollider.setRestitution(arena.floorRestitution);
     this.catchFloorCollider.setFriction(Math.max(0.25, arena.floorFriction));
     this.catchFloorCollider.setRestitution(0.22);
+
+    if (this.useArenaMeshFloor && this.arenaSurfaceColliders.length > 0) {
+      for (const collider of this.arenaSurfaceColliders) {
+        collider.setFriction(arena.floorFriction);
+        collider.setRestitution(arena.floorRestitution);
+      }
+    }
 
     this.ui.arenaHintEl.textContent = arena.hint;
     this.ui.arenaTagEl.textContent = arena.label;
@@ -834,6 +914,7 @@ export class DiscDropGame {
       this.arenaKtx2Loader.dispose();
       this.arenaKtx2Loader = null;
     }
+    this.clearArenaSurfacePhysics();
     this.clearArenaObstacles();
     this.renderer.dispose();
   }
