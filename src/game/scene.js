@@ -30,7 +30,7 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
   controls.dampingFactor = 0.08;
   controls.target.set(0, 0.35, 0);
   controls.minDistance = 6;
-  controls.maxDistance = 28;
+  controls.maxDistance = 40;
   controls.maxPolarAngle = Math.PI * 0.495;
 
   const ambientLight = new THREE.AmbientLight(

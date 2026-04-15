@@ -21,6 +21,8 @@ import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 
 const ROUND_TIMEOUT_SECONDS = 8;
 const OUT_OF_ARENA_RADIUS = TABLE_RADIUS + 1.1;
+const HEIGHT_MIN = 2;
+const HEIGHT_MAX = 8;
 
 export class DiscDropGame {
   constructor(app, { theme = "hell", soundEnabled = true } = {}) {
@@ -52,10 +54,24 @@ export class DiscDropGame {
     this.running = false;
     this.rafId = null;
     this.handleResizeBound = () => this.handleResize();
+    this.handleCanvasPointerDownBound = (event) =>
+      this.handleCanvasPointerDown(event);
+    this.handleWindowPointerMoveBound = (event) =>
+      this.handleWindowPointerMove(event);
+    this.handleWindowPointerUpBound = () => this.handleWindowPointerUp();
     this._wind = { x: 0, y: 0, z: 0 };
     this._tempQuat = new THREE.Quaternion();
     this._tempUp = new THREE.Vector3(0, 1, 0);
     this._tempForward = new THREE.Vector3();
+    this._tempPickPoint = new THREE.Vector3();
+    this._raycaster = new THREE.Raycaster();
+    this._pointerNdc = new THREE.Vector2();
+    this._pickPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LOWER_DISC_START_Y);
+    this.positionPickRadius = TABLE_RADIUS - 1.45;
+    this.isDraggingPosition = false;
+    this.isChargingPower = false;
+    this.chargeDirection = 1;
+    this.chargeValue = 0;
     this.throwSfxPaths = [
       "/sounds/throw.mp3",
       "/sounds/throw2.mp3",
@@ -91,7 +107,14 @@ export class DiscDropGame {
     await this.setupArenaVisualModel();
     this.setupDiscs();
     this.setupArrow();
+    this.setupPositionGizmo();
     this.setupUIBindings();
+    this.renderer.domElement.addEventListener(
+      "pointerdown",
+      this.handleCanvasPointerDownBound
+    );
+    window.addEventListener("pointermove", this.handleWindowPointerMoveBound);
+    window.addEventListener("pointerup", this.handleWindowPointerUpBound);
 
     this.applyArena(this.activeArenaKey);
     this.buildRoundBodies();
@@ -125,7 +148,8 @@ export class DiscDropGame {
     this.floorCollider = this.world.createCollider(
       RAPIER.ColliderDesc.cylinder(0.22, TABLE_RADIUS)
         .setFriction(0.38)
-        .setRestitution(0.55),
+        .setRestitution(0.55)
+        .setContactSkin(0.008),
       floorBody
     );
 
@@ -135,7 +159,8 @@ export class DiscDropGame {
     this.catchFloorCollider = this.world.createCollider(
       RAPIER.ColliderDesc.cuboid(TABLE_RADIUS + 1, 1, TABLE_RADIUS + 1)
         .setFriction(0.55)
-        .setRestitution(0.2),
+        .setRestitution(0.2)
+        .setContactSkin(0.008),
       catchFloorBody
     );
   }
@@ -262,7 +287,7 @@ export class DiscDropGame {
 
       const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
       const collider = this.world.createCollider(
-        RAPIER.ColliderDesc.trimesh(vertices, indices),
+        RAPIER.ColliderDesc.trimesh(vertices, indices).setContactSkin(0.004),
         body
       );
       this.arenaSurfaceBodies.push(body);
@@ -270,7 +295,8 @@ export class DiscDropGame {
     });
 
     this.useArenaMeshFloor = this.arenaSurfaceColliders.length > 0;
-    this.floorCollider.setEnabled(!this.useArenaMeshFloor);
+    // Keep base floor enabled as a safety net against deep penetration.
+    this.floorCollider.setEnabled(true);
   }
 
   createLavaMaterial() {
@@ -395,6 +421,52 @@ export class DiscDropGame {
     this.scene.add(this.launchArrow);
   }
 
+  setupPositionGizmo() {
+    this.positionGizmo = new THREE.Group();
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: "#ffe3a8",
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.42, 0.07, 16, 56),
+      ringMat
+    );
+    ring.rotation.x = Math.PI * 0.5;
+    ring.renderOrder = 999;
+    this.positionGizmo.add(ring);
+
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: "#ff9f66",
+      depthTest: false,
+      depthWrite: false,
+    });
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 20, 20),
+      coreMat
+    );
+    core.position.y = 0.04;
+    core.renderOrder = 1000;
+    this.positionGizmo.add(core);
+
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 0.16, 12),
+      new THREE.MeshBasicMaterial({
+        color: "#ffd9a3",
+        depthTest: false,
+        depthWrite: false,
+      })
+    );
+    pole.position.y = 0.08;
+    pole.renderOrder = 999;
+    this.positionGizmo.add(pole);
+
+    this.scene.add(this.positionGizmo);
+    this.updatePositionGizmo();
+  }
+
   setupUIBindings() {
     const arenaKeys =
       this.theme === "heaven" ? ["classic"] : Object.keys(ARENA_CONFIGS);
@@ -414,27 +486,13 @@ export class DiscDropGame {
       this.setStatus("choose a position to hit");
     });
 
-    this.ui.launchBtn.addEventListener("click", () => {
-      if (this.hasResolved) {
-        this.buildRoundBodies();
-        return;
-      }
-      this.launchRound();
-    });
-    this.ui.resetBtn.addEventListener("click", () => this.buildRoundBodies());
-
-    this.bindSlider("posX");
-    this.bindSlider("posZ");
-    this.bindSlider("height");
-    this.bindSlider("power");
-  }
-
-  bindSlider(key) {
-    const slider = this.ui.sliders[key];
-    const sync = () => {
-      this.settings[key] = Number(slider.input.value);
-      slider.value.textContent = slider.format(this.settings[key]);
-
+    const onHeightPointer = (event) => {
+      const rect = this.ui.heightMeterEl.getBoundingClientRect();
+      const y = THREE.MathUtils.clamp(event.clientY - rect.top, 0, rect.height);
+      const ratioTopToBottom = y / rect.height;
+      const ratioBottomToTop = 1 - ratioTopToBottom;
+      this.settings.height = HEIGHT_MIN + (HEIGHT_MAX - HEIGHT_MIN) * ratioBottomToTop;
+      this.updateHeightMeterUI();
       if (!this.hasLaunched && this.upperDiscBody) {
         this.upperDiscBody.setNextKinematicTranslation({
           x: this.settings.posX,
@@ -443,11 +501,39 @@ export class DiscDropGame {
         });
         this.upperDiscBody.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 });
         this.updateLaunchArrow();
+        this.updatePositionGizmo();
       }
     };
+    let isDraggingHeight = false;
+    this.ui.heightMeterEl.addEventListener("pointerdown", (event) => {
+      isDraggingHeight = true;
+      this.ui.heightMeterEl.setPointerCapture(event.pointerId);
+      onHeightPointer(event);
+    });
+    this.ui.heightMeterEl.addEventListener("pointermove", (event) => {
+      if (isDraggingHeight) {
+        onHeightPointer(event);
+      }
+    });
+    this.ui.heightMeterEl.addEventListener("pointerup", () => {
+      isDraggingHeight = false;
+    });
+    this.ui.heightMeterEl.addEventListener("pointercancel", () => {
+      isDraggingHeight = false;
+    });
+    this.updateHeightMeterUI();
 
-    slider.input.addEventListener("input", sync);
-    sync();
+    this.ui.launchBtn.addEventListener("click", () => {
+      if (this.hasLaunched) {
+        return;
+      }
+      if (this.isChargingPower) {
+        this.commitPowerAndLaunch();
+      } else {
+        this.startPowerCharge();
+      }
+    });
+    this.ui.resetBtn.addEventListener("click", () => this.buildRoundBodies());
   }
 
   safeLaunchHeight() {
@@ -456,6 +542,38 @@ export class DiscDropGame {
 
   setStatus(message) {
     this.ui.statusEl.textContent = message;
+  }
+
+  updatePowerMeterUI() {
+    const value = THREE.MathUtils.clamp(this.chargeValue, 0, 100);
+    this.ui.powerFillEl.style.height = `${value}%`;
+    this.ui.powerMarkerEl.style.top = `calc(${value}% - 1px)`;
+  }
+
+  updateHeightMeterUI() {
+    const ratio =
+      (THREE.MathUtils.clamp(this.settings.height, HEIGHT_MIN, HEIGHT_MAX) - HEIGHT_MIN) /
+      (HEIGHT_MAX - HEIGHT_MIN);
+    const pct = ratio * 100;
+    this.ui.heightFillEl.style.height = `${pct}%`;
+    this.ui.heightMarkerEl.style.bottom = `calc(${pct}% - 1px)`;
+    this.ui.heightValueEl.textContent = this.settings.height.toFixed(1);
+  }
+
+  startPowerCharge() {
+    this.isChargingPower = true;
+    this.chargeDirection = 1;
+    this.chargeValue = 0;
+    this.ui.launchBtn.textContent = "Hit";
+    this.updatePowerMeterUI();
+    this.setStatus("set power and hit");
+  }
+
+  commitPowerAndLaunch() {
+    this.isChargingPower = false;
+    this.settings.power = THREE.MathUtils.clamp(this.chargeValue, 3, 100);
+    this.ui.actionButtonsEl.classList.add("show-reset");
+    this.launchRound();
   }
 
   clearArenaObstacles() {
@@ -564,6 +682,7 @@ export class DiscDropGame {
     );
     this.lowerDiscBody.setLinearDamping(0.015);
     this.lowerDiscBody.setAngularDamping(0.003);
+    this.lowerDiscBody.setAdditionalSolverIterations(8);
     this.lowerDiscBody.enableCcd(true);
     this.lowerDiscBody.setSoftCcdPrediction(0.3);
     this.lowerDiscCollider = this.world.createCollider(
@@ -571,6 +690,7 @@ export class DiscDropGame {
         .setFriction(arena.lowerFriction)
         .setRestitution(arena.lowerRestitution)
         .setDensity(arena.lowerDensity)
+        .setContactSkin(0.003)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.lowerDiscBody
     );
@@ -587,11 +707,13 @@ export class DiscDropGame {
         .setFriction(arena.upperFriction)
         .setRestitution(arena.upperRestitution)
         .setDensity(arena.upperDensity)
+        .setContactSkin(0.003)
         .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
       this.upperDiscBody
     );
     this.upperDiscBody.setLinearDamping(0.06);
     this.upperDiscBody.setAngularDamping(0.03);
+    this.upperDiscBody.setAdditionalSolverIterations(8);
     this.upperDiscBody.enableCcd(true);
     this.upperDiscBody.setSoftCcdPrediction(0.3);
 
@@ -599,10 +721,17 @@ export class DiscDropGame {
     this.hasResolved = false;
     this.stableFrames = 0;
     this.roundElapsed = 0;
+    this.isChargingPower = false;
+    this.chargeValue = 0;
     this.ui.launchBtn.disabled = false;
-    this.ui.launchBtn.textContent = "Hit";
+    this.ui.launchBtn.textContent = "Power";
+    this.ui.actionButtonsEl.classList.remove("show-reset");
+    this.updateHeightMeterUI();
+    this.updatePowerMeterUI();
     this.setStatus("choose a position to hit");
     this.updateLaunchArrow();
+    this.updatePositionGizmo();
+    this.updateMiniMap();
   }
 
   playSfx(path, volume = 0.8) {
@@ -649,6 +778,7 @@ export class DiscDropGame {
       lowerPos.y - launchY,
       lowerPos.z - this.settings.posZ
     );
+    const fullLength = Math.max(0.3, toLower.length());
 
     if (toLower.lengthSq() < 0.000001) {
       toLower.set(0, -1, 0);
@@ -658,8 +788,138 @@ export class DiscDropGame {
 
     this.launchArrow.position.set(this.settings.posX, launchY, this.settings.posZ);
     this.launchArrow.setDirection(toLower);
-    this.launchArrow.setLength(1 + this.settings.power * 0.16, 0.7, 0.45);
+    const headLength = THREE.MathUtils.clamp(fullLength * 0.2, 0.14, 0.55);
+    const headWidth = THREE.MathUtils.clamp(fullLength * 0.1, 0.08, 0.35);
+    this.launchArrow.setLength(fullLength, headLength, headWidth);
     this.launchArrow.visible = !this.hasLaunched;
+  }
+
+  updatePositionGizmo() {
+    if (!this.positionGizmo) {
+      return;
+    }
+    this.positionGizmo.position.set(
+      this.settings.posX,
+      this.safeLaunchHeight() + 0.03,
+      this.settings.posZ
+    );
+    this.positionGizmo.visible = !this.hasLaunched;
+  }
+
+  updateMiniMap() {
+    if (!this.ui?.miniMapEl || !this.ui.miniLowerDotEl || !this.ui.miniUpperDotEl) {
+      return;
+    }
+
+    const size = this.ui.miniMapEl.clientWidth || 128;
+    const half = size * 0.5;
+    const radius = Math.max(TABLE_RADIUS, 0.001);
+    const mapScale = half * 0.88;
+
+    const mapToUi = (x, z) => {
+      const nx = THREE.MathUtils.clamp(x / radius, -1, 1);
+      const nz = THREE.MathUtils.clamp(z / radius, -1, 1);
+      return {
+        x: half + nx * mapScale,
+        y: half + nz * mapScale,
+      };
+    };
+
+    const lowerPos = this.lowerDiscBody
+      ? this.lowerDiscBody.translation()
+      : { x: 0, z: 0 };
+    const upperPos =
+      this.upperDiscBody && this.hasLaunched
+        ? this.upperDiscBody.translation()
+        : { x: this.settings.posX, z: this.settings.posZ };
+
+    const lowerUi = mapToUi(lowerPos.x, lowerPos.z);
+    const upperUi = mapToUi(upperPos.x, upperPos.z);
+    this.ui.miniLowerDotEl.style.left = `${lowerUi.x}px`;
+    this.ui.miniLowerDotEl.style.top = `${lowerUi.y}px`;
+    this.ui.miniUpperDotEl.style.left = `${upperUi.x}px`;
+    this.ui.miniUpperDotEl.style.top = `${upperUi.y}px`;
+  }
+
+  handleCanvasPointerDown(event) {
+    if (
+      event.button !== 0 ||
+      this.hasLaunched ||
+      this.isChargingPower ||
+      !this.positionGizmo
+    ) {
+      return;
+    }
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this._pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this._pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this._raycaster.setFromCamera(this._pointerNdc, this.camera);
+    const dragTargets = [...this.positionGizmo.children];
+    if (this.upperDiscMesh) {
+      dragTargets.push(this.upperDiscMesh);
+    }
+    const hits = this._raycaster.intersectObjects(dragTargets, false);
+    if (hits.length === 0) {
+      return;
+    }
+
+    this.isDraggingPosition = true;
+    this.controls.enabled = false;
+    this.updateDragPosition(event);
+  }
+
+  updateDragPosition(event) {
+    this._pickPlane.constant = -this.safeLaunchHeight();
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this._pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this._pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this._raycaster.setFromCamera(this._pointerNdc, this.camera);
+    const picked = this._raycaster.ray.intersectPlane(
+      this._pickPlane,
+      this._tempPickPoint
+    );
+    if (!picked) {
+      return;
+    }
+
+    let x = picked.x;
+    let z = picked.z;
+    const radius = Math.hypot(x, z);
+    if (radius > this.positionPickRadius) {
+      const s = this.positionPickRadius / radius;
+      x *= s;
+      z *= s;
+    }
+
+    this.settings.posX = x;
+    this.settings.posZ = z;
+    if (!this.hasLaunched && this.upperDiscBody) {
+      this.upperDiscBody.setNextKinematicTranslation({
+        x: this.settings.posX,
+        y: this.safeLaunchHeight(),
+        z: this.settings.posZ,
+      });
+      this.upperDiscBody.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 });
+    }
+    this.updateLaunchArrow();
+    this.updatePositionGizmo();
+    this.updateMiniMap();
+  }
+
+  handleWindowPointerMove(event) {
+    if (!this.isDraggingPosition) {
+      return;
+    }
+    this.updateDragPosition(event);
+  }
+
+  handleWindowPointerUp() {
+    if (!this.isDraggingPosition) {
+      return;
+    }
+    this.isDraggingPosition = false;
+    this.controls.enabled = true;
   }
 
   launchRound() {
@@ -674,6 +934,8 @@ export class DiscDropGame {
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Hit";
     this.updateLaunchArrow();
+    this.updatePositionGizmo();
+    this.updateMiniMap();
 
     const launchY = this.safeLaunchHeight();
 
@@ -746,8 +1008,8 @@ export class DiscDropGame {
     }
 
     this.hasResolved = true;
-    this.ui.launchBtn.disabled = false;
-    this.ui.launchBtn.textContent = "Play Again";
+    this.ui.launchBtn.disabled = true;
+    this.ui.launchBtn.textContent = "Power";
     if (
       this.isOutOfArena(this.upperDiscBody) ||
       this.isOutOfArena(this.lowerDiscBody)
@@ -903,6 +1165,17 @@ export class DiscDropGame {
     this.rafId = requestAnimationFrame(() => this.animate());
 
     const delta = this.clock.getDelta();
+    if (this.isChargingPower) {
+      this.chargeValue += this.chargeDirection * delta * 120;
+      if (this.chargeValue >= 100) {
+        this.chargeValue = 100;
+        this.chargeDirection = -1;
+      } else if (this.chargeValue <= 0) {
+        this.chargeValue = 0;
+        this.chargeDirection = 1;
+      }
+      this.updatePowerMeterUI();
+    }
     this.accumulator = Math.min(this.accumulator + delta, 0.25);
 
     while (this.accumulator >= FIXED_STEP) {
@@ -916,6 +1189,7 @@ export class DiscDropGame {
     if (this.lowerDiscBody) {
       this.syncMesh(this.lowerDiscBody, this.lowerDiscMesh);
     }
+    this.updateMiniMap();
 
     this.controls.update();
 
@@ -938,10 +1212,10 @@ export class DiscDropGame {
 
   applyResponsiveCamera() {
     if (window.innerWidth <= 760) {
-      this.camera.position.set(0, 15.2, 24.2);
+      this.camera.position.set(0, 19.2, 31.5);
       this.controls.target.set(0, 0.45, 0);
     } else {
-      this.camera.position.set(0, 9.8, 16.4);
+      this.camera.position.set(0, 13.3, 24.6);
       this.controls.target.set(0, 0.35, 0);
     }
     this.camera.lookAt(this.controls.target);
@@ -962,6 +1236,12 @@ export class DiscDropGame {
       this.rafId = null;
     }
     window.removeEventListener("resize", this.handleResizeBound);
+    window.removeEventListener("pointermove", this.handleWindowPointerMoveBound);
+    window.removeEventListener("pointerup", this.handleWindowPointerUpBound);
+    this.renderer.domElement.removeEventListener(
+      "pointerdown",
+      this.handleCanvasPointerDownBound
+    );
     this.controls.dispose();
     if (this.arenaVisualRoot) {
       this.scene.remove(this.arenaVisualRoot);
