@@ -44,6 +44,7 @@ export class DiscDropGame {
     this.arenaSurfaceBodies = [];
     this.arenaSurfaceColliders = [];
     this.useArenaMeshFloor = false;
+    this.lavaUniforms = [];
 
     this.minLaunchClearance = LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
 
@@ -168,11 +169,15 @@ export class DiscDropGame {
       loader.load(
         "/3d/hellArena1.glb",
         (gltf) => {
+          this.lavaUniforms.length = 0;
           const model = gltf.scene;
           model.traverse((child) => {
             if (child.isMesh) {
               child.castShadow = false;
               child.receiveShadow = true;
+              if (child.name === "Object_8") {
+                child.material = this.createLavaMaterial();
+              }
             }
           });
 
@@ -266,6 +271,59 @@ export class DiscDropGame {
 
     this.useArenaMeshFloor = this.arenaSurfaceColliders.length > 0;
     this.floorCollider.setEnabled(!this.useArenaMeshFloor);
+  }
+
+  createLavaMaterial() {
+    const uniforms = {
+      iTime: { value: 0 },
+    };
+    this.lavaUniforms.push(uniforms);
+
+    return new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float iTime;
+        varying vec2 vUv;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+            u.y
+          );
+        }
+
+        void main() {
+          vec2 uv = vUv * 3.2;
+          float t = iTime * 0.18;
+          float n1 = noise(uv + vec2(t, -t * 0.35));
+          float n2 = noise(uv * 1.9 - vec2(t * 0.55, t * 0.15));
+          float lava = smoothstep(0.35, 0.95, n1 * 0.65 + n2 * 0.35);
+
+          vec3 deep = vec3(0.14, 0.02, 0.01);
+          vec3 hot = vec3(1.0, 0.30, 0.04);
+          vec3 bright = vec3(1.0, 0.82, 0.28);
+          vec3 color = mix(deep, hot, lava);
+          color = mix(color, bright, pow(lava, 3.0) * 0.65);
+
+          gl_FragColor = vec4(color, 1.0);
+        }
+      `,
+    });
   }
 
   setupDiscs() {
@@ -873,6 +931,9 @@ export class DiscDropGame {
     if (this.skyUniforms) {
       this.skyUniforms.iTime.value += delta;
     }
+    for (const uniforms of this.lavaUniforms) {
+      uniforms.iTime.value += delta;
+    }
   }
 
   applyResponsiveCamera() {
@@ -914,6 +975,7 @@ export class DiscDropGame {
       this.arenaKtx2Loader.dispose();
       this.arenaKtx2Loader = null;
     }
+    this.lavaUniforms.length = 0;
     this.clearArenaSurfacePhysics();
     this.clearArenaObstacles();
     this.renderer.dispose();
