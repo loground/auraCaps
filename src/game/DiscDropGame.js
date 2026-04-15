@@ -681,7 +681,7 @@ export class DiscDropGame {
       RAPIER.RigidBodyDesc.dynamic().setTranslation(0, LOWER_DISC_START_Y, 0)
     );
     this.lowerDiscBody.setLinearDamping(0.015);
-    this.lowerDiscBody.setAngularDamping(0.003);
+    this.lowerDiscBody.setAngularDamping(0.0016);
     this.lowerDiscBody.setAdditionalSolverIterations(8);
     this.lowerDiscBody.enableCcd(true);
     this.lowerDiscBody.setSoftCcdPrediction(0.3);
@@ -976,11 +976,11 @@ export class DiscDropGame {
       true
     );
 
-    const impulseScale = 0.9;
+    const impulseScale = 1.08;
     this.upperDiscBody.applyImpulseAtPoint(
       {
         x: toLower.x * this.settings.power * impulseScale,
-        y: -this.settings.power * 1.3,
+        y: -this.settings.power * 1.5,
         z: toLower.z * this.settings.power * impulseScale,
       },
       {
