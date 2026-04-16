@@ -410,6 +410,9 @@ export class DiscDropGame {
     this.lowerBackTexture = this.randomBackTexture();
     this.upperBackTexture =
       this.gameMode === "slammer" ? this.mainBackTexture : this.randomBackTexture();
+    if (this.gameMode === "slammer") {
+      this.upperCapTexture = this.upperBackTexture;
+    }
 
     if (this.gameMode === "slammer") {
       this.floorCapTextures = Array.from({ length: 6 }, () => this.randomCapTexture());
