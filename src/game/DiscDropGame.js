@@ -24,6 +24,8 @@ const ROUND_TIMEOUT_SECONDS = 8;
 const OUT_OF_ARENA_RADIUS_OFFSET = 1.1;
 const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
+const SLAMMER_HEIGHT_MULT = 1.32;
+const SLAMMER_DENSITY_MULT = 2.45;
 
 export class DiscDropGame {
   constructor(
@@ -419,7 +421,7 @@ export class DiscDropGame {
 
       this.upperDiscMesh = createDiscMesh({
         radius: DISC_RADIUS,
-        height: DISC_HEIGHT * 1.15,
+        height: DISC_HEIGHT * SLAMMER_HEIGHT_MULT,
         sideColor: "#dfe7f5",
         topFaceMap: this.upperBackTexture,
         bottomFaceMap: this.upperCapTexture,
@@ -765,7 +767,7 @@ export class DiscDropGame {
     this.lowerDiscCollider = null;
 
     if (this.gameMode === "slammer") {
-      const slammerDiscHeight = DISC_HEIGHT * 0.8;
+      const slammerDiscHeight = DISC_HEIGHT * SLAMMER_HEIGHT_MULT;
       const stackCount = 6;
       const stackStep = DISC_HEIGHT + 0.012;
       for (let i = 0; i < stackCount; i += 1) {
@@ -806,7 +808,7 @@ export class DiscDropGame {
         RAPIER.ColliderDesc.cylinder(slammerDiscHeight * 0.5, DISC_RADIUS)
           .setFriction(arena.upperFriction)
           .setRestitution(arena.upperRestitution)
-          .setDensity(arena.upperDensity * 2.15)
+          .setDensity(arena.upperDensity * SLAMMER_DENSITY_MULT)
           .setContactSkin(0.0008)
           .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         this.upperDiscBody
