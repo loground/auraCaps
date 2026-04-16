@@ -33,6 +33,7 @@ export class DiscDropGame {
     {
       theme = "hell",
       soundEnabled = true,
+      isSoundEnabled = null,
       initialArenaKey = DEFAULT_ARENA_KEY,
       gameMode = "classic",
     } = {}
@@ -40,6 +41,7 @@ export class DiscDropGame {
     this.app = app;
     this.theme = theme;
     this.soundEnabled = soundEnabled;
+    this.isSoundEnabled = typeof isSoundEnabled === "function" ? isSoundEnabled : null;
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey =
@@ -891,6 +893,9 @@ export class DiscDropGame {
   }
 
   playSfx(path, volume = 0.8) {
+    if (this.isSoundEnabled && !this.isSoundEnabled()) {
+      return;
+    }
     if (!this.soundEnabled) {
       return;
     }

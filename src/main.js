@@ -326,6 +326,7 @@ async function showPlay() {
   game = new DiscDropGame(app, {
     theme: currentTheme,
     soundEnabled,
+    isSoundEnabled: () => soundEnabled,
     initialArenaKey: setup.arenaKey,
     gameMode: setup.gameMode,
   });
