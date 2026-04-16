@@ -3,7 +3,8 @@ import "./style.css";
 const app = document.querySelector("#app");
 const hoverSfxTemplate = new Audio("/sounds/menuHover.mp3");
 hoverSfxTemplate.preload = "auto";
-const hoverTargetsSelector = "button, .collection-card, .disc-card";
+const hoverTargetsSelector = "button";
+const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
 let soundEnabled = true;
 
@@ -87,7 +88,11 @@ app.addEventListener("mouseover", (event) => {
     return;
   }
 
-  const target = event.target.closest(hoverTargetsSelector);
+  const selector = app.classList.contains("mode-collection")
+    ? collectionHoverTargetsSelector
+    : hoverTargetsSelector;
+
+  const target = event.target.closest(selector);
   if (!target || !app.contains(target)) {
     return;
   }
@@ -98,7 +103,7 @@ app.addEventListener("mouseover", (event) => {
 
   const fromTarget =
     event.relatedTarget instanceof Element
-      ? event.relatedTarget.closest(hoverTargetsSelector)
+      ? event.relatedTarget.closest(selector)
       : null;
   if (fromTarget === target) {
     return;

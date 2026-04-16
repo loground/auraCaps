@@ -167,12 +167,25 @@ export function mountCollectionScreen({ app, onBack }) {
     const capNumber = i + 1;
     const card = document.createElement("div");
     card.className = "collection-card";
+    const randomSeries = 100 + capNumber * 17;
+    const randomTier = ["Relic", "Myth", "Echo", "Prime", "Burn"][i % 5];
     card.innerHTML = `
-      <button class="disc-card" type="button" aria-label="Inspect Aura cap ${capNumber}">
-        <img src="/caps/${capNumber}.png" alt="Aura cap ${capNumber}" />
-      </button>
+      <div class="cap-slot">
+        <button class="disc-card" type="button" aria-label="Inspect Aura cap ${capNumber}">
+          <img src="/caps/${capNumber}.png" alt="Aura cap ${capNumber}" />
+        </button>
+      </div>
+      <div class="cap-info">
+        <h3>Powerful cap N${capNumber}</h3>
+        <p>collection INK&apos;s old (f)arts</p>
+        <p>Series ${randomSeries} • Tier ${randomTier} • Core Flux ${(1.2 + i * 0.3).toFixed(1)}</p>
+        <button class="inspect-btn" type="button">inspect</button>
+      </div>
     `;
     card.querySelector(".disc-card").addEventListener("click", () => {
+      openInspector(capNumber);
+    });
+    card.querySelector(".inspect-btn").addEventListener("click", () => {
       openInspector(capNumber);
     });
     grid.appendChild(card);
