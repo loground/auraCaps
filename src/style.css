@@ -1527,5 +1527,7 @@ button:disabled {
   .mode-play .global-mute-btn {
     top: calc(env(safe-area-inset-top, 0px) + 7.85rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.55rem);
+    left: auto;
+    bottom: auto;
   }
 }
