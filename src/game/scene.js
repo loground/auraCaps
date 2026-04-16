@@ -6,7 +6,7 @@ export function createRenderer(app) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = false;
   app.appendChild(renderer.domElement);
   return renderer;
 }
@@ -44,8 +44,6 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
     isHeaven ? 1.62 : 1.49
   );
   directionalLight.position.set(8, 14, 8);
-  directionalLight.castShadow = true;
-  directionalLight.shadow.mapSize.set(1024, 1024);
   scene.add(directionalLight);
 
   let skyUniforms = null;
@@ -119,7 +117,6 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
     floorMaterial
   );
   floorMesh.position.y = -0.2;
-  floorMesh.receiveShadow = true;
   scene.add(floorMesh);
 
   const tableMaterial = new THREE.MeshStandardMaterial({
@@ -132,7 +129,6 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
     tableMaterial
   );
   tableMesh.position.y = 0.12;
-  tableMesh.receiveShadow = true;
   scene.add(tableMesh);
 
   return {

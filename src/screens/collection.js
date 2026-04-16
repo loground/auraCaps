@@ -128,7 +128,7 @@ export function mountCollectionScreen({ app, onBack }) {
     inspectorScene.add(fillLight);
     inspectorScene.add(new THREE.AmbientLight(0xf3f7ff, 1.05));
 
-    frontTexture = loadDiscTexture(inspectorRenderer, `/caps/${capNumber}.png`);
+    frontTexture = loadDiscTexture(inspectorRenderer, `/caps/${capNumber}.webp`);
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
     frontTexture.rotation = Math.PI * 0.5;
     backTexture.rotation = Math.PI * 0.5;
@@ -172,7 +172,7 @@ export function mountCollectionScreen({ app, onBack }) {
     card.innerHTML = `
       <div class="cap-slot">
         <button class="disc-card" type="button" aria-label="Inspect Aura cap ${capNumber}">
-          <img src="/caps/${capNumber}.png" alt="Aura cap ${capNumber}" />
+          <img src="/caps/${capNumber}.webp" alt="Aura cap ${capNumber}" />
         </button>
       </div>
       <div class="cap-info">

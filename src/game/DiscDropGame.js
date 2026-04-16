@@ -24,7 +24,7 @@ const ROUND_TIMEOUT_SECONDS = 8;
 const OUT_OF_ARENA_RADIUS_OFFSET = 1.1;
 const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
-const SLAMMER_HEIGHT_MULT = 1.32;
+const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
 
 export class DiscDropGame {
@@ -233,7 +233,7 @@ export class DiscDropGame {
           model.traverse((child) => {
             if (child.isMesh) {
               child.castShadow = false;
-              child.receiveShadow = true;
+              child.receiveShadow = false;
               if (child.name === "Object_8") {
                 child.material = this.createLavaMaterial();
               }
@@ -387,14 +387,22 @@ export class DiscDropGame {
   }
 
   setupDiscs() {
-    this.mainBackTexture = loadDiscTexture(this.renderer, "/caps/back.png");
+    this.slammerBackTextures = [
+      loadDiscTexture(this.renderer, "/caps/slammer1.png"),
+      loadDiscTexture(this.renderer, "/caps/slammer2.png"),
+      loadDiscTexture(this.renderer, "/caps/slammer3.png"),
+    ];
+    this.mainBackTexture =
+      this.slammerBackTextures[
+        Math.floor(Math.random() * this.slammerBackTextures.length)
+      ];
     this.backFaceTextures = [
       loadDiscTexture(this.renderer, "/caps/back1.png"),
       loadDiscTexture(this.renderer, "/caps/back2.png"),
       loadDiscTexture(this.renderer, "/caps/back3.png"),
     ];
     this.capTextures = Array.from({ length: 9 }, (_, idx) =>
-      loadDiscTexture(this.renderer, `/caps/${idx + 1}.png`)
+      loadDiscTexture(this.renderer, `/caps/${idx + 1}.webp`)
     );
 
     this.lowerCapTexture = this.randomCapTexture();
@@ -699,8 +707,6 @@ export class DiscDropGame {
       body
     );
 
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
     mesh.position.set(def.x, def.y, def.z);
     this.scene.add(mesh);
 
