@@ -1,4 +1,5 @@
 import "./style.css";
+import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 
 const app = document.querySelector("#app");
 const hoverSfxTemplate = new Audio("/sounds/menuHover.mp3");
@@ -120,6 +121,115 @@ let menuModulePromise = null;
 let collectionModulePromise = null;
 let gameModulePromise = null;
 
+function showPlaySetupModal({ theme }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "play-setup-modal";
+
+    const arenaKeys = theme === "heaven" ? ["classic"] : Object.keys(ARENA_CONFIGS);
+    const arenaOptions = arenaKeys
+      .map(
+        (key) =>
+          `<option value="${key}">${ARENA_CONFIGS[key]?.label ?? key}</option>`
+      )
+      .join("");
+
+    overlay.innerHTML = `
+      <div class="play-setup-backdrop"></div>
+      <div class="play-setup-panel">
+        <h2>Choose Battle Setup</h2>
+        <p>Select map and mode before launching the round.</p>
+        <label>
+          Map
+          <select id="setupArenaSelect">${arenaOptions}</select>
+        </label>
+        <div class="mode-picker">
+          <span class="mode-label">Mode</span>
+          <div class="mode-buttons">
+            <button id="setupModeClassicBtn" class="mode-btn active" type="button">Classic</button>
+            <button id="setupModeSlammerBtn" class="mode-btn" type="button">Slammer</button>
+          </div>
+        </div>
+        <p id="setupModeHint" class="setup-hint">
+          Classic: 2 caps duel. Land and spin to end with more green faces up.
+        </p>
+        <div class="play-setup-actions">
+          <button id="setupCancelBtn" type="button">back</button>
+          <button id="setupLaunchBtn" type="button">launch</button>
+        </div>
+      </div>
+    `;
+
+    app.appendChild(overlay);
+
+    const arenaSelect = overlay.querySelector("#setupArenaSelect");
+    const modeClassicBtn = overlay.querySelector("#setupModeClassicBtn");
+    const modeSlammerBtn = overlay.querySelector("#setupModeSlammerBtn");
+    const modeHint = overlay.querySelector("#setupModeHint");
+    const cancelBtn = overlay.querySelector("#setupCancelBtn");
+    const launchBtn = overlay.querySelector("#setupLaunchBtn");
+    const backdrop = overlay.querySelector(".play-setup-backdrop");
+    let selectedMode = "classic";
+
+    if (arenaSelect) {
+      arenaSelect.value = arenaKeys.includes(DEFAULT_ARENA_KEY)
+        ? DEFAULT_ARENA_KEY
+        : arenaKeys[0];
+    }
+
+    const updateModeUI = () => {
+      if (!modeHint) {
+        return;
+      }
+      modeClassicBtn?.classList.toggle("active", selectedMode === "classic");
+      modeSlammerBtn?.classList.toggle("active", selectedMode === "slammer");
+      modeHint.textContent =
+        selectedMode === "slammer"
+          ? "Slammer: 6 caps stack on floor. Throw heavier slammer and flip 4+ caps face up to win."
+          : "Classic: 2 caps duel. Land and spin to end with more green faces up.";
+    };
+    updateModeUI();
+
+    const onModeClassic = () => {
+      selectedMode = "classic";
+      updateModeUI();
+    };
+    const onModeSlammer = () => {
+      selectedMode = "slammer";
+      updateModeUI();
+    };
+    modeClassicBtn?.addEventListener("click", onModeClassic);
+    modeSlammerBtn?.addEventListener("click", onModeSlammer);
+
+    const cleanup = () => {
+      modeClassicBtn?.removeEventListener("click", onModeClassic);
+      modeSlammerBtn?.removeEventListener("click", onModeSlammer);
+      cancelBtn?.removeEventListener("click", onCancel);
+      launchBtn?.removeEventListener("click", onLaunch);
+      backdrop?.removeEventListener("click", onCancel);
+      overlay.remove();
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    const onLaunch = () => {
+      const value = {
+        arenaKey: arenaSelect?.value || DEFAULT_ARENA_KEY,
+        gameMode: selectedMode,
+      };
+      cleanup();
+      resolve(value);
+    };
+
+    cancelBtn?.addEventListener("click", onCancel);
+    launchBtn?.addEventListener("click", onLaunch);
+    backdrop?.addEventListener("click", onCancel);
+  });
+}
+
 function loadMenuModule() {
   menuModulePromise ??= import("./screens/menu.js");
   return menuModulePromise;
@@ -199,6 +309,14 @@ async function showMenu() {
 
 async function showPlay() {
   const localVersion = ++viewVersion;
+  const setup = await showPlaySetupModal({ theme: currentTheme });
+  if (localVersion !== viewVersion) {
+    return;
+  }
+  if (!setup) {
+    return;
+  }
+
   clearCurrentScreen();
   setViewMode("play");
   const { DiscDropGame } = await loadGameModule();
@@ -208,6 +326,8 @@ async function showPlay() {
   game = new DiscDropGame(app, {
     theme: currentTheme,
     soundEnabled,
+    initialArenaKey: setup.arenaKey,
+    gameMode: setup.gameMode,
   });
   await game.init();
   if (localVersion !== viewVersion) {

@@ -8,6 +8,7 @@ import {
   DISC_HEIGHT,
   DISC_RADIUS,
   FIXED_STEP,
+  FLOOR_RADIUS,
   LOWER_DISC_START_Y,
   TABLE_RADIUS,
 } from "./constants.js";
@@ -20,17 +21,32 @@ import { createRenderer, createWorldScene } from "./scene.js";
 import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 
 const ROUND_TIMEOUT_SECONDS = 8;
-const OUT_OF_ARENA_RADIUS = TABLE_RADIUS + 1.1;
+const OUT_OF_ARENA_RADIUS_OFFSET = 1.1;
 const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
 
 export class DiscDropGame {
-  constructor(app, { theme = "hell", soundEnabled = true } = {}) {
+  constructor(
+    app,
+    {
+      theme = "hell",
+      soundEnabled = true,
+      initialArenaKey = DEFAULT_ARENA_KEY,
+      gameMode = "classic",
+    } = {}
+  ) {
     this.app = app;
     this.theme = theme;
     this.soundEnabled = soundEnabled;
+    this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.settings = { ...DEFAULT_SETTINGS };
-    this.activeArenaKey = theme === "heaven" ? "classic" : DEFAULT_ARENA_KEY;
+    this.activeArenaKey =
+      theme === "heaven" ? "classic" : initialArenaKey || DEFAULT_ARENA_KEY;
+    this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
+    this.floorRadius =
+      this.gameMode === "slammer"
+        ? this.arenaRadius + 8.5
+        : Math.max(this.arenaRadius, FLOOR_RADIUS);
 
     this.hasLaunched = false;
     this.hasResolved = false;
@@ -39,6 +55,11 @@ export class DiscDropGame {
     this.accumulator = 0;
 
     this.lowerDiscBody = null;
+    this.floorDiscBodies = [];
+    this.floorDiscColliders = [];
+    this.floorDiscMeshes = [];
+    this.floorCapTextures = [];
+    this.floorBackTextures = [];
     this.upperDiscBody = null;
 
     this.arenaObstacleBodies = [];
@@ -48,7 +69,10 @@ export class DiscDropGame {
     this.useArenaMeshFloor = false;
     this.lavaUniforms = [];
 
-    this.minLaunchClearance = LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
+    this.minLaunchClearance =
+      this.gameMode === "slammer"
+        ? LOWER_DISC_START_Y + DISC_HEIGHT * 8.3
+        : LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
 
     this.clock = new THREE.Clock();
     this.running = false;
@@ -67,7 +91,7 @@ export class DiscDropGame {
     this._raycaster = new THREE.Raycaster();
     this._pointerNdc = new THREE.Vector2();
     this._pickPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LOWER_DISC_START_Y);
-    this.positionPickRadius = TABLE_RADIUS - 1.45;
+    this.positionPickRadius = this.arenaRadius - 1.45;
     this.isDraggingPosition = false;
     this.isChargingPower = false;
     this.chargeDirection = 1;
@@ -85,6 +109,7 @@ export class DiscDropGame {
       "/sounds/win3.mp3",
     ];
     this.lastHitSfxAt = 0;
+    this.slammerMiniDots = [];
   }
 
   async init() {
@@ -146,10 +171,10 @@ export class DiscDropGame {
       RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.22, 0)
     );
     this.floorCollider = this.world.createCollider(
-      RAPIER.ColliderDesc.cylinder(0.22, TABLE_RADIUS)
+      RAPIER.ColliderDesc.cylinder(0.22, this.floorRadius)
         .setFriction(0.38)
         .setRestitution(0.55)
-        .setContactSkin(0.008),
+        .setContactSkin(0.001),
       floorBody
     );
 
@@ -157,18 +182,25 @@ export class DiscDropGame {
       RAPIER.RigidBodyDesc.fixed().setTranslation(0, -1.15, 0)
     );
     this.catchFloorCollider = this.world.createCollider(
-      RAPIER.ColliderDesc.cuboid(TABLE_RADIUS + 1, 1, TABLE_RADIUS + 1)
+      RAPIER.ColliderDesc.cuboid(this.floorRadius + 1, 1, this.floorRadius + 1)
         .setFriction(0.55)
         .setRestitution(0.2)
-        .setContactSkin(0.008),
+        .setContactSkin(0.001),
       catchFloorBody
     );
   }
 
   setupArenaVisualModel() {
-    if (this.theme === "heaven") {
+    if (this.theme === "heaven" || this.gameMode === "slammer") {
       this.floorMesh.visible = true;
       this.tableMesh.visible = true;
+      if (this.gameMode === "slammer") {
+        this.floorMesh.scale.setScalar(this.floorRadius / FLOOR_RADIUS);
+        this.tableMesh.scale.setScalar(this.arenaRadius / TABLE_RADIUS);
+      } else {
+        this.floorMesh.scale.setScalar(1);
+        this.tableMesh.scale.setScalar(1);
+      }
       this.useArenaMeshFloor = false;
       this.floorCollider.setEnabled(true);
       return Promise.resolve();
@@ -287,7 +319,7 @@ export class DiscDropGame {
 
       const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
       const collider = this.world.createCollider(
-        RAPIER.ColliderDesc.trimesh(vertices, indices).setContactSkin(0.004),
+        RAPIER.ColliderDesc.trimesh(vertices, indices).setContactSkin(0.0015),
         body
       );
       this.arenaSurfaceBodies.push(body);
@@ -353,6 +385,7 @@ export class DiscDropGame {
   }
 
   setupDiscs() {
+    this.mainBackTexture = loadDiscTexture(this.renderer, "/caps/back.png");
     this.backFaceTextures = [
       loadDiscTexture(this.renderer, "/caps/back1.png"),
       loadDiscTexture(this.renderer, "/caps/back2.png"),
@@ -365,7 +398,35 @@ export class DiscDropGame {
     this.lowerCapTexture = this.randomCapTexture();
     this.upperCapTexture = this.randomCapTexture();
     this.lowerBackTexture = this.randomBackTexture();
-    this.upperBackTexture = this.randomBackTexture();
+    this.upperBackTexture =
+      this.gameMode === "slammer" ? this.mainBackTexture : this.randomBackTexture();
+
+    if (this.gameMode === "slammer") {
+      this.floorCapTextures = Array.from({ length: 6 }, () => this.randomCapTexture());
+      this.floorBackTextures = Array.from({ length: 6 }, () => this.randomBackTexture());
+      this.floorDiscMeshes = this.floorCapTextures.map((capTex, idx) => {
+        const mesh = createDiscMesh({
+          radius: DISC_RADIUS,
+          height: DISC_HEIGHT,
+          sideColor: "#a9b3c8",
+          topFaceMap: this.floorBackTextures[idx],
+          bottomFaceMap: capTex,
+        });
+        this.scene.add(mesh);
+        return mesh;
+      });
+      this.lowerDiscMesh = this.floorDiscMeshes[0];
+
+      this.upperDiscMesh = createDiscMesh({
+        radius: DISC_RADIUS,
+        height: DISC_HEIGHT * 1.15,
+        sideColor: "#dfe7f5",
+        topFaceMap: this.upperBackTexture,
+        bottomFaceMap: this.upperCapTexture,
+      });
+      this.scene.add(this.upperDiscMesh);
+      return;
+    }
 
     this.lowerDiscMesh = createDiscMesh({
       radius: DISC_RADIUS,
@@ -397,6 +458,22 @@ export class DiscDropGame {
   }
 
   refreshDiscArt() {
+    if (this.gameMode === "slammer") {
+      this.floorDiscMeshes.forEach((mesh, idx) => {
+        setDiscFaceTextures({
+          mesh,
+          topFaceMap: this.floorBackTextures[idx],
+          bottomFaceMap: this.floorCapTextures[idx],
+        });
+      });
+      setDiscFaceTextures({
+        mesh: this.upperDiscMesh,
+        topFaceMap: this.upperBackTexture,
+        bottomFaceMap: this.upperCapTexture,
+      });
+      return;
+    }
+
     setDiscFaceTextures({
       mesh: this.lowerDiscMesh,
       topFaceMap: this.lowerBackTexture,
@@ -646,7 +723,10 @@ export class DiscDropGame {
       }
     }
 
-    this.ui.arenaHintEl.textContent = arena.hint;
+    this.ui.arenaHintEl.textContent =
+      this.gameMode === "slammer"
+        ? `${arena.hint} Slammer: flip 4+ floor caps face up to win.`
+        : arena.hint;
     this.ui.arenaTagEl.textContent = arena.label;
 
     if (this.theme === "heaven") {
@@ -670,52 +750,117 @@ export class DiscDropGame {
   buildRoundBodies() {
     const arena = ARENA_CONFIGS[this.activeArenaKey];
 
-    if (this.lowerDiscBody) {
-      this.world.removeRigidBody(this.lowerDiscBody);
+    for (const body of this.floorDiscBodies) {
+      this.world.removeRigidBody(body);
     }
+    this.floorDiscBodies.length = 0;
+    this.floorDiscColliders.length = 0;
+    this.lowerDiscBody = null;
+
     if (this.upperDiscBody) {
       this.world.removeRigidBody(this.upperDiscBody);
     }
+    this.upperDiscBody = null;
+    this.upperDiscCollider = null;
+    this.lowerDiscCollider = null;
 
-    this.lowerDiscBody = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(0, LOWER_DISC_START_Y, 0)
-    );
-    this.lowerDiscBody.setLinearDamping(0.015);
-    this.lowerDiscBody.setAngularDamping(0.0016);
-    this.lowerDiscBody.setAdditionalSolverIterations(8);
-    this.lowerDiscBody.enableCcd(true);
-    this.lowerDiscBody.setSoftCcdPrediction(0.3);
-    this.lowerDiscCollider = this.world.createCollider(
-      RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
-        .setFriction(arena.lowerFriction)
-        .setRestitution(arena.lowerRestitution)
-        .setDensity(arena.lowerDensity)
-        .setContactSkin(0.003)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
-      this.lowerDiscBody
-    );
+    if (this.gameMode === "slammer") {
+      const slammerDiscHeight = DISC_HEIGHT * 0.8;
+      const stackCount = 6;
+      const stackStep = DISC_HEIGHT + 0.012;
+      for (let i = 0; i < stackCount; i += 1) {
+        const offsetX = (i % 2 === 0 ? 1 : -1) * 0.018;
+        const offsetZ = (i % 3 - 1) * 0.014;
+        const y = LOWER_DISC_START_Y + i * stackStep;
+        const body = this.world.createRigidBody(
+          RAPIER.RigidBodyDesc.dynamic().setTranslation(offsetX, y, offsetZ)
+        );
+        body.setLinearDamping(0.02);
+        body.setAngularDamping(0.0017);
+        body.setAdditionalSolverIterations(10);
+        body.enableCcd(true);
+        body.setSoftCcdPrediction(0.32);
+        const collider = this.world.createCollider(
+          RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
+            .setFriction(arena.lowerFriction)
+            .setRestitution(arena.lowerRestitution)
+            .setDensity(arena.lowerDensity * 1.08)
+            .setContactSkin(0.0008)
+            .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+          body
+        );
+        this.floorDiscBodies.push(body);
+        this.floorDiscColliders.push(collider);
+      }
+      this.lowerDiscBody = this.floorDiscBodies[0] ?? null;
+      this.lowerDiscCollider = this.floorDiscColliders[0] ?? null;
 
-    this.upperDiscBody = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
-        this.settings.posX,
-        this.settings.height,
-        this.settings.posZ
-      )
-    );
-    this.upperDiscCollider = this.world.createCollider(
-      RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
-        .setFriction(arena.upperFriction)
-        .setRestitution(arena.upperRestitution)
-        .setDensity(arena.upperDensity)
-        .setContactSkin(0.003)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
-      this.upperDiscBody
-    );
-    this.upperDiscBody.setLinearDamping(0.06);
-    this.upperDiscBody.setAngularDamping(0.03);
-    this.upperDiscBody.setAdditionalSolverIterations(8);
-    this.upperDiscBody.enableCcd(true);
-    this.upperDiscBody.setSoftCcdPrediction(0.3);
+      this.upperDiscBody = this.world.createRigidBody(
+        RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
+          this.settings.posX,
+          this.settings.height,
+          this.settings.posZ
+        )
+      );
+      this.upperDiscCollider = this.world.createCollider(
+        RAPIER.ColliderDesc.cylinder(slammerDiscHeight * 0.5, DISC_RADIUS)
+          .setFriction(arena.upperFriction)
+          .setRestitution(arena.upperRestitution)
+          .setDensity(arena.upperDensity * 2.15)
+          .setContactSkin(0.0008)
+          .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+        this.upperDiscBody
+      );
+      this.upperDiscBody.setLinearDamping(0.055);
+      this.upperDiscBody.setAngularDamping(0.03);
+      this.upperDiscBody.setAdditionalSolverIterations(10);
+      this.upperDiscBody.enableCcd(true);
+      this.upperDiscBody.setSoftCcdPrediction(0.34);
+      this.minLaunchClearance = LOWER_DISC_START_Y + stackCount * stackStep + 0.75;
+    } else {
+      this.lowerDiscBody = this.world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(0, LOWER_DISC_START_Y, 0)
+      );
+      this.lowerDiscBody.setLinearDamping(0.015);
+      this.lowerDiscBody.setAngularDamping(0.0016);
+      this.lowerDiscBody.setAdditionalSolverIterations(8);
+      this.lowerDiscBody.enableCcd(true);
+      this.lowerDiscBody.setSoftCcdPrediction(0.3);
+      this.lowerDiscCollider = this.world.createCollider(
+        RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
+          .setFriction(arena.lowerFriction)
+          .setRestitution(arena.lowerRestitution)
+          .setDensity(arena.lowerDensity)
+          .setContactSkin(0.0008)
+          .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+        this.lowerDiscBody
+      );
+      this.floorDiscBodies.push(this.lowerDiscBody);
+      this.floorDiscColliders.push(this.lowerDiscCollider);
+
+      this.upperDiscBody = this.world.createRigidBody(
+        RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
+          this.settings.posX,
+          this.settings.height,
+          this.settings.posZ
+        )
+      );
+      this.upperDiscCollider = this.world.createCollider(
+        RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
+          .setFriction(arena.upperFriction)
+          .setRestitution(arena.upperRestitution)
+          .setDensity(arena.upperDensity)
+          .setContactSkin(0.0008)
+          .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
+        this.upperDiscBody
+      );
+      this.upperDiscBody.setLinearDamping(0.06);
+      this.upperDiscBody.setAngularDamping(0.03);
+      this.upperDiscBody.setAdditionalSolverIterations(8);
+      this.upperDiscBody.enableCcd(true);
+      this.upperDiscBody.setSoftCcdPrediction(0.3);
+      this.minLaunchClearance = LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
+    }
 
     this.hasLaunched = false;
     this.hasResolved = false;
@@ -763,6 +908,20 @@ export class DiscDropGame {
   }
 
   getLowerTargetPosition() {
+    if (this.gameMode === "slammer" && this.floorDiscBodies.length > 0) {
+      let sx = 0;
+      let sy = -Infinity;
+      let sz = 0;
+      for (const body of this.floorDiscBodies) {
+        const p = body.translation();
+        sx += p.x;
+        sy = Math.max(sy, p.y);
+        sz += p.z;
+      }
+      const n = this.floorDiscBodies.length;
+      return { x: sx / n, y: sy, z: sz / n };
+    }
+
     if (!this.lowerDiscBody) {
       return { x: 0, y: LOWER_DISC_START_Y, z: 0 };
     }
@@ -813,7 +972,7 @@ export class DiscDropGame {
 
     const size = this.ui.miniMapEl.clientWidth || 128;
     const half = size * 0.5;
-    const radius = Math.max(TABLE_RADIUS, 0.001);
+    const radius = Math.max(this.arenaRadius, 0.001);
     const mapScale = half * 0.88;
 
     const mapToUi = (x, z) => {
@@ -825,9 +984,20 @@ export class DiscDropGame {
       };
     };
 
-    const lowerPos = this.lowerDiscBody
-      ? this.lowerDiscBody.translation()
-      : { x: 0, z: 0 };
+    let lowerPos = { x: 0, z: 0 };
+    if (this.gameMode === "slammer" && this.floorDiscBodies.length > 0) {
+      let sx = 0;
+      let sz = 0;
+      for (const body of this.floorDiscBodies) {
+        const p = body.translation();
+        sx += p.x;
+        sz += p.z;
+      }
+      const n = this.floorDiscBodies.length;
+      lowerPos = { x: sx / n, z: sz / n };
+    } else if (this.lowerDiscBody) {
+      lowerPos = this.lowerDiscBody.translation();
+    }
     const upperPos =
       this.upperDiscBody && this.hasLaunched
         ? this.upperDiscBody.translation()
@@ -835,8 +1005,40 @@ export class DiscDropGame {
 
     const lowerUi = mapToUi(lowerPos.x, lowerPos.z);
     const upperUi = mapToUi(upperPos.x, upperPos.z);
-    this.ui.miniLowerDotEl.style.left = `${lowerUi.x}px`;
-    this.ui.miniLowerDotEl.style.top = `${lowerUi.y}px`;
+    if (this.gameMode === "slammer") {
+      this.ui.miniLowerDotEl.style.display = "none";
+      if (this.ui.miniLowerLabelEl) {
+        this.ui.miniLowerLabelEl.style.display = "none";
+      }
+
+      while (this.slammerMiniDots.length < this.floorDiscBodies.length) {
+        const dot = document.createElement("div");
+        dot.className = "mini-dot stack";
+        this.ui.miniMapEl.appendChild(dot);
+        this.slammerMiniDots.push(dot);
+      }
+      while (this.slammerMiniDots.length > this.floorDiscBodies.length) {
+        const dot = this.slammerMiniDots.pop();
+        dot?.remove();
+      }
+      for (let i = 0; i < this.floorDiscBodies.length; i += 1) {
+        const p = this.floorDiscBodies[i].translation();
+        const ui = mapToUi(p.x, p.z);
+        this.slammerMiniDots[i].style.left = `${ui.x}px`;
+        this.slammerMiniDots[i].style.top = `${ui.y}px`;
+      }
+    } else {
+      this.ui.miniLowerDotEl.style.display = "";
+      if (this.ui.miniLowerLabelEl) {
+        this.ui.miniLowerLabelEl.style.display = "";
+      }
+      for (const dot of this.slammerMiniDots) {
+        dot.remove();
+      }
+      this.slammerMiniDots.length = 0;
+      this.ui.miniLowerDotEl.style.left = `${lowerUi.x}px`;
+      this.ui.miniLowerDotEl.style.top = `${lowerUi.y}px`;
+    }
     this.ui.miniUpperDotEl.style.left = `${upperUi.x}px`;
     this.ui.miniUpperDotEl.style.top = `${upperUi.y}px`;
   }
@@ -965,8 +1167,10 @@ export class DiscDropGame {
     const power01 = this.settings.power / 100;
     const direction = new THREE.Vector3(toLower.x, 0, toLower.z).normalize();
 
-    const horizontalSpeed = 2 + power01 * 13;
-    const downwardSpeed = 12 + power01 * 40;
+    const horizontalSpeed =
+      this.gameMode === "slammer" ? 1.3 + power01 * 10.2 : 2 + power01 * 13;
+    const downwardSpeed =
+      this.gameMode === "slammer" ? 20 + power01 * 58 : 12 + power01 * 40;
     this.upperDiscBody.setLinvel(
       {
         x: direction.x * horizontalSpeed,
@@ -976,11 +1180,12 @@ export class DiscDropGame {
       true
     );
 
-    const impulseScale = 1.08;
+    const impulseScale = this.gameMode === "slammer" ? 1.72 : 1.08;
+    const downwardImpulseScale = this.gameMode === "slammer" ? 2.75 : 1.5;
     this.upperDiscBody.applyImpulseAtPoint(
       {
         x: toLower.x * this.settings.power * impulseScale,
-        y: -this.settings.power * 1.5,
+        y: -this.settings.power * downwardImpulseScale,
         z: toLower.z * this.settings.power * impulseScale,
       },
       {
@@ -1003,23 +1208,39 @@ export class DiscDropGame {
   }
 
   resolveRound() {
-    if (!this.upperDiscBody || !this.lowerDiscBody) {
+    if (!this.upperDiscBody || this.floorDiscBodies.length === 0) {
       return;
     }
 
     this.hasResolved = true;
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Power";
-    if (
-      this.isOutOfArena(this.upperDiscBody) ||
-      this.isOutOfArena(this.lowerDiscBody)
-    ) {
+    if (this.isOutOfArena(this.upperDiscBody)) {
       this.setStatus("you lost");
       return;
     }
 
+    if (this.floorDiscBodies.some((body) => this.isOutOfArena(body))) {
+      this.setStatus("you lost");
+      return;
+    }
+
+    if (this.gameMode === "slammer") {
+      const faceUpCount = this.floorDiscBodies.reduce(
+        (sum, body) => sum + Number(this.topFaceColor(body) === "green"),
+        0
+      );
+      if (faceUpCount > 3) {
+        this.setStatus("you won");
+        this.playRandomWinSfx();
+      } else {
+        this.setStatus("you lost");
+      }
+      return;
+    }
+
     const upperColor = this.topFaceColor(this.upperDiscBody);
-    const lowerColor = this.topFaceColor(this.lowerDiscBody);
+    const lowerColor = this.topFaceColor(this.floorDiscBodies[0]);
     const greens = Number(upperColor === "green") + Number(lowerColor === "green");
 
     if (greens === 2) {
@@ -1038,7 +1259,11 @@ export class DiscDropGame {
 
   isOutOfArena(body) {
     const pos = body.translation();
-    return Math.hypot(pos.x, pos.z) > OUT_OF_ARENA_RADIUS;
+    const limit =
+      this.gameMode === "slammer"
+        ? this.floorRadius - 0.8
+        : this.arenaRadius + OUT_OF_ARENA_RADIUS_OFFSET;
+    return Math.hypot(pos.x, pos.z) > limit;
   }
 
   hasSettled(body) {
@@ -1073,6 +1298,66 @@ export class DiscDropGame {
     );
   }
 
+  applySlammerEdgeContainment(body) {
+    if (!body || this.gameMode !== "slammer") {
+      return;
+    }
+
+    const pos = body.translation();
+    const radius = Math.hypot(pos.x, pos.z);
+    if (radius < 0.0001) {
+      return;
+    }
+
+    const nx = pos.x / radius;
+    const nz = pos.z / radius;
+    const softStart = Math.max(1, this.floorRadius - 4.2);
+    const hardLimit = this.floorRadius - 0.45;
+
+    if (radius > softStart) {
+      const t = THREE.MathUtils.clamp(
+        (radius - softStart) / Math.max(0.001, hardLimit - softStart),
+        0,
+        1
+      );
+      const inwardImpulse = 0.7 + t * 3.8;
+      body.applyImpulse(
+        {
+          x: -nx * inwardImpulse,
+          y: 0,
+          z: -nz * inwardImpulse,
+        },
+        true
+      );
+
+      const lin = body.linvel();
+      const outward = lin.x * nx + lin.z * nz;
+      if (outward > 0) {
+        const damp = 0.22 + t * 0.55;
+        body.setLinvel(
+          {
+            x: lin.x - nx * outward * damp,
+            y: lin.y,
+            z: lin.z - nz * outward * damp,
+          },
+          true
+        );
+      }
+    }
+
+    if (radius > hardLimit) {
+      const scale = hardLimit / radius;
+      body.setTranslation(
+        {
+          x: pos.x * scale,
+          y: pos.y,
+          z: pos.z * scale,
+        },
+        true
+      );
+    }
+  }
+
   syncMesh(body, mesh) {
     const position = body.translation();
     const rotation = body.rotation();
@@ -1081,15 +1366,18 @@ export class DiscDropGame {
   }
 
   isDiscCollisionPair(handleA, handleB) {
-    if (!this.upperDiscCollider || !this.lowerDiscCollider) {
+    if (!this.upperDiscCollider) {
       return false;
     }
-    const upper = this.upperDiscCollider.handle;
-    const lower = this.lowerDiscCollider.handle;
-    return (
-      (handleA === upper && handleB === lower) ||
-      (handleA === lower && handleB === upper)
-    );
+    const upperHandle = this.upperDiscCollider.handle;
+    const floorHandles = this.floorDiscColliders.map((collider) => collider.handle);
+    if (handleA === upperHandle) {
+      return floorHandles.includes(handleB);
+    }
+    if (handleB === upperHandle) {
+      return floorHandles.includes(handleA);
+    }
+    return false;
   }
 
   consumeCollisionSfxEvents() {
@@ -1123,7 +1411,16 @@ export class DiscDropGame {
       this.roundElapsed += FIXED_STEP;
       this.currentWind(this.clock.elapsedTime, this._wind);
       this.applyWind(this.upperDiscBody, this._wind);
-      this.applyWind(this.lowerDiscBody, this._wind);
+      for (const body of this.floorDiscBodies) {
+        this.applyWind(body, this._wind);
+      }
+
+      if (this.gameMode === "slammer") {
+        this.applySlammerEdgeContainment(this.upperDiscBody);
+        for (const body of this.floorDiscBodies) {
+          this.applySlammerEdgeContainment(body);
+        }
+      }
     }
 
     this.world.timestep = FIXED_STEP;
@@ -1134,9 +1431,12 @@ export class DiscDropGame {
       this.hasLaunched &&
       !this.hasResolved &&
       this.upperDiscBody &&
-      this.lowerDiscBody
+      this.floorDiscBodies.length > 0
     ) {
-      if (this.hasSettled(this.upperDiscBody) && this.hasSettled(this.lowerDiscBody)) {
+      const allSettled =
+        this.hasSettled(this.upperDiscBody) &&
+        this.floorDiscBodies.every((body) => this.hasSettled(body));
+      if (allSettled) {
         this.stableFrames += 1;
         if (this.stableFrames > 35) {
           this.resolveRound();
@@ -1147,7 +1447,7 @@ export class DiscDropGame {
 
       if (
         this.isOutOfArena(this.upperDiscBody) ||
-        this.isOutOfArena(this.lowerDiscBody)
+        this.floorDiscBodies.some((body) => this.isOutOfArena(body))
       ) {
         this.resolveRound();
       }
@@ -1183,10 +1483,15 @@ export class DiscDropGame {
       this.accumulator -= FIXED_STEP;
     }
 
-    if (this.upperDiscBody) {
+    if (this.upperDiscBody && this.upperDiscMesh) {
       this.syncMesh(this.upperDiscBody, this.upperDiscMesh);
     }
-    if (this.lowerDiscBody) {
+    if (this.gameMode === "slammer") {
+      const count = Math.min(this.floorDiscBodies.length, this.floorDiscMeshes.length);
+      for (let i = 0; i < count; i += 1) {
+        this.syncMesh(this.floorDiscBodies[i], this.floorDiscMeshes[i]);
+      }
+    } else if (this.lowerDiscBody && this.lowerDiscMesh) {
       this.syncMesh(this.lowerDiscBody, this.lowerDiscMesh);
     }
     this.updateMiniMap();

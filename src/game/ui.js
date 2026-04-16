@@ -65,6 +65,8 @@ export function renderGameUI(app) {
     miniMapEl: app.querySelector("#miniMap"),
     miniLowerDotEl: app.querySelector("#miniLowerDot"),
     miniUpperDotEl: app.querySelector("#miniUpperDot"),
+    miniLowerLabelEl: app.querySelector(".mini-label.lower"),
+    miniUpperLabelEl: app.querySelector(".mini-label.upper"),
     powerMeterEl: app.querySelector("#powerMeter"),
     powerFillEl: app.querySelector("#powerFill"),
     powerMarkerEl: app.querySelector("#powerMarker"),

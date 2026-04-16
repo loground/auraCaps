@@ -474,6 +474,15 @@ canvas {
   background: #ffcf75;
 }
 
+.mini-dot.stack {
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  margin-top: -4px;
+  background: #8fd6ff;
+  box-shadow: 0 0 5px rgba(180, 235, 255, 0.75);
+}
+
 .mini-label {
   position: absolute;
   margin: 0;
@@ -570,6 +579,135 @@ button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+}
+
+.play-setup-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+}
+
+.play-setup-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 2, 2, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.play-setup-panel {
+  position: relative;
+  z-index: 1;
+  width: min(460px, calc(100vw - 1.4rem));
+  border-radius: 14px;
+  border: 1px solid rgba(255, 126, 87, 0.5);
+  background: linear-gradient(180deg, rgba(54, 14, 11, 0.95), rgba(23, 7, 7, 0.95));
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.5);
+  padding: 1rem 1rem 0.92rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.58rem;
+}
+
+.play-setup-panel h2 {
+  margin: 0;
+  font-family: "Hell", "Teko", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffbe9f;
+  font-size: clamp(1.2rem, 3.2vw, 1.75rem);
+}
+
+.play-setup-panel p {
+  margin: 0;
+  color: #f7c4a8;
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
+.play-setup-panel label {
+  display: grid;
+  gap: 0.25rem;
+  color: #ffdccc;
+}
+
+.mode-picker {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mode-label {
+  color: #ffdccc;
+  font-size: 1rem;
+}
+
+.mode-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.mode-btn {
+  width: 100%;
+}
+
+.mode-btn.active {
+  border-color: rgba(255, 214, 156, 0.95);
+  box-shadow: 0 0 0 1px rgba(255, 186, 132, 0.4), 0 0 14px rgba(255, 103, 67, 0.35);
+}
+
+.play-setup-panel select {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 130, 92, 0.65);
+  background: rgba(57, 12, 10, 0.92);
+  color: #ffe4d6;
+  padding: 0.48rem 0.58rem;
+  font-size: 0.95rem;
+}
+
+.play-setup-panel .setup-hint {
+  min-height: 2.2rem;
+}
+
+.play-setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 0.15rem;
+}
+
+.theme-heaven .play-setup-backdrop {
+  background: rgba(35, 73, 108, 0.34);
+}
+
+.theme-heaven .play-setup-panel {
+  border: 1px solid rgba(94, 151, 210, 0.52);
+  background: linear-gradient(180deg, rgba(217, 236, 253, 0.95), rgba(185, 216, 242, 0.95));
+  box-shadow: 0 20px 46px rgba(26, 80, 126, 0.34);
+}
+
+.theme-heaven .play-setup-panel h2 {
+  color: #214d74;
+}
+
+.theme-heaven .play-setup-panel p,
+.theme-heaven .play-setup-panel label,
+.theme-heaven .mode-label {
+  color: #35658f;
+}
+
+.theme-heaven .play-setup-panel select {
+  border: 1px solid rgba(106, 155, 209, 0.7);
+  background: rgba(233, 246, 255, 0.95);
+  color: #214668;
+}
+
+.theme-heaven .mode-btn.active {
+  border-color: rgba(44, 112, 181, 0.95);
+  box-shadow: 0 0 0 1px rgba(71, 143, 214, 0.35), 0 0 12px rgba(95, 164, 227, 0.35);
 }
 
 .status {
@@ -876,13 +1014,15 @@ button:disabled {
 .mode-play .back-btn {
   border: 1px solid rgba(255, 132, 96, 0.72);
   background: linear-gradient(180deg, rgba(141, 35, 22, 0.95), rgba(56, 12, 11, 0.95));
-  top: calc(env(safe-area-inset-top, 0px) + 4.4rem);
+  top: calc(env(safe-area-inset-top, 0px) + 0.8rem);
   right: calc(env(safe-area-inset-right, 0px) + 0.8rem);
 }
 
 .mode-play .global-mute-btn {
-  top: calc(env(safe-area-inset-top, 0px) + 8.1rem);
-  right: calc(env(safe-area-inset-right, 0px) + 0.8rem);
+  left: calc(env(safe-area-inset-left, 0px) + 0.8rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
+  right: auto;
+  top: auto;
 }
 
 .collection-screen h2 {
@@ -1147,6 +1287,27 @@ button:disabled {
     min-width: 0;
     font-size: 1.2rem;
     padding: 0.45rem 0.62rem;
+  }
+
+  .play-setup-panel {
+    width: min(430px, calc(100vw - 1rem));
+    padding: 0.78rem 0.74rem 0.72rem;
+    gap: 0.48rem;
+  }
+
+  .play-setup-panel p {
+    font-size: 0.8rem;
+  }
+
+  .play-setup-panel select {
+    font-size: 0.86rem;
+    padding: 0.42rem 0.5rem;
+  }
+
+  .play-setup-actions button {
+    min-width: 96px;
+    font-size: 0.8rem;
+    padding: 0.4rem 0.54rem;
   }
 
   .theme-switch {

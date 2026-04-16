@@ -6,6 +6,6 @@ export const DISC_HEIGHT = 0.14;
 
 export const TABLE_TOP_Y = 0.24;
 export const DISC_HALF_HEIGHT = DISC_HEIGHT * 0.5;
-export const LOWER_DISC_START_Y = TABLE_TOP_Y + DISC_HALF_HEIGHT + 0.01;
+export const LOWER_DISC_START_Y = TABLE_TOP_Y + DISC_HALF_HEIGHT + 0.002;
 
 export const FIXED_STEP = 1 / 120;
