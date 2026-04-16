@@ -108,7 +108,7 @@ export function mountCollectionScreen({ app, onBack }) {
 
     inspectorScene = new THREE.Scene();
     inspectorCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-    inspectorCamera.position.set(0, 0.85, 4.2);
+    inspectorCamera.position.set(0, 0.9, 5.1);
     inspectorCamera.lookAt(0, 0, 0);
 
     inspectorControls = new OrbitControls(
@@ -117,7 +117,7 @@ export function mountCollectionScreen({ app, onBack }) {
     );
     inspectorControls.enablePan = false;
     inspectorControls.enableDamping = true;
-    inspectorControls.minDistance = 2.6;
+    inspectorControls.minDistance = 3.1;
     inspectorControls.maxDistance = 6;
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.45);

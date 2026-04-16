@@ -1188,6 +1188,13 @@ button:disabled {
     bottom: auto;
   }
 
+  .mode-collection .global-mute-btn {
+    left: calc(env(safe-area-inset-left, 0px) + 0.7rem);
+    top: calc(env(safe-area-inset-top, 0px) + 0.7rem);
+    right: auto;
+    bottom: auto;
+  }
+
   .back-btn {
     top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.55rem);
