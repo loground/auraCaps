@@ -6,6 +6,38 @@ import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
+const AURA_ORIGIN = "https://auramaxx.gg";
+const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
+
+function loadAuraSdk() {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== "undefined" && window.Aura?.SigninButton) {
+      resolve(window.Aura);
+      return;
+    }
+
+    const existing = document.querySelector('script[data-aura-sdk="true"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.Aura), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Failed to load Aura SDK")),
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = AURA_SDK_URL;
+    script.async = true;
+    script.dataset.auraSdk = "true";
+    script.dataset.auraOrigin = AURA_ORIGIN;
+    script.onload = () => resolve(window.Aura);
+    script.onerror = () => reject(new Error("Failed to load Aura SDK"));
+    document.head.appendChild(script);
+  });
+}
+
 export function mountMenuScreen({
   app,
   onPlay,
@@ -14,7 +46,17 @@ export function mountMenuScreen({
   onThemeChange,
   soundEnabled = true,
   onSoundToggle,
+  auraSession = null,
+  onAuraSuccess,
 }) {
+  const formatAuraStatus = (sessionLike) => {
+    const wallet = sessionLike?.walletAddress || "";
+    if (wallet.length >= 10) {
+      return `connected with aura • ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
+    }
+    return "connected with aura";
+  };
+
   app.innerHTML = `
     <div class="menu-overlay">
       <div class="menu-mute-switch" role="group" aria-label="Menu mute switcher">
@@ -22,9 +64,12 @@ export function mountMenuScreen({
           ${soundEnabled ? "mute: off" : "mute: on"}
         </button>
       </div>
-      <div class="theme-switch" role="group" aria-label="Theme switcher">
-        <button id="themeHell" class="theme-btn ${theme === "hell" ? "active" : ""}" type="button">hell</button>
-        <button id="themeHeaven" class="theme-btn ${theme === "heaven" ? "active" : ""}" type="button">heaven</button>
+      <div class="menu-top-right">
+        <div class="theme-switch" role="group" aria-label="Theme switcher">
+          <button id="themeHell" class="theme-btn ${theme === "hell" ? "active" : ""}" type="button">hell</button>
+          <button id="themeHeaven" class="theme-btn ${theme === "heaven" ? "active" : ""}" type="button">heaven</button>
+        </div>
+        <div id="aura-login" class="aura-login-slot" aria-label="Aura login"></div>
       </div>
       <div id="menuPreloader" class="menu-preloader">
         <div class="sigil"></div>
@@ -33,6 +78,9 @@ export function mountMenuScreen({
       <div class="menu-buttons">
         <button id="menuPlay" class="menu-btn" type="button">play</button>
         <button id="menuCollection" class="menu-btn" type="button">collection</button>
+      </div>
+      <div id="auraConnectedStatus" class="menu-aura-status ${auraSession?.connected ? "visible" : ""}">
+        ${auraSession?.connected ? formatAuraStatus(auraSession) : ""}
       </div>
     </div>
   `;
@@ -310,6 +358,8 @@ export function mountMenuScreen({
   const menuMuteToggleBtn = app.querySelector("#menuMuteToggle");
   const themeHellBtn = app.querySelector("#themeHell");
   const themeHeavenBtn = app.querySelector("#themeHeaven");
+  const auraLoginContainer = app.querySelector("#aura-login");
+  const auraConnectedStatus = app.querySelector("#auraConnectedStatus");
   const preloader = app.querySelector("#menuPreloader");
   const menuButtons = app.querySelector(".menu-buttons");
   const updateSoundButton = (enabled) => {
@@ -322,12 +372,48 @@ export function mountMenuScreen({
   };
   const onThemeHell = () => onThemeChange?.("hell");
   const onThemeHeaven = () => onThemeChange?.("heaven");
+  const setAuraConnectedStatus = (sessionLike) => {
+    if (!auraConnectedStatus) {
+      return;
+    }
+    const connected = Boolean(sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected);
+    auraConnectedStatus.classList.toggle("visible", connected);
+    auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : "";
+  };
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
   themeHellBtn.addEventListener("click", onThemeHell);
   themeHeavenBtn.addEventListener("click", onThemeHeaven);
   menuButtons.classList.add("disabled");
+
+  loadAuraSdk()
+    .then((Aura) => {
+      if (!auraLoginContainer || !Aura?.SigninButton) {
+        return;
+      }
+      auraLoginContainer.innerHTML = "";
+      Aura.SigninButton({
+        container: "#aura-login",
+        clientId: window.__AURA_CLIENT_ID__ || "your-app",
+        onSuccess(result) {
+          setAuraConnectedStatus({
+            connected: true,
+            walletAddress: result?.walletAddress,
+            user: result?.user,
+          });
+          onAuraSuccess?.(result);
+          console.log(result?.walletAddress);
+          console.log(result?.user);
+        },
+      });
+    })
+    .catch(() => {
+      if (auraLoginContainer) {
+        auraLoginContainer.innerHTML =
+          '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
+      }
+    });
 
   const revealMenu = () => {
     preloader.classList.add("hidden");

@@ -8,6 +8,40 @@ const hoverTargetsSelector = "button";
 const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
 let soundEnabled = true;
+const AURA_SESSION_KEY = "aura_session_v1";
+let auraSession = loadAuraSession();
+
+function loadAuraSession() {
+  try {
+    const raw = window.localStorage.getItem(AURA_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.connected) {
+      return null;
+    }
+    return {
+      connected: true,
+      walletAddress: parsed.walletAddress || "",
+      user: parsed.user || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveAuraSession(session) {
+  try {
+    if (session?.connected) {
+      window.localStorage.setItem(AURA_SESSION_KEY, JSON.stringify(session));
+      return;
+    }
+    window.localStorage.removeItem(AURA_SESSION_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
 function composeCleanups(...cleanups) {
   return () => {
@@ -291,10 +325,19 @@ async function showMenu() {
     app,
     theme: currentTheme,
     soundEnabled,
+    auraSession,
     onSoundToggle: () => {
       soundEnabled = !soundEnabled;
       syncSoundButtonsUI();
       return soundEnabled;
+    },
+    onAuraSuccess: (result) => {
+      auraSession = {
+        connected: true,
+        walletAddress: result?.walletAddress || "",
+        user: result?.user || null,
+      };
+      saveAuraSession(auraSession);
     },
     onThemeChange: (nextTheme) => {
       if (nextTheme !== currentTheme) {

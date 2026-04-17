@@ -52,6 +52,38 @@ canvas {
   pointer-events: auto;
 }
 
+.menu-top-right {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.42rem;
+  pointer-events: none;
+}
+
+.menu-top-right .theme-switch {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
+
+.aura-login-slot {
+  min-width: 190px;
+  pointer-events: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.aura-login-fallback {
+  min-width: 190px;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.72rem;
+}
+
 .sound-switch {
   position: absolute;
   top: 1rem;
@@ -143,6 +175,29 @@ canvas {
   flex-direction: column;
   gap: 0.8rem;
   pointer-events: auto;
+}
+
+.menu-aura-status {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  padding: 0.45rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 128, 96, 0.6);
+  background: rgba(34, 8, 6, 0.78);
+  color: #ffd8c6;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8rem;
+  transition: opacity 180ms ease;
+}
+
+.menu-aura-status.visible {
+  opacity: 1;
 }
 
 .menu-buttons.disabled {
@@ -789,6 +844,16 @@ button:disabled {
   box-shadow: 0 0 0 1px rgba(71, 143, 214, 0.35), 0 0 12px rgba(95, 164, 227, 0.35);
 }
 
+.theme-heaven .aura-login-fallback {
+  color: #1f3c59;
+}
+
+.theme-heaven .menu-aura-status {
+  border: 1px solid rgba(96, 153, 214, 0.72);
+  background: rgba(216, 236, 255, 0.88);
+  color: #1f3f5d;
+}
+
 .theme-heaven .menu-preloader {
   background:
     radial-gradient(circle at 50% 50%, rgba(187, 224, 255, 0.6), rgba(152, 198, 236, 0.92)),
@@ -1316,6 +1381,12 @@ button:disabled {
     gap: 0.3rem;
   }
 
+  .menu-top-right {
+    top: 0.7rem;
+    right: 0.7rem;
+    gap: 0.28rem;
+  }
+
   .sound-switch {
     top: 0.7rem;
     left: 0.7rem;
@@ -1368,6 +1439,22 @@ button:disabled {
     min-width: 76px;
     font-size: 0.8rem;
     padding: 0.42rem 0.52rem;
+  }
+
+  .aura-login-slot {
+    min-width: 148px;
+  }
+
+  .aura-login-fallback {
+    min-width: 148px;
+    font-size: 0.72rem;
+    padding: 0.42rem 0.5rem;
+  }
+
+  .menu-aura-status {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.64rem);
+    font-size: 0.66rem;
+    padding: 0.36rem 0.52rem;
   }
 
   .collection-grid {
