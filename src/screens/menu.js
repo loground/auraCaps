@@ -65,11 +65,15 @@ export function mountMenuScreen({
         </button>
       </div>
       <div class="menu-top-right">
-        <div class="theme-switch" role="group" aria-label="Theme switcher">
-          <button id="themeHell" class="theme-btn ${theme === "hell" ? "active" : ""}" type="button">hell</button>
-          <button id="themeHeaven" class="theme-btn ${theme === "heaven" ? "active" : ""}" type="button">heaven</button>
-        </div>
-        <div id="aura-login" class="aura-login-slot" aria-label="Aura login"></div>
+        <div id="aura-login" class="aura-login-slot ${auraSession?.connected ? "hidden" : ""}" aria-label="Aura login"></div>
+      </div>
+      <div class="menu-theme-picker" role="group" aria-label="Theme switcher">
+        <label for="menuThemeSelect">theme</label>
+        <select id="menuThemeSelect" class="menu-theme-select">
+          <option value="heaven" ${theme === "heaven" ? "selected" : ""}>heaven</option>
+          <option value="hell" ${theme === "hell" ? "selected" : ""}>hell</option>
+          <option value="jungle-bay" ${theme === "jungle-bay" ? "selected" : ""}>jungle bay</option>
+        </select>
       </div>
       <div id="menuPreloader" class="menu-preloader">
         <div class="sigil"></div>
@@ -356,8 +360,7 @@ export function mountMenuScreen({
   const playButton = app.querySelector("#menuPlay");
   const collectionButton = app.querySelector("#menuCollection");
   const menuMuteToggleBtn = app.querySelector("#menuMuteToggle");
-  const themeHellBtn = app.querySelector("#themeHell");
-  const themeHeavenBtn = app.querySelector("#themeHeaven");
+  const themeSelectEl = app.querySelector("#menuThemeSelect");
   const auraLoginContainer = app.querySelector("#aura-login");
   const auraConnectedStatus = app.querySelector("#auraConnectedStatus");
   const preloader = app.querySelector("#menuPreloader");
@@ -370,8 +373,7 @@ export function mountMenuScreen({
     const enabled = onSoundToggle ? onSoundToggle() : menuMuteToggleBtn.classList.contains("muted");
     updateSoundButton(Boolean(enabled));
   };
-  const onThemeHell = () => onThemeChange?.("hell");
-  const onThemeHeaven = () => onThemeChange?.("heaven");
+  const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || "hell");
   const setAuraConnectedStatus = (sessionLike) => {
     if (!auraConnectedStatus) {
       return;
@@ -379,15 +381,21 @@ export function mountMenuScreen({
     const connected = Boolean(sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected);
     auraConnectedStatus.classList.toggle("visible", connected);
     auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : "";
+    if (auraLoginContainer) {
+      auraLoginContainer.classList.toggle("hidden", connected);
+      if (connected) {
+        auraLoginContainer.innerHTML = "";
+      }
+    }
   };
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
-  themeHellBtn.addEventListener("click", onThemeHell);
-  themeHeavenBtn.addEventListener("click", onThemeHeaven);
+  themeSelectEl?.addEventListener("change", onThemeSelect);
   menuButtons.classList.add("disabled");
 
-  loadAuraSdk()
+  if (!auraSession?.connected) {
+    loadAuraSdk()
     .then((Aura) => {
       if (!auraLoginContainer || !Aura?.SigninButton) {
         return;
@@ -414,6 +422,9 @@ export function mountMenuScreen({
           '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
       }
     });
+  } else {
+    setAuraConnectedStatus(auraSession);
+  }
 
   const revealMenu = () => {
     preloader.classList.add("hidden");
@@ -511,8 +522,7 @@ export function mountMenuScreen({
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
     menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
-    themeHellBtn.removeEventListener("click", onThemeHell);
-    themeHeavenBtn.removeEventListener("click", onThemeHeaven);
+    themeSelectEl?.removeEventListener("change", onThemeSelect);
     window.removeEventListener("pointermove", onPointerMove);
     controls.dispose();
     dracoLoader.dispose();

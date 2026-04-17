@@ -64,13 +64,6 @@ canvas {
   pointer-events: none;
 }
 
-.menu-top-right .theme-switch {
-  position: static;
-  top: auto;
-  right: auto;
-  z-index: auto;
-}
-
 .aura-login-slot {
   min-width: 190px;
   pointer-events: auto;
@@ -78,10 +71,44 @@ canvas {
   justify-content: flex-end;
 }
 
+.aura-login-slot.hidden {
+  display: none;
+}
+
 .aura-login-fallback {
   min-width: 190px;
   font-size: 0.88rem;
   padding: 0.5rem 0.72rem;
+}
+
+.menu-theme-picker {
+  position: absolute;
+  right: calc(env(safe-area-inset-right, 0px) + 0.8rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.24rem;
+  pointer-events: auto;
+}
+
+.menu-theme-picker label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  color: #ffd8c6;
+}
+
+.menu-theme-select {
+  min-width: 142px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 128, 96, 0.65);
+  background: linear-gradient(180deg, rgba(114, 28, 20, 0.94), rgba(42, 9, 8, 0.94));
+  color: #ffd8c6;
+  padding: 0.36rem 0.52rem;
 }
 
 .sound-switch {
@@ -185,10 +212,9 @@ canvas {
   z-index: 6;
   pointer-events: none;
   opacity: 0;
-  padding: 0.45rem 0.8rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 128, 96, 0.6);
-  background: rgba(34, 8, 6, 0.78);
+  padding: 0;
+  border: none;
+  background: transparent;
   color: #ffd8c6;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -849,9 +875,17 @@ button:disabled {
 }
 
 .theme-heaven .menu-aura-status {
-  border: 1px solid rgba(96, 153, 214, 0.72);
-  background: rgba(216, 236, 255, 0.88);
   color: #1f3f5d;
+}
+
+.theme-heaven .menu-theme-picker label {
+  color: #1f3c59;
+}
+
+.theme-heaven .menu-theme-select {
+  border: 1px solid rgba(86, 142, 206, 0.7);
+  background: linear-gradient(180deg, rgba(222, 240, 255, 0.95), rgba(180, 216, 246, 0.94));
+  color: #1f3c59;
 }
 
 .theme-heaven .menu-preloader {
@@ -1387,6 +1421,22 @@ button:disabled {
     gap: 0.28rem;
   }
 
+  .menu-theme-picker {
+    right: calc(env(safe-area-inset-right, 0px) + 0.65rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.68rem);
+    gap: 0.18rem;
+  }
+
+  .menu-theme-picker label {
+    font-size: 0.62rem;
+  }
+
+  .menu-theme-select {
+    min-width: 124px;
+    font-size: 0.72rem;
+    padding: 0.34rem 0.45rem;
+  }
+
   .sound-switch {
     top: 0.7rem;
     left: 0.7rem;
@@ -1454,7 +1504,7 @@ button:disabled {
   .menu-aura-status {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 0.64rem);
     font-size: 0.66rem;
-    padding: 0.36rem 0.52rem;
+    padding: 0;
   }
 
   .collection-grid {
