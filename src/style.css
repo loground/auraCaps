@@ -99,6 +99,12 @@ canvas {
   padding: 0.5rem 0.72rem;
 }
 
+.aura-disconnect-btn {
+  min-width: 190px;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.72rem;
+}
+
 .menu-theme-picker {
   position: absolute;
   right: calc(env(safe-area-inset-right, 0px) + 0.8rem);
@@ -1663,7 +1669,8 @@ button:disabled {
 
   .menu-theme-picker {
     right: calc(env(safe-area-inset-right, 0px) + 0.65rem);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.68rem);
+    top: calc(env(safe-area-inset-top, 0px) + 2.95rem);
+    bottom: auto;
     gap: 0.18rem;
   }
 
@@ -1737,6 +1744,12 @@ button:disabled {
   }
 
   .aura-login-fallback {
+    min-width: 148px;
+    font-size: 0.72rem;
+    padding: 0.42rem 0.5rem;
+  }
+
+  .aura-disconnect-btn {
     min-width: 148px;
     font-size: 0.72rem;
     padding: 0.42rem 0.5rem;

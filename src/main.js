@@ -342,6 +342,10 @@ async function showMenu() {
       };
       saveAuraSession(auraSession);
     },
+    onAuraDisconnect: () => {
+      auraSession = null;
+      saveAuraSession(null);
+    },
     onThemeChange: (nextTheme) => {
       if (nextTheme !== currentTheme) {
         setTheme(nextTheme);

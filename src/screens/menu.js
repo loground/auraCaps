@@ -48,6 +48,7 @@ export function mountMenuScreen({
   onSoundToggle,
   auraSession = null,
   onAuraSuccess,
+  onAuraDisconnect,
 }) {
   const formatAuraStatus = (sessionLike) => {
     const wallet = sessionLike?.walletAddress || "";
@@ -65,7 +66,7 @@ export function mountMenuScreen({
         </button>
       </div>
       <div class="menu-top-right">
-        <div id="aura-login" class="aura-login-slot ${auraSession?.connected ? "hidden" : ""}" aria-label="Aura login"></div>
+        <div id="aura-login" class="aura-login-slot" aria-label="Aura login"></div>
       </div>
       <div class="menu-theme-picker" role="group" aria-label="Theme switcher">
         <select id="menuThemeSelect" class="menu-theme-select">
@@ -446,6 +447,72 @@ export function mountMenuScreen({
     updateSoundButton(Boolean(enabled));
   };
   const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || "hell");
+  let auraApi = null;
+  let disconnectHandler = null;
+
+  const clearDisconnectHandler = () => {
+    if (disconnectHandler) {
+      auraLoginContainer?.removeEventListener("click", disconnectHandler);
+      disconnectHandler = null;
+    }
+  };
+
+  const renderAuraDisconnect = () => {
+    if (!auraLoginContainer) {
+      return;
+    }
+    clearDisconnectHandler();
+    auraLoginContainer.classList.remove("hidden");
+    auraLoginContainer.innerHTML =
+      '<button id="auraDisconnectBtn" class="theme-btn aura-disconnect-btn" type="button">disconnect</button>';
+    disconnectHandler = async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest("#auraDisconnectBtn")) {
+        return;
+      }
+      try {
+        if (auraApi && typeof auraApi.SignOut === "function") {
+          await auraApi.SignOut();
+        }
+      } catch {
+        // Ignore sign-out API errors, local disconnect still applies.
+      }
+      onAuraDisconnect?.();
+      setAuraConnectedStatus(null);
+      renderAuraSignin();
+    };
+    auraLoginContainer.addEventListener("click", disconnectHandler);
+  };
+
+  const renderAuraSignin = () => {
+    if (!auraLoginContainer) {
+      return;
+    }
+    clearDisconnectHandler();
+    auraLoginContainer.classList.remove("hidden");
+    auraLoginContainer.innerHTML = "";
+    if (!auraApi?.SigninButton) {
+      auraLoginContainer.innerHTML =
+        '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
+      return;
+    }
+    auraApi.SigninButton({
+      container: "#aura-login",
+      clientId: window.__AURA_CLIENT_ID__ || "your-app",
+      onSuccess(result) {
+        setAuraConnectedStatus({
+          connected: true,
+          walletAddress: result?.walletAddress,
+          user: result?.user,
+        });
+        onAuraSuccess?.(result);
+        renderAuraDisconnect();
+        console.log(result?.walletAddress);
+        console.log(result?.user);
+      },
+    });
+  };
+
   const setAuraConnectedStatus = (sessionLike) => {
     if (!auraConnectedStatus) {
       return;
@@ -453,12 +520,6 @@ export function mountMenuScreen({
     const connected = Boolean(sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected);
     auraConnectedStatus.classList.toggle("visible", connected);
     auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : "";
-    if (auraLoginContainer) {
-      auraLoginContainer.classList.toggle("hidden", connected);
-      if (connected) {
-        auraLoginContainer.innerHTML = "";
-      }
-    }
   };
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
@@ -469,33 +530,20 @@ export function mountMenuScreen({
   if (!auraSession?.connected) {
     loadAuraSdk()
     .then((Aura) => {
-      if (!auraLoginContainer || !Aura?.SigninButton) {
-        return;
-      }
-      auraLoginContainer.innerHTML = "";
-      Aura.SigninButton({
-        container: "#aura-login",
-        clientId: window.__AURA_CLIENT_ID__ || "your-app",
-        onSuccess(result) {
-          setAuraConnectedStatus({
-            connected: true,
-            walletAddress: result?.walletAddress,
-            user: result?.user,
-          });
-          onAuraSuccess?.(result);
-          console.log(result?.walletAddress);
-          console.log(result?.user);
-        },
-      });
+      auraApi = Aura;
+      renderAuraSignin();
     })
     .catch(() => {
-      if (auraLoginContainer) {
-        auraLoginContainer.innerHTML =
-          '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
-      }
+      renderAuraSignin();
     });
   } else {
     setAuraConnectedStatus(auraSession);
+    loadAuraSdk()
+      .then((Aura) => {
+        auraApi = Aura;
+      })
+      .catch(() => {});
+    renderAuraDisconnect();
   }
 
   const revealMenu = () => {
@@ -595,6 +643,7 @@ export function mountMenuScreen({
     collectionButton.removeEventListener("click", onCollection);
     menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeSelectEl?.removeEventListener("change", onThemeSelect);
+    clearDisconnectHandler();
     window.removeEventListener("pointermove", onPointerMove);
     controls.dispose();
     dracoLoader.dispose();
