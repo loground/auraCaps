@@ -281,9 +281,9 @@ export class DiscDropGame {
           this.arenaVisualRoot.add(model);
           this.arenaVisualRoot.scale.setScalar(scale);
           this.arenaVisualRoot.position.set(
-            10,
+            this.theme === "jungle-bay" ? 10 : 0,
             this.theme === "jungle-bay" ? -15 : -0.62,
-            -5
+            this.theme === "jungle-bay" ? -5 : 0
           );
           this.createArenaSurfacePhysics();
           resolve();

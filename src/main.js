@@ -174,12 +174,14 @@ function showPlaySetupModal({ theme }) {
     overlay.innerHTML = `
       <div class="play-setup-backdrop"></div>
       <div class="play-setup-panel">
+        <button id="setupCloseBtn" class="play-setup-close" type="button" aria-label="Close setup">×</button>
         <h2>Choose Battle Setup</h2>
         <p>Select map and mode before launching the round.</p>
         <label>
           Map
           <select id="setupArenaSelect">${arenaOptions}</select>
         </label>
+        <p id="setupMapHint" class="setup-hint"></p>
         <div class="mode-picker">
           <span class="mode-label">Mode</span>
           <div class="mode-buttons">
@@ -191,7 +193,6 @@ function showPlaySetupModal({ theme }) {
           Classic: 2 caps duel. Land and spin to end with more green faces up.
         </p>
         <div class="play-setup-actions">
-          <button id="setupCancelBtn" type="button">back</button>
           <button id="setupLaunchBtn" type="button">launch</button>
         </div>
       </div>
@@ -200,10 +201,11 @@ function showPlaySetupModal({ theme }) {
     app.appendChild(overlay);
 
     const arenaSelect = overlay.querySelector("#setupArenaSelect");
+    const mapHint = overlay.querySelector("#setupMapHint");
     const modeClassicBtn = overlay.querySelector("#setupModeClassicBtn");
     const modeSlammerBtn = overlay.querySelector("#setupModeSlammerBtn");
     const modeHint = overlay.querySelector("#setupModeHint");
-    const cancelBtn = overlay.querySelector("#setupCancelBtn");
+    const closeBtn = overlay.querySelector("#setupCloseBtn");
     const launchBtn = overlay.querySelector("#setupLaunchBtn");
     const backdrop = overlay.querySelector(".play-setup-backdrop");
     let selectedMode = "classic";
@@ -213,6 +215,15 @@ function showPlaySetupModal({ theme }) {
         ? DEFAULT_ARENA_KEY
         : arenaKeys[0];
     }
+
+    const updateMapHint = () => {
+      if (!mapHint) {
+        return;
+      }
+      const arenaKey = arenaSelect?.value || DEFAULT_ARENA_KEY;
+      mapHint.textContent = ARENA_CONFIGS[arenaKey]?.hint || "";
+    };
+    updateMapHint();
 
     const updateModeUI = () => {
       if (!modeHint) {
@@ -237,11 +248,13 @@ function showPlaySetupModal({ theme }) {
     };
     modeClassicBtn?.addEventListener("click", onModeClassic);
     modeSlammerBtn?.addEventListener("click", onModeSlammer);
+    arenaSelect?.addEventListener("change", updateMapHint);
 
     const cleanup = () => {
       modeClassicBtn?.removeEventListener("click", onModeClassic);
       modeSlammerBtn?.removeEventListener("click", onModeSlammer);
-      cancelBtn?.removeEventListener("click", onCancel);
+      arenaSelect?.removeEventListener("change", updateMapHint);
+      closeBtn?.removeEventListener("click", onCancel);
       launchBtn?.removeEventListener("click", onLaunch);
       backdrop?.removeEventListener("click", onCancel);
       overlay.remove();
@@ -261,7 +274,7 @@ function showPlaySetupModal({ theme }) {
       resolve(value);
     };
 
-    cancelBtn?.addEventListener("click", onCancel);
+    closeBtn?.addEventListener("click", onCancel);
     launchBtn?.addEventListener("click", onLaunch);
     backdrop?.addEventListener("click", onCancel);
   });
