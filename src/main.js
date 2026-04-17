@@ -160,7 +160,10 @@ function showPlaySetupModal({ theme }) {
     const overlay = document.createElement("div");
     overlay.className = "play-setup-modal";
 
-    const arenaKeys = theme === "heaven" ? ["classic"] : Object.keys(ARENA_CONFIGS);
+    const arenaKeys =
+      theme === "heaven" || theme === "jungle-bay"
+        ? ["classic"]
+        : Object.keys(ARENA_CONFIGS);
     const arenaOptions = arenaKeys
       .map(
         (key) =>

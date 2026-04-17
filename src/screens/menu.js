@@ -68,7 +68,6 @@ export function mountMenuScreen({
         <div id="aura-login" class="aura-login-slot ${auraSession?.connected ? "hidden" : ""}" aria-label="Aura login"></div>
       </div>
       <div class="menu-theme-picker" role="group" aria-label="Theme switcher">
-        <label for="menuThemeSelect">theme</label>
         <select id="menuThemeSelect" class="menu-theme-select">
           <option value="heaven" ${theme === "heaven" ? "selected" : ""}>heaven</option>
           <option value="hell" ${theme === "hell" ? "selected" : ""}>hell</option>
@@ -99,7 +98,8 @@ export function mountMenuScreen({
 
   const scene = new THREE.Scene();
   const isHeaven = theme === "heaven";
-  const bgColor = isHeaven ? "#8ccfff" : "#170807";
+  const isJungle = theme === "jungle-bay";
+  const bgColor = isHeaven ? "#8ccfff" : isJungle ? "#8edcb4" : "#170807";
   scene.background = new THREE.Color(bgColor);
   scene.fog = new THREE.Fog(bgColor, 18, 58);
 
@@ -125,29 +125,29 @@ export function mountMenuScreen({
   controls.update();
 
   const ambient = new THREE.AmbientLight(
-    isHeaven ? 0xe6f6ff : 0xffb48a,
-    isHeaven ? 0.78 : 0.56
+    isHeaven ? 0xe6f6ff : isJungle ? 0xf4ffd6 : 0xffb48a,
+    isHeaven ? 0.78 : isJungle ? 0.82 : 0.56
   );
   scene.add(ambient);
 
   const keyLight = new THREE.DirectionalLight(
-    isHeaven ? 0xd2ecff : 0xff5b31,
-    isHeaven ? 1.45 : 1.6
+    isHeaven ? 0xd2ecff : isJungle ? 0xffefbd : 0xff5b31,
+    isHeaven ? 1.45 : isJungle ? 1.52 : 1.6
   );
   keyLight.position.set(8, 10, 6);
   keyLight.castShadow = true;
   scene.add(keyLight);
 
   const fillLight = new THREE.DirectionalLight(
-    isHeaven ? 0xffffff : 0xffda99,
-    isHeaven ? 0.88 : 0.72
+    isHeaven ? 0xffffff : isJungle ? 0xd1ffd2 : 0xffda99,
+    isHeaven ? 0.88 : isJungle ? 0.76 : 0.72
   );
   fillLight.position.set(-8, 5, 2);
   scene.add(fillLight);
 
   const demonTopLight = new THREE.SpotLight(
-    isHeaven ? 0xf2fbff : 0xffc58f,
-    isHeaven ? 2.0 : 2.32,
+    isHeaven ? 0xf2fbff : isJungle ? 0xfff5ca : 0xffc58f,
+    isHeaven ? 2.0 : isJungle ? 2.18 : 2.32,
     60,
     0.45,
     0.35,
@@ -160,7 +160,7 @@ export function mountMenuScreen({
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
     new THREE.MeshStandardMaterial({
-      color: isHeaven ? "#d4e8f6" : "#24100d",
+      color: isHeaven ? "#d4e8f6" : isJungle ? "#acc98d" : "#24100d",
       roughness: 0.92,
       metalness: 0.02,
     })
@@ -268,7 +268,6 @@ export function mountMenuScreen({
       vec3 bottom = vec3(0.86, 0.94, 1.0);
       vec3 sky = mix(bottom, top, clamp(uv.y, 0.0, 1.0));
 
-      // Cheap layered cloud bands.
       float t = iTime * 0.08;
       float c1 = sin((uv.x * 7.0 + t) + sin(uv.y * 6.0)) * 0.5 + 0.5;
       float c2 = sin((uv.x * 12.0 - t * 1.4) + cos(uv.y * 9.0)) * 0.5 + 0.5;
@@ -278,11 +277,79 @@ export function mountMenuScreen({
       gl_FragColor = vec4(color, 1.0);
     }
   `;
+  const kaleFragmentShader = `
+    uniform float iTime;
+    uniform vec2 iResolution;
+    uniform vec2 iMouse;
+    uniform float iHover;
+    varying vec2 vUv;
+
+    float hash12(vec2 p){
+      vec3 p3  = fract(vec3(p.xyx) * 0.1031);
+      p3 += dot(p3, p3.yzx + 33.33);
+      return fract((p3.x + p3.y) * p3.z);
+    }
+
+    float noise(vec2 p){
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f*f*(3.0-2.0*f);
+      float a = hash12(i + vec2(0.0, 0.0));
+      float b = hash12(i + vec2(1.0, 0.0));
+      float c = hash12(i + vec2(0.0, 1.0));
+      float d = hash12(i + vec2(1.0, 1.0));
+      return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    }
+
+    void main() {
+      vec2 fragCoord = vUv * iResolution.xy;
+      vec2 uv = fragCoord / iResolution.xy;
+
+      // sand base color
+      vec4 sandcolor = vec4(0.9606, 0.6601, 0.1445, 1.0);
+
+      // pseudo textures (iChannel0/1 replacement)
+      float nLo = noise(uv * 64.0 + vec2(iTime * 0.03, -iTime * 0.02));
+      float nHi = noise(uv * 256.0 + vec2(-iTime * 0.12, iTime * 0.07));
+      float nHi2 = noise(uv * 256.0 + vec2(sin(iTime * 0.4), cos(iTime * 0.3)));
+      float nHi3 = noise(uv * 256.0 + vec2(cos(iTime * 0.21), -sin(iTime * 0.35)));
+
+      vec4 sandtexture = vec4(vec3(nLo), 1.0);
+      vec4 sandspecular = vec4(nHi, nHi2, nHi3, 1.0);
+      vec4 sandspecular2 = vec4(nHi2, nHi3, nHi, 1.0);
+      vec4 sandspecular3 = vec4(nHi3, nHi, nHi2, 1.0);
+
+      sandspecular.xyz =
+        sandspecular.xxx * sandspecular3.yyy * sandspecular2.zzz * vec3(2.0);
+
+      float d = abs(fragCoord.y - ((1.3 + sin(iTime)) * 200.0));
+      d = d * 0.003;
+      d = pow(d, 0.6);
+      d = min(d, 1.0);
+
+      vec4 sandbase = min(sandcolor + sandtexture * 0.06, vec4(1.0));
+      vec4 darkensand = mix(sandtexture, vec4(0.0), d);
+      vec4 gradientgen = mix(sandspecular, darkensand, d);
+      vec4 finalmix = min(sandbase + gradientgen * 0.3, vec4(1.0));
+
+      // hover boost to make interaction visible
+      float distToMouse = distance(uv, iMouse);
+      float hoverGlow = exp(-distToMouse * 9.5) * iHover;
+      finalmix.rgb += vec3(0.18, 0.12, 0.02) * hoverGlow;
+      finalmix.rgb = min(finalmix.rgb, vec3(1.0));
+
+      gl_FragColor = vec4(finalmix.rgb, 1.0);
+    }
+  `;
 
   const titleMaterial = new THREE.ShaderMaterial({
     uniforms: titleUniforms,
     vertexShader: titleVertexShader,
-    fragmentShader: isHeaven ? heavenFragmentShader : hellFragmentShader,
+    fragmentShader: isHeaven
+      ? heavenFragmentShader
+      : isJungle
+        ? kaleFragmentShader
+        : hellFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
@@ -324,8 +391,13 @@ export function mountMenuScreen({
   gltfLoader.setDRACOLoader(dracoLoader);
   gltfLoader.setKTX2Loader(ktx2Loader);
 
+  const menuModelPath = isHeaven
+    ? "/3d/heaven.glb"
+    : isJungle
+      ? "/3d/jbMenu.glb"
+      : "/3d/demon.glb";
   gltfLoader.load(
-    isHeaven ? "/3d/heaven.glb" : "/3d/demon.glb",
+    menuModelPath,
     (gltf) => {
       demon = gltf.scene;
       demon.traverse((child) => {

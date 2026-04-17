@@ -45,7 +45,9 @@ export class DiscDropGame {
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey =
-      theme === "heaven" ? "classic" : initialArenaKey || DEFAULT_ARENA_KEY;
+      theme === "heaven" || theme === "jungle-bay"
+        ? "classic"
+        : initialArenaKey || DEFAULT_ARENA_KEY;
     this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
     this.floorRadius =
       this.gameMode === "slammer"
@@ -195,7 +197,8 @@ export class DiscDropGame {
   }
 
   setupArenaVisualModel() {
-    if (this.theme === "heaven" || this.gameMode === "slammer") {
+    const usesProceduralArena = this.theme === "heaven" || this.gameMode === "slammer";
+    if (usesProceduralArena) {
       this.floorMesh.visible = true;
       this.tableMesh.visible = true;
       if (this.gameMode === "slammer") {
@@ -209,6 +212,9 @@ export class DiscDropGame {
       this.floorCollider.setEnabled(true);
       return Promise.resolve();
     }
+
+    const arenaModelPath =
+      this.theme === "jungle-bay" ? "/3d/jbArena.glb" : "/3d/hellArena1.glb";
 
     this.floorMesh.visible = false;
     this.tableMesh.visible = false;
@@ -228,7 +234,7 @@ export class DiscDropGame {
 
     return new Promise((resolve) => {
       loader.load(
-        "/3d/hellArena1.glb",
+        arenaModelPath,
         (gltf) => {
           this.lavaUniforms.length = 0;
           const model = gltf.scene;
@@ -236,28 +242,49 @@ export class DiscDropGame {
             if (child.isMesh) {
               child.castShadow = false;
               child.receiveShadow = false;
-              if (child.name === "Object_8") {
+              if (this.theme === "hell" && child.name === "Object_8") {
                 child.material = this.createLavaMaterial();
+              }
+              if (this.theme === "jungle-bay") {
+                const meshName = String(child.name || "").toLowerCase();
+                const matName = String(child.material?.name || "").toLowerCase();
+                const isSeaMesh =
+                  meshName.includes("sphere001_sea_0") ||
+                  meshName.includes("sea") ||
+                  matName.includes("sea");
+                if (isSeaMesh) {
+                  child.material = this.createWaterMaterial();
+                }
               }
             }
           });
 
           const center = new THREE.Vector3();
+          const size = new THREE.Vector3();
           const sourceBox = new THREE.Box3().setFromObject(model);
           sourceBox.getCenter(center);
+          sourceBox.getSize(size);
           model.position.sub(center);
 
-          const scale = 10;
+          const scale =
+            this.theme === "jungle-bay"
+              ? ((this.arenaRadius * 2) / Math.max(size.x, size.z, 0.001)) * 5
+              : 10;
 
           this.arenaVisualRoot.clear();
           this.arenaVisualRoot.add(model);
           this.arenaVisualRoot.scale.setScalar(scale);
-          this.arenaVisualRoot.position.set(0, -0.62, 0);
-          this.createHellArenaSurfacePhysics();
+          this.arenaVisualRoot.position.set(
+            0,
+            this.theme === "jungle-bay" ? -15.35 : -0.62,
+            0
+          );
+          this.createArenaSurfacePhysics();
           resolve();
         },
         undefined,
         () => {
+          console.warn(`Failed to load arena model: ${arenaModelPath}`);
           // Fallback to procedural visuals if model loading fails.
           this.floorMesh.visible = true;
           this.tableMesh.visible = true;
@@ -276,7 +303,7 @@ export class DiscDropGame {
     this.arenaSurfaceColliders.length = 0;
   }
 
-  createHellArenaSurfacePhysics() {
+  createArenaSurfacePhysics() {
     this.clearArenaSurfacePhysics();
     if (!this.arenaVisualRoot) {
       this.useArenaMeshFloor = false;
@@ -385,6 +412,68 @@ export class DiscDropGame {
           gl_FragColor = vec4(color, 1.0);
         }
       `,
+    });
+  }
+
+  createWaterMaterial() {
+    const uniforms = {
+      iTime: { value: 0 },
+    };
+    this.lavaUniforms.push(uniforms);
+
+    return new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float iTime;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+            u.y
+          );
+        }
+
+        void main() {
+          vec2 uv = vUv * 8.0;
+          float t = iTime * 0.18;
+          float n1 = noise(uv + vec2(t * 0.8, -t * 0.4));
+          float n2 = noise(uv * 1.9 - vec2(t * 0.35, t * 0.6));
+          float wave = n1 * 0.62 + n2 * 0.38;
+
+          vec3 deep = vec3(0.02, 0.20, 0.28);
+          vec3 shallow = vec3(0.08, 0.48, 0.58);
+          vec3 foam = vec3(0.72, 0.90, 0.86);
+          vec3 color = mix(deep, shallow, smoothstep(0.22, 0.88, wave));
+          color = mix(color, foam, pow(smoothstep(0.78, 1.0, wave), 2.2) * 0.45);
+
+          // slight depth tint using world height for more ocean feel
+          float heightTint = smoothstep(-3.0, 3.0, vWorldPos.y);
+          color *= mix(0.9, 1.1, heightTint);
+
+          gl_FragColor = vec4(color, 0.96);
+        }
+      `,
+      transparent: true,
     });
   }
 
@@ -561,7 +650,9 @@ export class DiscDropGame {
 
   setupUIBindings() {
     const arenaKeys =
-      this.theme === "heaven" ? ["classic"] : Object.keys(ARENA_CONFIGS);
+      this.theme === "heaven" || this.theme === "jungle-bay"
+        ? ["classic"]
+        : Object.keys(ARENA_CONFIGS);
     for (const key of arenaKeys) {
       const option = document.createElement("option");
       option.value = key;
@@ -569,7 +660,8 @@ export class DiscDropGame {
       this.ui.arenaSelectEl.appendChild(option);
     }
     this.ui.arenaSelectEl.value = this.activeArenaKey;
-    this.ui.arenaSelectEl.disabled = this.theme === "heaven";
+    this.ui.arenaSelectEl.disabled =
+      this.theme === "heaven" || this.theme === "jungle-bay";
 
     this.ui.arenaSelectEl.addEventListener("change", (event) => {
       const nextArena = event.target.value;
@@ -720,7 +812,8 @@ export class DiscDropGame {
   }
 
   applyArena(key) {
-    this.activeArenaKey = this.theme === "heaven" ? "classic" : key;
+    this.activeArenaKey =
+      this.theme === "heaven" || this.theme === "jungle-bay" ? "classic" : key;
     const arena = ARENA_CONFIGS[this.activeArenaKey];
 
     this.world.gravity = { x: 0, y: arena.gravity, z: 0 };
@@ -745,6 +838,9 @@ export class DiscDropGame {
     if (this.theme === "heaven") {
       this.floorMaterial.color.set("#d8ebfb");
       this.tableMaterial.color.set("#bfdcf4");
+    } else if (this.theme === "jungle-bay") {
+      this.floorMaterial.color.set("#d4e6ba");
+      this.tableMaterial.color.set("#8cb07a");
     } else {
       this.floorMaterial.color.set(
         key === "bumperGarden" ? "#2c2a5d" : "#263049"
