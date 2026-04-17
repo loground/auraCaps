@@ -1609,6 +1609,54 @@ button:disabled {
   object-fit: cover;
   border-radius: 50%;
   display: block;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.disc-card img.loaded {
+  opacity: 1;
+}
+
+.cap-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.35rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(73, 24, 20, 0.94), rgba(18, 6, 7, 0.95));
+  color: #ffd6bd;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.52rem;
+  line-height: 1;
+}
+
+.cap-loading.loaded {
+  display: none;
+}
+
+.cap-loading-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 182, 140, 0.35);
+  border-top-color: rgba(255, 224, 198, 0.95);
+  justify-self: center;
+  animation: cap-spin 0.9s linear infinite;
+}
+
+.cap-loading-text {
+  opacity: 0.9;
+}
+
+@keyframes cap-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .disc-card:hover {
@@ -1691,6 +1739,16 @@ button:disabled {
   background: transparent;
 }
 
+.theme-heaven .cap-loading {
+  background: radial-gradient(circle at 35% 30%, rgba(188, 220, 245, 0.94), rgba(139, 180, 215, 0.95));
+  color: #234f79;
+}
+
+.theme-heaven .cap-loading-spinner {
+  border-color: rgba(72, 132, 194, 0.35);
+  border-top-color: rgba(228, 245, 255, 0.95);
+}
+
 .theme-heaven .cap-info {
   border: none;
   background: linear-gradient(180deg, rgba(225, 242, 255, 0.78), rgba(194, 221, 245, 0.78));
@@ -1738,6 +1796,16 @@ button:disabled {
 .theme-jungle-bay .cap-slot {
   border: none;
   background: transparent;
+}
+
+.theme-jungle-bay .cap-loading {
+  background: radial-gradient(circle at 35% 30%, rgba(192, 222, 145, 0.95), rgba(124, 170, 99, 0.95));
+  color: #294f35;
+}
+
+.theme-jungle-bay .cap-loading-spinner {
+  border-color: rgba(82, 135, 73, 0.36);
+  border-top-color: rgba(239, 253, 198, 0.95);
 }
 
 .theme-jungle-bay .cap-info {

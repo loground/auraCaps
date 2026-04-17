@@ -397,6 +397,8 @@ export function mountMenuScreen({
     : isJungle
       ? "/3d/jbMenu.glb"
       : "/3d/demon.glb";
+  const jungleMenuYDesktop = 1.38;
+  const jungleMenuYMobile = 0.93;
   gltfLoader.load(
     menuModelPath,
     (gltf) => {
@@ -414,7 +416,7 @@ export function mountMenuScreen({
       demon.position.sub(center);
 
       demonPivot = new THREE.Group();
-      demonPivot.position.set(0, 1.5, -1);
+      demonPivot.position.set(0, isJungle ? jungleMenuYDesktop : 1.5, -1);
       demonPivot.scale.setScalar(10);
       demonPivot.rotation.y = -Math.PI * 0.5;
       demonPivot.add(demon);
@@ -625,7 +627,14 @@ export function mountMenuScreen({
     }
     if (demonPivot) {
       demonPivot.scale.setScalar(isMobile ? 8.2 : 10);
-      demonPivot.position.set(0, isMobile ? 1.05 : 1.5, -1);
+      const y = isJungle
+        ? isMobile
+          ? jungleMenuYMobile
+          : jungleMenuYDesktop
+        : isMobile
+          ? 1.05
+          : 1.5;
+      demonPivot.position.set(0, y, -1);
     }
   };
 

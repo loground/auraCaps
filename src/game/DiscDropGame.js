@@ -935,9 +935,6 @@ export class DiscDropGame {
   }
 
   startComputerTurn() {
-    if (this.battleMode !== "vs-ai") {
-      return;
-    }
     this.lockPlayerInput = true;
     this.buildRoundBodies({ resetTurnResults: false });
     this.currentThrower = "cpu";
@@ -968,12 +965,35 @@ export class DiscDropGame {
   }
 
   finalizeRoundFromTurns() {
-    if (this.battleMode !== "vs-ai") {
-      return;
-    }
     const playerScore = this.turnScore(this.playerTurnResult);
     const cpuScore = this.turnScore(this.cpuTurnResult);
     let roundOutcome = "tie";
+
+    if (this.battleMode === "training") {
+      if (playerScore > cpuScore) {
+        roundOutcome = "win";
+        this.playRandomWinSfx();
+      } else if (cpuScore > playerScore) {
+        roundOutcome = "lose";
+      }
+
+      const cpuMoveSummary = `turn ${this.cpuTurnResult ?? "tie"}`;
+      if (roundOutcome === "win") {
+        this.setStatus("you won", cpuMoveSummary);
+        this.showCenterNotice("YOU WON", 1500);
+      } else if (roundOutcome === "lose") {
+        this.setStatus("you lost", cpuMoveSummary);
+        this.showCenterNotice("YOU LOST", 1500);
+      } else {
+        this.setStatus("tie", cpuMoveSummary);
+        this.showCenterNotice("TIE", 1500);
+      }
+      this.ui.resetBtn.textContent = "Play Again";
+      this.ui.actionButtonsEl.classList.add("show-reset");
+      this.ui.resetBtn.disabled = false;
+      return;
+    }
+
     if (playerScore > cpuScore) {
       roundOutcome = "win";
       this.playerWins += 1;
@@ -1612,22 +1632,6 @@ export class DiscDropGame {
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Power";
     const result = this.getRoundResult();
-    if (this.battleMode === "training") {
-      if (result === "win") {
-        this.setStatus("you won", "training");
-        this.showCenterNotice("YOU WON", 1500);
-      } else if (result === "lose") {
-        this.setStatus("you lost", "training");
-        this.showCenterNotice("YOU LOST", 1500);
-      } else {
-        this.setStatus("tie", "training");
-        this.showCenterNotice("TIE", 1500);
-      }
-      this.ui.resetBtn.textContent = "Play Again";
-      this.ui.resetBtn.disabled = false;
-      this.ui.actionButtonsEl.classList.add("show-reset");
-      return;
-    }
     if (this.currentThrower === "player") {
       this.playerTurnResult = result;
       this.setStatus(`your turn ${result}`, "cpu preparing throw");

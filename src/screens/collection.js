@@ -239,7 +239,11 @@ export function mountCollectionScreen({ app, onBack }) {
       card.innerHTML = `
       <div class="cap-slot">
         <button class="disc-card" type="button" aria-label="Inspect ${item.name}">
-          <img src="${item.imagePath}" alt="${item.name}" />
+          <div class="cap-loading">
+            <span class="cap-loading-spinner" aria-hidden="true"></span>
+            <span class="cap-loading-text">loading</span>
+          </div>
+          <img src="${item.imagePath}" alt="${item.name}" loading="lazy" decoding="async" />
         </button>
       </div>
       <div class="cap-info">
@@ -255,6 +259,21 @@ export function mountCollectionScreen({ app, onBack }) {
       card.querySelector(".inspect-btn").addEventListener("click", () => {
         openInspector(item);
       });
+
+      const img = card.querySelector("img");
+      const loadingEl = card.querySelector(".cap-loading");
+      const markLoaded = () => {
+        loadingEl?.classList.add("loaded");
+        img?.classList.add("loaded");
+      };
+      if (img) {
+        if (img.complete) {
+          markLoaded();
+        } else {
+          img.addEventListener("load", markLoaded, { once: true });
+          img.addEventListener("error", markLoaded, { once: true });
+        }
+      }
       grid.appendChild(card);
     });
   };
