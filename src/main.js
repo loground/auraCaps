@@ -2,6 +2,8 @@ import "./style.css";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 
 const app = document.querySelector("#app");
+const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
+const THEME_OPTIONS = ["hell", "heaven", "jungle-bay"];
 const hoverSfxTemplate = new Audio("/sounds/menuHover.mp3");
 hoverSfxTemplate.preload = "auto";
 const hoverTargetsSelector = "button";
@@ -150,10 +152,24 @@ app.addEventListener("mouseover", (event) => {
 let cleanupScreen = null;
 let game = null;
 let viewVersion = 0;
-let currentTheme = "hell";
+let currentTheme = pickRefreshTheme();
 let menuModulePromise = null;
 let collectionModulePromise = null;
 let gameModulePromise = null;
+
+function pickRefreshTheme() {
+  try {
+    const lastTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const pool = THEME_OPTIONS.filter((theme) => theme !== lastTheme);
+    const selectedPool = pool.length > 0 ? pool : THEME_OPTIONS;
+    const selected =
+      selectedPool[Math.floor(Math.random() * selectedPool.length)] || "hell";
+    window.localStorage.setItem(THEME_STORAGE_KEY, selected);
+    return selected;
+  } catch {
+    return THEME_OPTIONS[Math.floor(Math.random() * THEME_OPTIONS.length)] || "hell";
+  }
+}
 
 function showPlaySetupModal({ theme }) {
   return new Promise((resolve) => {
@@ -364,6 +380,11 @@ function setViewMode(mode) {
 
 function setTheme(nextTheme) {
   currentTheme = nextTheme;
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  } catch {
+    // Ignore storage failures.
+  }
 }
 
 async function showMenu() {
