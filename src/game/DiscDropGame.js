@@ -26,6 +26,14 @@ const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
 const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
+const JUNGLE_BAY_CAP_PATHS = [
+  "/caps/jb/jbcap1.webp",
+  "/caps/jbcap2.webp",
+  "/caps/jb/jbcap3.webp",
+  "/caps/jb/jbcap4.webp",
+  "/caps/jb/jbcap5.webp",
+  "/caps/jb/jbcap6.webp",
+];
 
 export class DiscDropGame {
   constructor(
@@ -519,9 +527,14 @@ export class DiscDropGame {
       loadDiscTexture(this.renderer, "/caps/back2.png"),
       loadDiscTexture(this.renderer, "/caps/back3.png"),
     ];
-    this.capTextures = Array.from({ length: 9 }, (_, idx) =>
-      loadDiscTexture(this.renderer, `/caps/${idx + 1}.webp`)
-    );
+    this.capTextures =
+      this.theme === "jungle-bay"
+        ? JUNGLE_BAY_CAP_PATHS.map((path) =>
+            loadDiscTexture(this.renderer, path)
+          )
+        : Array.from({ length: 9 }, (_, idx) =>
+            loadDiscTexture(this.renderer, `/caps/${idx + 1}.webp`)
+          );
 
     this.lowerCapTexture = this.randomCapTexture();
     this.upperCapTexture = this.randomCapTexture();

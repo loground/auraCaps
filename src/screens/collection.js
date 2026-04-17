@@ -4,10 +4,50 @@ import { DISC_HEIGHT, DISC_RADIUS } from "../game/constants.js";
 import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
 
 export function mountCollectionScreen({ app, onBack }) {
+  const JUNGLE_BAY_CAP_PATHS = [
+    "/caps/jb/jbcap1.webp",
+    "/caps/jbcap2.webp",
+    "/caps/jb/jbcap3.webp",
+    "/caps/jb/jbcap4.webp",
+    "/caps/jb/jbcap5.webp",
+    "/caps/jb/jbcap6.webp",
+  ];
+
+  const COLLECTIONS = {
+    classic: {
+      id: "classic",
+      label: "classic",
+      items: Array.from({ length: 9 }, (_, i) => ({
+        number: i + 1,
+        name: `Powerful cap N${i + 1}`,
+        imagePath: `/caps/${i + 1}.webp`,
+        subtitle: "collection INK's old (f)arts",
+        details: `Series ${100 + (i + 1) * 17} • Tier ${
+          ["Relic", "Myth", "Echo", "Prime", "Burn"][i % 5]
+        } • Core Flux ${(1.2 + i * 0.3).toFixed(1)}`,
+      })),
+    },
+    jungleBay: {
+      id: "jungleBay",
+      label: "jungle bay",
+      items: JUNGLE_BAY_CAP_PATHS.map((path, i) => ({
+        number: i + 1,
+        name: `Jungle cap JB${i + 1}`,
+        imagePath: path,
+        subtitle: "collection Jungle Bay",
+        details: `Wave Set ${40 + i * 9} • Tier Tide • Core Flux ${(2.4 + i * 0.2).toFixed(1)}`,
+      })),
+    },
+  };
+  let activeCollectionKey = app.classList.contains("theme-jungle-bay")
+    ? "jungleBay"
+    : "classic";
+
   app.innerHTML = `
     <div class="collection-screen">
       <button id="backBtn" class="back-btn" type="button">back</button>
       <h2>Collection</h2>
+      <div class="collection-switcher" id="collectionSwitcher" role="tablist" aria-label="Collection tabs"></div>
       <div class="collection-grid" id="collectionGrid"></div>
       <div id="inspectorModal" class="inspector-modal hidden" aria-hidden="true">
         <div class="inspector-backdrop" id="inspectorBackdrop"></div>
@@ -92,7 +132,7 @@ export function mountCollectionScreen({ app, onBack }) {
     disposeInspector();
   };
 
-  const openInspector = (capNumber) => {
+  const openInspector = (item) => {
     disposeInspector();
 
     modal.classList.remove("hidden");
@@ -128,7 +168,7 @@ export function mountCollectionScreen({ app, onBack }) {
     inspectorScene.add(fillLight);
     inspectorScene.add(new THREE.AmbientLight(0xf3f7ff, 1.05));
 
-    frontTexture = loadDiscTexture(inspectorRenderer, `/caps/${capNumber}.webp`);
+    frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath);
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
     frontTexture.rotation = Math.PI * 0.5;
     backTexture.rotation = Math.PI * 0.5;
@@ -163,33 +203,64 @@ export function mountCollectionScreen({ app, onBack }) {
     render();
   };
 
-  for (let i = 0; i < 9; i += 1) {
-    const capNumber = i + 1;
-    const card = document.createElement("div");
-    card.className = "collection-card";
-    const randomSeries = 100 + capNumber * 17;
-    const randomTier = ["Relic", "Myth", "Echo", "Prime", "Burn"][i % 5];
-    card.innerHTML = `
+  const switcher = app.querySelector("#collectionSwitcher");
+  const renderSwitcher = () => {
+    switcher.innerHTML = "";
+    Object.values(COLLECTIONS).forEach((collection) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `collection-tab ${
+        collection.id === activeCollectionKey ? "active" : ""
+      }`;
+      btn.textContent = collection.label;
+      btn.setAttribute("role", "tab");
+      btn.setAttribute(
+        "aria-selected",
+        collection.id === activeCollectionKey ? "true" : "false"
+      );
+      btn.addEventListener("click", () => {
+        if (activeCollectionKey === collection.id) {
+          return;
+        }
+        activeCollectionKey = collection.id;
+        renderSwitcher();
+        renderCards();
+      });
+      switcher.appendChild(btn);
+    });
+  };
+
+  const renderCards = () => {
+    const active = COLLECTIONS[activeCollectionKey];
+    grid.innerHTML = "";
+    active.items.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "collection-card";
+      card.innerHTML = `
       <div class="cap-slot">
-        <button class="disc-card" type="button" aria-label="Inspect Aura cap ${capNumber}">
-          <img src="/caps/${capNumber}.webp" alt="Aura cap ${capNumber}" />
+        <button class="disc-card" type="button" aria-label="Inspect ${item.name}">
+          <img src="${item.imagePath}" alt="${item.name}" />
         </button>
       </div>
       <div class="cap-info">
-        <h3>Powerful cap N${capNumber}</h3>
-        <p>collection INK&apos;s old (f)arts</p>
-        <p>Series ${randomSeries} • Tier ${randomTier} • Core Flux ${(1.2 + i * 0.3).toFixed(1)}</p>
+        <h3>${item.name}</h3>
+        <p>${item.subtitle}</p>
+        <p>${item.details}</p>
         <button class="inspect-btn" type="button">inspect</button>
       </div>
     `;
-    card.querySelector(".disc-card").addEventListener("click", () => {
-      openInspector(capNumber);
+      card.querySelector(".disc-card").addEventListener("click", () => {
+        openInspector(item);
+      });
+      card.querySelector(".inspect-btn").addEventListener("click", () => {
+        openInspector(item);
+      });
+      grid.appendChild(card);
     });
-    card.querySelector(".inspect-btn").addEventListener("click", () => {
-      openInspector(capNumber);
-    });
-    grid.appendChild(card);
-  }
+  };
+
+  renderSwitcher();
+  renderCards();
 
   const backBtn = app.querySelector("#backBtn");
   backBtn.addEventListener("click", onBack);
