@@ -701,6 +701,7 @@ export class DiscDropGame {
   }
 
   setupUIBindings() {
+    const isTrainingMode = this.battleMode === "training";
     const arenaKeys = Object.keys(ARENA_CONFIGS);
     for (const key of arenaKeys) {
       const option = document.createElement("option");
@@ -709,9 +710,13 @@ export class DiscDropGame {
       this.ui.arenaSelectEl.appendChild(option);
     }
     this.ui.arenaSelectEl.value = this.activeArenaKey;
-    this.ui.arenaSelectEl.disabled = false;
+    this.ui.arenaSelectEl.disabled = !isTrainingMode;
+    this.ui.arenaPanelEl?.classList.toggle("hidden-in-vs-ai", !isTrainingMode);
 
     this.ui.arenaSelectEl.addEventListener("change", (event) => {
+      if (!isTrainingMode) {
+        return;
+      }
       if (this.lockPlayerInput) {
         return;
       }

@@ -11,7 +11,7 @@ export function renderGameUI(app) {
       <div class="sigil"></div>
       <p>SUMMONING</p>
     </div>
-    <div class="arena-panel">
+    <div id="arenaPanel" class="arena-panel">
       <label>
         Arena
         <select id="arenaSelect"></select>
@@ -59,6 +59,7 @@ export function renderGameUI(app) {
     arenaHintEl: app.querySelector("#arenaHint"),
     arenaTagEl: app.querySelector("#arenaTag"),
     arenaSelectEl: app.querySelector("#arenaSelect"),
+    arenaPanelEl: app.querySelector("#arenaPanel"),
     heightMeterEl: app.querySelector("#heightMeter"),
     heightFillEl: app.querySelector("#heightFill"),
     heightMarkerEl: app.querySelector("#heightMarker"),

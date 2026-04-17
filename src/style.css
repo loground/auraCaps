@@ -415,6 +415,10 @@ canvas {
   color: #e8f1ff;
 }
 
+.arena-panel.hidden-in-vs-ai {
+  display: none !important;
+}
+
 .action-hud {
   position: fixed;
   left: 50%;
