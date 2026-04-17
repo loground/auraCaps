@@ -55,10 +55,7 @@ export class DiscDropGame {
     this.battleMode = battleMode === "training" ? "training" : "vs-ai";
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.settings = { ...DEFAULT_SETTINGS };
-    this.activeArenaKey =
-      theme === "heaven" || theme === "jungle-bay"
-        ? "classic"
-        : initialArenaKey || DEFAULT_ARENA_KEY;
+    this.activeArenaKey = initialArenaKey || DEFAULT_ARENA_KEY;
     this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
     this.floorRadius =
       this.gameMode === "slammer"
@@ -704,10 +701,7 @@ export class DiscDropGame {
   }
 
   setupUIBindings() {
-    const arenaKeys =
-      this.theme === "heaven" || this.theme === "jungle-bay"
-        ? ["classic"]
-        : Object.keys(ARENA_CONFIGS);
+    const arenaKeys = Object.keys(ARENA_CONFIGS);
     for (const key of arenaKeys) {
       const option = document.createElement("option");
       option.value = key;
@@ -715,8 +709,7 @@ export class DiscDropGame {
       this.ui.arenaSelectEl.appendChild(option);
     }
     this.ui.arenaSelectEl.value = this.activeArenaKey;
-    this.ui.arenaSelectEl.disabled =
-      this.theme === "heaven" || this.theme === "jungle-bay";
+    this.ui.arenaSelectEl.disabled = false;
 
     this.ui.arenaSelectEl.addEventListener("change", (event) => {
       if (this.lockPlayerInput) {
@@ -1073,8 +1066,7 @@ export class DiscDropGame {
   }
 
   applyArena(key) {
-    this.activeArenaKey =
-      this.theme === "heaven" || this.theme === "jungle-bay" ? "classic" : key;
+    this.activeArenaKey = key;
     const arena = ARENA_CONFIGS[this.activeArenaKey];
 
     this.world.gravity = { x: 0, y: arena.gravity, z: 0 };

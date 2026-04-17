@@ -783,7 +783,13 @@ button:disabled {
 
 .mode-btn.active {
   border-color: rgba(255, 214, 156, 0.95);
-  box-shadow: 0 0 0 1px rgba(255, 186, 132, 0.4), 0 0 14px rgba(255, 103, 67, 0.35);
+  background: linear-gradient(180deg, rgba(255, 175, 133, 0.96), rgba(196, 54, 34, 0.96));
+  color: #fff9f0;
+  box-shadow:
+    0 0 0 2px rgba(255, 214, 156, 0.55),
+    0 0 18px rgba(255, 103, 67, 0.5),
+    inset 0 0 12px rgba(255, 240, 214, 0.25);
+  transform: translateY(-1px) scale(1.02);
 }
 
 .play-setup-panel select {
@@ -879,12 +885,22 @@ button:disabled {
 
 .theme-heaven .mode-btn.active {
   border-color: rgba(44, 112, 181, 0.95);
-  box-shadow: 0 0 0 1px rgba(71, 143, 214, 0.35), 0 0 12px rgba(95, 164, 227, 0.35);
+  background: linear-gradient(180deg, rgba(99, 171, 238, 0.96), rgba(56, 115, 185, 0.96));
+  color: #f6fbff;
+  box-shadow:
+    0 0 0 2px rgba(120, 187, 245, 0.5),
+    0 0 16px rgba(95, 164, 227, 0.42),
+    inset 0 0 10px rgba(224, 244, 255, 0.22);
 }
 
 .theme-jungle-bay .mode-btn.active {
   border-color: rgba(89, 139, 84, 0.95);
-  box-shadow: 0 0 0 1px rgba(114, 174, 96, 0.34), 0 0 12px rgba(160, 206, 97, 0.34);
+  background: linear-gradient(180deg, rgba(168, 209, 103, 0.96), rgba(88, 148, 76, 0.96));
+  color: #f8ffe8;
+  box-shadow:
+    0 0 0 2px rgba(169, 211, 114, 0.45),
+    0 0 16px rgba(160, 206, 97, 0.4),
+    inset 0 0 10px rgba(232, 252, 186, 0.2);
 }
 
 .status {
@@ -1062,10 +1078,18 @@ button:disabled {
   color: #1f3c59;
 }
 
+.theme-heaven .menu-theme-picker::after {
+  color: #2b5f91;
+}
+
 .theme-jungle-bay .menu-theme-select {
   border: 1px solid rgba(98, 150, 86, 0.76);
   background: linear-gradient(180deg, rgba(236, 247, 203, 0.95), rgba(182, 220, 151, 0.94));
   color: #29563c;
+}
+
+.theme-jungle-bay .menu-theme-picker::after {
+  color: #3f6d46;
 }
 
 .theme-heaven .menu-preloader {
