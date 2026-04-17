@@ -26,6 +26,7 @@ const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
 const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
+const MATCH_TOTAL_ROUNDS = 4;
 const JUNGLE_BAY_CAP_PATHS = [
   "/caps/jb/jbcap1.webp",
   "/caps/jbcap2.webp",
@@ -43,6 +44,7 @@ export class DiscDropGame {
       soundEnabled = true,
       isSoundEnabled = null,
       initialArenaKey = DEFAULT_ARENA_KEY,
+      battleMode = "vs-ai",
       gameMode = "classic",
     } = {}
   ) {
@@ -50,6 +52,7 @@ export class DiscDropGame {
     this.theme = theme;
     this.soundEnabled = soundEnabled;
     this.isSoundEnabled = typeof isSoundEnabled === "function" ? isSoundEnabled : null;
+    this.battleMode = battleMode === "training" ? "training" : "vs-ai";
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey =
@@ -67,6 +70,18 @@ export class DiscDropGame {
     this.stableFrames = 0;
     this.roundElapsed = 0;
     this.accumulator = 0;
+    this.totalRounds = MATCH_TOTAL_ROUNDS;
+    this.currentRound = 1;
+    this.playerWins = 0;
+    this.cpuWins = 0;
+    this.tieRounds = 0;
+    this.playerTurnResult = null;
+    this.cpuTurnResult = null;
+    this.currentThrower = "player";
+    this.lockPlayerInput = false;
+    this.cpuLaunchTimeoutId = null;
+    this.cpuPlannedMove = null;
+    this.centerNoticeTimeoutId = null;
 
     this.lowerDiscBody = null;
     this.floorDiscBodies = [];
@@ -704,13 +719,19 @@ export class DiscDropGame {
       this.theme === "heaven" || this.theme === "jungle-bay";
 
     this.ui.arenaSelectEl.addEventListener("change", (event) => {
+      if (this.lockPlayerInput) {
+        return;
+      }
       const nextArena = event.target.value;
       this.applyArena(nextArena);
       this.buildRoundBodies();
-      this.setStatus("choose a position to hit");
+      this.setStatus("choose a position to hit", "waiting");
     });
 
     const onHeightPointer = (event) => {
+      if (this.lockPlayerInput) {
+        return;
+      }
       const rect = this.ui.heightMeterEl.getBoundingClientRect();
       const y = THREE.MathUtils.clamp(event.clientY - rect.top, 0, rect.height);
       const ratioTopToBottom = y / rect.height;
@@ -748,7 +769,7 @@ export class DiscDropGame {
     this.updateHeightMeterUI();
 
     this.ui.launchBtn.addEventListener("click", () => {
-      if (this.hasLaunched) {
+      if (this.hasLaunched || this.lockPlayerInput) {
         return;
       }
       if (this.isChargingPower) {
@@ -757,15 +778,83 @@ export class DiscDropGame {
         this.startPowerCharge();
       }
     });
-    this.ui.resetBtn.addEventListener("click", () => this.buildRoundBodies());
+    this.ui.resetBtn.addEventListener("click", () => {
+      if (this.lockPlayerInput) {
+        return;
+      }
+      if (this.battleMode === "training") {
+        this.buildRoundBodies();
+        return;
+      }
+      if (this.hasResolved) {
+        if (this.currentRound >= this.totalRounds) {
+          this.startNewMatch();
+          return;
+        }
+        this.currentRound += 1;
+      }
+      this.buildRoundBodies();
+    });
   }
 
   safeLaunchHeight() {
     return Math.max(this.settings.height, this.minLaunchClearance);
   }
 
-  setStatus(message) {
-    this.ui.statusEl.textContent = message;
+  scoreText() {
+    if (this.battleMode === "training") {
+      return "training • infinite throws";
+    }
+    return `r${this.currentRound}/${this.totalRounds} • you ${this.playerWins} - cpu ${this.cpuWins}`;
+  }
+
+  setComputerMove(message) {
+    this.ui.statusCpuMoveEl.textContent = `computer move: ${message}`;
+  }
+
+  setStatus(message, computerMove = null) {
+    this.ui.statusMoveEl.textContent = message;
+    if (computerMove !== null) {
+      this.setComputerMove(computerMove);
+    }
+    this.ui.statusScoreEl.textContent = this.scoreText();
+  }
+
+  showCenterNotice(message, durationMs = 1750) {
+    const notice = this.ui?.centerNoticeEl;
+    if (!notice) {
+      return;
+    }
+    notice.textContent = message;
+    notice.classList.add("visible");
+    if (this.centerNoticeTimeoutId !== null) {
+      clearTimeout(this.centerNoticeTimeoutId);
+    }
+    this.centerNoticeTimeoutId = setTimeout(() => {
+      notice.classList.remove("visible");
+      this.centerNoticeTimeoutId = null;
+    }, durationMs);
+  }
+
+  startNewMatch() {
+    if (this.battleMode === "training") {
+      this.buildRoundBodies();
+      return;
+    }
+    this.currentRound = 1;
+    this.playerWins = 0;
+    this.cpuWins = 0;
+    this.tieRounds = 0;
+    this.playerTurnResult = null;
+    this.cpuTurnResult = null;
+    this.currentThrower = "player";
+    this.lockPlayerInput = false;
+    this.cpuPlannedMove = null;
+    if (this.cpuLaunchTimeoutId !== null) {
+      clearTimeout(this.cpuLaunchTimeoutId);
+      this.cpuLaunchTimeoutId = null;
+    }
+    this.buildRoundBodies();
   }
 
   updatePowerMeterUI() {
@@ -790,14 +879,146 @@ export class DiscDropGame {
     this.chargeValue = 0;
     this.ui.launchBtn.textContent = "Hit";
     this.updatePowerMeterUI();
-    this.setStatus("set power and hit");
+    this.setStatus("set power and hit", "waiting");
   }
 
   commitPowerAndLaunch() {
     this.isChargingPower = false;
     this.settings.power = THREE.MathUtils.clamp(this.chargeValue, 3, 100);
+    this.launchRound("player");
+  }
+
+  turnScore(result) {
+    if (result === "win") return 2;
+    if (result === "tie") return 1;
+    return 0;
+  }
+
+  formatCpuMove(move) {
+    if (!move) {
+      return "aiming";
+    }
+    return `x ${move.posX.toFixed(1)} z ${move.posZ.toFixed(1)} h ${move.height.toFixed(
+      1
+    )} p ${move.power.toFixed(0)}`;
+  }
+
+  clampPositionToArena(x, z) {
+    const radius = Math.hypot(x, z);
+    if (radius <= this.positionPickRadius || radius < 0.0001) {
+      return { x, z };
+    }
+    const s = this.positionPickRadius / radius;
+    return { x: x * s, z: z * s };
+  }
+
+  generateCpuMove() {
+    const target = this.getLowerTargetPosition();
+    const angle = Math.random() * Math.PI * 2;
+    const spread =
+      this.gameMode === "slammer"
+        ? 1.2 + Math.random() * 1.0
+        : 1.5 + Math.random() * 1.4;
+    const rawX = target.x + Math.cos(angle) * spread;
+    const rawZ = target.z + Math.sin(angle) * spread;
+    const clamped = this.clampPositionToArena(rawX, rawZ);
+    return {
+      posX: clamped.x,
+      posZ: clamped.z,
+      height:
+        this.gameMode === "slammer"
+          ? 5.3 + Math.random() * 2.2
+          : 4.1 + Math.random() * 2.6,
+      power:
+        this.gameMode === "slammer"
+          ? 60 + Math.random() * 38
+          : 52 + Math.random() * 42,
+    };
+  }
+
+  startComputerTurn() {
+    if (this.battleMode !== "vs-ai") {
+      return;
+    }
+    this.lockPlayerInput = true;
+    this.buildRoundBodies({ resetTurnResults: false });
+    this.currentThrower = "cpu";
+    this.cpuPlannedMove = this.generateCpuMove();
+    this.settings.posX = this.cpuPlannedMove.posX;
+    this.settings.posZ = this.cpuPlannedMove.posZ;
+    this.settings.height = this.cpuPlannedMove.height;
+    this.settings.power = this.cpuPlannedMove.power;
+    this.updateHeightMeterUI();
+    this.updatePowerMeterUI();
+    this.updateLaunchArrow();
+    this.updatePositionGizmo();
+    this.updateMiniMap();
+    this.ui.launchBtn.disabled = true;
+    this.ui.resetBtn.disabled = true;
+    this.setStatus("computer turn", this.formatCpuMove(this.cpuPlannedMove));
+
+    if (this.cpuLaunchTimeoutId !== null) {
+      clearTimeout(this.cpuLaunchTimeoutId);
+    }
+    this.cpuLaunchTimeoutId = setTimeout(() => {
+      this.cpuLaunchTimeoutId = null;
+      if (!this.running || this.currentThrower !== "cpu" || this.hasLaunched) {
+        return;
+      }
+      this.launchRound("cpu");
+    }, 700);
+  }
+
+  finalizeRoundFromTurns() {
+    if (this.battleMode !== "vs-ai") {
+      return;
+    }
+    const playerScore = this.turnScore(this.playerTurnResult);
+    const cpuScore = this.turnScore(this.cpuTurnResult);
+    let roundOutcome = "tie";
+    if (playerScore > cpuScore) {
+      roundOutcome = "win";
+      this.playerWins += 1;
+      this.playRandomWinSfx();
+    } else if (cpuScore > playerScore) {
+      roundOutcome = "lose";
+      this.cpuWins += 1;
+    } else {
+      this.tieRounds += 1;
+    }
+
+    const cpuMoveSummary = `turn ${this.cpuTurnResult ?? "tie"}`;
+    const isMatchOver = this.currentRound >= this.totalRounds;
+    if (isMatchOver) {
+      if (this.playerWins > this.cpuWins) {
+        this.setStatus("match won", cpuMoveSummary);
+        this.showCenterNotice("MATCH WON", 2300);
+      } else if (this.cpuWins > this.playerWins) {
+        this.setStatus("match lost", cpuMoveSummary);
+        this.showCenterNotice("MATCH LOST", 2300);
+      } else {
+        this.setStatus("match tie", cpuMoveSummary);
+        this.showCenterNotice("MATCH TIE", 2300);
+      }
+      this.ui.resetBtn.textContent = "New Match";
+      this.ui.actionButtonsEl.classList.add("show-reset");
+      this.ui.resetBtn.disabled = false;
+      return;
+    }
+
+    if (roundOutcome === "win") {
+      this.setStatus("you won round", cpuMoveSummary);
+      this.showCenterNotice("YOU WON", 1700);
+    } else if (roundOutcome === "lose") {
+      this.setStatus("you lost round", cpuMoveSummary);
+      this.showCenterNotice("YOU LOST", 1700);
+    } else {
+      this.setStatus("round tie", cpuMoveSummary);
+      this.showCenterNotice("TIE", 1700);
+    }
+    this.ui.resetBtn.textContent = "Next Round";
     this.ui.actionButtonsEl.classList.add("show-reset");
-    this.launchRound();
+    this.ui.resetBtn.disabled = false;
   }
 
   clearArenaObstacles() {
@@ -869,10 +1090,14 @@ export class DiscDropGame {
       }
     }
 
+    const battleHint =
+      this.battleMode === "vs-ai"
+        ? "Match: 4 rounds vs CPU."
+        : "Training: infinite throws.";
     this.ui.arenaHintEl.textContent =
       this.gameMode === "slammer"
-        ? `${arena.hint} Slammer: flip 4+ floor caps face up to win.`
-        : arena.hint;
+        ? `${arena.hint} Slammer: flip 4+ floor caps face up to win. ${battleHint}`
+        : `${arena.hint} ${battleHint}`;
     this.ui.arenaTagEl.textContent = arena.label;
 
     if (this.theme === "heaven") {
@@ -896,7 +1121,7 @@ export class DiscDropGame {
     }
   }
 
-  buildRoundBodies() {
+  buildRoundBodies({ resetTurnResults = true } = {}) {
     const arena = ARENA_CONFIGS[this.activeArenaKey];
 
     for (const body of this.floorDiscBodies) {
@@ -1017,12 +1242,28 @@ export class DiscDropGame {
     this.roundElapsed = 0;
     this.isChargingPower = false;
     this.chargeValue = 0;
-    this.ui.launchBtn.disabled = false;
+    this.ui.launchBtn.disabled = this.lockPlayerInput;
     this.ui.launchBtn.textContent = "Power";
-    this.ui.actionButtonsEl.classList.remove("show-reset");
+    this.ui.resetBtn.textContent = "Next Round";
+    this.ui.resetBtn.disabled = this.battleMode === "vs-ai";
+    this.ui.actionButtonsEl.classList.toggle(
+      "show-reset",
+      this.battleMode === "training"
+    );
+    if (resetTurnResults) {
+      this.playerTurnResult = null;
+      this.cpuTurnResult = null;
+      this.currentThrower = "player";
+      this.cpuPlannedMove = null;
+    }
+    if (this.centerNoticeTimeoutId !== null) {
+      clearTimeout(this.centerNoticeTimeoutId);
+      this.centerNoticeTimeoutId = null;
+    }
+    this.ui.centerNoticeEl?.classList.remove("visible");
     this.updateHeightMeterUI();
     this.updatePowerMeterUI();
-    this.setStatus("choose a position to hit");
+    this.setStatus("choose a position to hit", "waiting");
     this.updateLaunchArrow();
     this.updatePositionGizmo();
     this.updateMiniMap();
@@ -1200,6 +1441,7 @@ export class DiscDropGame {
       event.button !== 0 ||
       this.hasLaunched ||
       this.isChargingPower ||
+      this.lockPlayerInput ||
       !this.positionGizmo
     ) {
       return;
@@ -1276,11 +1518,12 @@ export class DiscDropGame {
     this.controls.enabled = true;
   }
 
-  launchRound() {
+  launchRound(thrower = "player") {
     if (this.hasLaunched || !this.upperDiscBody) {
       return;
     }
 
+    this.currentThrower = thrower;
     this.hasLaunched = true;
     this.hasResolved = false;
     this.stableFrames = 0;
@@ -1349,7 +1592,11 @@ export class DiscDropGame {
     );
 
     this.playRandomThrowSfx();
-    this.setStatus("in motion");
+    if (thrower === "cpu") {
+      this.setStatus("computer in motion", this.formatCpuMove(this.cpuPlannedMove));
+    } else {
+      this.setStatus("in motion", "reading your throw");
+    }
   }
 
   topFaceColor(body) {
@@ -1367,14 +1614,41 @@ export class DiscDropGame {
     this.hasResolved = true;
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Power";
-    if (this.isOutOfArena(this.upperDiscBody)) {
-      this.setStatus("you lost");
+    const result = this.getRoundResult();
+    if (this.battleMode === "training") {
+      if (result === "win") {
+        this.setStatus("you won", "training");
+        this.showCenterNotice("YOU WON", 1500);
+      } else if (result === "lose") {
+        this.setStatus("you lost", "training");
+        this.showCenterNotice("YOU LOST", 1500);
+      } else {
+        this.setStatus("tie", "training");
+        this.showCenterNotice("TIE", 1500);
+      }
+      this.ui.resetBtn.textContent = "Play Again";
+      this.ui.resetBtn.disabled = false;
+      this.ui.actionButtonsEl.classList.add("show-reset");
       return;
+    }
+    if (this.currentThrower === "player") {
+      this.playerTurnResult = result;
+      this.setStatus(`your turn ${result}`, "cpu preparing throw");
+      this.startComputerTurn();
+      return;
+    }
+    this.cpuTurnResult = result;
+    this.lockPlayerInput = false;
+    this.finalizeRoundFromTurns();
+  }
+
+  getRoundResult() {
+    if (this.isOutOfArena(this.upperDiscBody)) {
+      return "lose";
     }
 
     if (this.floorDiscBodies.some((body) => this.isOutOfArena(body))) {
-      this.setStatus("you lost");
-      return;
+      return "lose";
     }
 
     if (this.gameMode === "slammer") {
@@ -1382,13 +1656,7 @@ export class DiscDropGame {
         (sum, body) => sum + Number(this.topFaceColor(body) === "green"),
         0
       );
-      if (faceUpCount > 3) {
-        this.setStatus("you won");
-        this.playRandomWinSfx();
-      } else {
-        this.setStatus("you lost");
-      }
-      return;
+      return faceUpCount > 3 ? "win" : "lose";
     }
 
     const upperColor = this.topFaceColor(this.upperDiscBody);
@@ -1396,17 +1664,12 @@ export class DiscDropGame {
     const greens = Number(upperColor === "green") + Number(lowerColor === "green");
 
     if (greens === 2) {
-      this.setStatus("you won");
-      this.playRandomWinSfx();
-      return;
+      return "win";
     }
-
     if (greens === 0) {
-      this.setStatus("you lost");
-      return;
+      return "lose";
     }
-
-    this.setStatus("tie");
+    return "tie";
   }
 
   isOutOfArena(body) {
@@ -1691,6 +1954,14 @@ export class DiscDropGame {
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
+    }
+    if (this.cpuLaunchTimeoutId !== null) {
+      clearTimeout(this.cpuLaunchTimeoutId);
+      this.cpuLaunchTimeoutId = null;
+    }
+    if (this.centerNoticeTimeoutId !== null) {
+      clearTimeout(this.centerNoticeTimeoutId);
+      this.centerNoticeTimeoutId = null;
     }
     window.removeEventListener("resize", this.handleResizeBound);
     window.removeEventListener("pointermove", this.handleWindowPointerMoveBound);

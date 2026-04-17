@@ -183,6 +183,16 @@ function showPlaySetupModal({ theme }) {
         </label>
         <p id="setupMapHint" class="setup-hint"></p>
         <div class="mode-picker">
+          <span class="mode-label">Battle Mode</span>
+          <div class="mode-buttons">
+            <button id="setupBattleTrainingBtn" class="mode-btn" type="button">Training</button>
+            <button id="setupBattleVsAiBtn" class="mode-btn active" type="button">Vs AI</button>
+          </div>
+        </div>
+        <p id="setupBattleHint" class="setup-hint">
+          Vs AI: 4 rounds against computer. Best score wins the match.
+        </p>
+        <div class="mode-picker">
           <span class="mode-label">Mode</span>
           <div class="mode-buttons">
             <button id="setupModeClassicBtn" class="mode-btn active" type="button">Classic</button>
@@ -202,12 +212,16 @@ function showPlaySetupModal({ theme }) {
 
     const arenaSelect = overlay.querySelector("#setupArenaSelect");
     const mapHint = overlay.querySelector("#setupMapHint");
+    const battleTrainingBtn = overlay.querySelector("#setupBattleTrainingBtn");
+    const battleVsAiBtn = overlay.querySelector("#setupBattleVsAiBtn");
+    const battleHint = overlay.querySelector("#setupBattleHint");
     const modeClassicBtn = overlay.querySelector("#setupModeClassicBtn");
     const modeSlammerBtn = overlay.querySelector("#setupModeSlammerBtn");
     const modeHint = overlay.querySelector("#setupModeHint");
     const closeBtn = overlay.querySelector("#setupCloseBtn");
     const launchBtn = overlay.querySelector("#setupLaunchBtn");
     const backdrop = overlay.querySelector(".play-setup-backdrop");
+    let selectedBattleMode = "vs-ai";
     let selectedMode = "classic";
 
     if (arenaSelect) {
@@ -238,6 +252,19 @@ function showPlaySetupModal({ theme }) {
     };
     updateModeUI();
 
+    const updateBattleModeUI = () => {
+      if (!battleHint) {
+        return;
+      }
+      battleTrainingBtn?.classList.toggle("active", selectedBattleMode === "training");
+      battleVsAiBtn?.classList.toggle("active", selectedBattleMode === "vs-ai");
+      battleHint.textContent =
+        selectedBattleMode === "vs-ai"
+          ? "Vs AI: 4 rounds against computer. Best score wins the match."
+          : "Training: infinite throws, no match score.";
+    };
+    updateBattleModeUI();
+
     const onModeClassic = () => {
       selectedMode = "classic";
       updateModeUI();
@@ -246,11 +273,23 @@ function showPlaySetupModal({ theme }) {
       selectedMode = "slammer";
       updateModeUI();
     };
+    const onBattleTraining = () => {
+      selectedBattleMode = "training";
+      updateBattleModeUI();
+    };
+    const onBattleVsAi = () => {
+      selectedBattleMode = "vs-ai";
+      updateBattleModeUI();
+    };
+    battleTrainingBtn?.addEventListener("click", onBattleTraining);
+    battleVsAiBtn?.addEventListener("click", onBattleVsAi);
     modeClassicBtn?.addEventListener("click", onModeClassic);
     modeSlammerBtn?.addEventListener("click", onModeSlammer);
     arenaSelect?.addEventListener("change", updateMapHint);
 
     const cleanup = () => {
+      battleTrainingBtn?.removeEventListener("click", onBattleTraining);
+      battleVsAiBtn?.removeEventListener("click", onBattleVsAi);
       modeClassicBtn?.removeEventListener("click", onModeClassic);
       modeSlammerBtn?.removeEventListener("click", onModeSlammer);
       arenaSelect?.removeEventListener("change", updateMapHint);
@@ -268,6 +307,7 @@ function showPlaySetupModal({ theme }) {
     const onLaunch = () => {
       const value = {
         arenaKey: arenaSelect?.value || DEFAULT_ARENA_KEY,
+        battleMode: selectedBattleMode,
         gameMode: selectedMode,
       };
       cleanup();
@@ -391,6 +431,7 @@ async function showPlay() {
     soundEnabled,
     isSoundEnabled: () => soundEnabled,
     initialArenaKey: setup.arenaKey,
+    battleMode: setup.battleMode,
     gameMode: setup.gameMode,
   });
   await game.init();
