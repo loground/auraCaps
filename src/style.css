@@ -942,6 +942,10 @@ button:disabled {
   opacity: 0.95;
 }
 
+.status-cpu-move.hidden {
+  display: none;
+}
+
 .status-score {
   font-size: clamp(0.82rem, 1.35vw, 1rem);
   letter-spacing: 0.045em;

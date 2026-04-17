@@ -702,6 +702,10 @@ export class DiscDropGame {
 
   setupUIBindings() {
     const isTrainingMode = this.battleMode === "training";
+    this.ui.statusCpuMoveEl?.classList.toggle("hidden", isTrainingMode);
+    if (isTrainingMode) {
+      this.ui.statusCpuMoveEl.textContent = "";
+    }
     const arenaKeys = Object.keys(ARENA_CONFIGS);
     for (const key of arenaKeys) {
       const option = document.createElement("option");
@@ -935,6 +939,9 @@ export class DiscDropGame {
   }
 
   startComputerTurn() {
+    if (this.battleMode !== "vs-ai") {
+      return;
+    }
     this.lockPlayerInput = true;
     this.buildRoundBodies({ resetTurnResults: false });
     this.currentThrower = "cpu";
@@ -965,35 +972,12 @@ export class DiscDropGame {
   }
 
   finalizeRoundFromTurns() {
+    if (this.battleMode !== "vs-ai") {
+      return;
+    }
     const playerScore = this.turnScore(this.playerTurnResult);
     const cpuScore = this.turnScore(this.cpuTurnResult);
     let roundOutcome = "tie";
-
-    if (this.battleMode === "training") {
-      if (playerScore > cpuScore) {
-        roundOutcome = "win";
-        this.playRandomWinSfx();
-      } else if (cpuScore > playerScore) {
-        roundOutcome = "lose";
-      }
-
-      const cpuMoveSummary = `turn ${this.cpuTurnResult ?? "tie"}`;
-      if (roundOutcome === "win") {
-        this.setStatus("you won", cpuMoveSummary);
-        this.showCenterNotice("YOU WON", 1500);
-      } else if (roundOutcome === "lose") {
-        this.setStatus("you lost", cpuMoveSummary);
-        this.showCenterNotice("YOU LOST", 1500);
-      } else {
-        this.setStatus("tie", cpuMoveSummary);
-        this.showCenterNotice("TIE", 1500);
-      }
-      this.ui.resetBtn.textContent = "Play Again";
-      this.ui.actionButtonsEl.classList.add("show-reset");
-      this.ui.resetBtn.disabled = false;
-      return;
-    }
-
     if (playerScore > cpuScore) {
       roundOutcome = "win";
       this.playerWins += 1;
@@ -1140,6 +1124,8 @@ export class DiscDropGame {
 
   buildRoundBodies({ resetTurnResults = true } = {}) {
     const arena = ARENA_CONFIGS[this.activeArenaKey];
+    const lowerStart = arena?.lowerStart || { x: 0, z: 0 };
+    const lowerStartY = arena?.lowerStartY ?? LOWER_DISC_START_Y;
 
     for (const body of this.floorDiscBodies) {
       this.world.removeRigidBody(body);
@@ -1210,7 +1196,11 @@ export class DiscDropGame {
       this.minLaunchClearance = LOWER_DISC_START_Y + stackCount * stackStep + 0.75;
     } else {
       this.lowerDiscBody = this.world.createRigidBody(
-        RAPIER.RigidBodyDesc.dynamic().setTranslation(0, LOWER_DISC_START_Y, 0)
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(
+          lowerStart.x,
+          lowerStartY,
+          lowerStart.z
+        )
       );
       this.lowerDiscBody.setLinearDamping(0.015);
       this.lowerDiscBody.setAngularDamping(0.0016);
@@ -1632,6 +1622,23 @@ export class DiscDropGame {
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Power";
     const result = this.getRoundResult();
+    if (this.battleMode === "training") {
+      if (result === "win") {
+        this.setStatus("you won", "training");
+        this.showCenterNotice("YOU WON", 1500);
+        this.playRandomWinSfx();
+      } else if (result === "lose") {
+        this.setStatus("you lost", "training");
+        this.showCenterNotice("YOU LOST", 1500);
+      } else {
+        this.setStatus("tie", "training");
+        this.showCenterNotice("TIE", 1500);
+      }
+      this.ui.resetBtn.textContent = "Play Again";
+      this.ui.resetBtn.disabled = false;
+      this.ui.actionButtonsEl.classList.add("show-reset");
+      return;
+    }
     if (this.currentThrower === "player") {
       this.playerTurnResult = result;
       this.setStatus(`your turn ${result}`, "cpu preparing throw");
