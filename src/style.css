@@ -2,6 +2,24 @@
   box-sizing: border-box;
 }
 
+/* Keep Jungle Bay button palette from being overridden by generic rules. */
+.theme-jungle-bay .play-setup-panel button,
+.theme-jungle-bay .play-setup-actions button,
+.theme-jungle-bay .mode-btn {
+  border: 1px solid rgba(98, 150, 86, 0.76);
+  background: linear-gradient(180deg, rgba(236, 247, 203, 0.95), rgba(182, 220, 151, 0.94));
+  color: #29563c;
+}
+
+.theme-jungle-bay.mode-play .action-buttons button,
+.theme-jungle-bay.mode-play .buttons button,
+.theme-jungle-bay.mode-play .back-btn,
+.theme-jungle-bay.mode-play .global-mute-btn {
+  border: 1px solid rgba(98, 150, 86, 0.76);
+  background: linear-gradient(180deg, rgba(236, 247, 203, 0.95), rgba(182, 220, 151, 0.94));
+  color: #29563c;
+}
+
 @font-face {
   font-family: "Hell";
   src: url("/fonts/hell.ttf") format("truetype");

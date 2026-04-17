@@ -245,6 +245,15 @@ export class DiscDropGame {
               if (this.theme === "hell" && child.name === "Object_8") {
                 child.material = this.createLavaMaterial();
               }
+              if (this.theme === "jungle-bay") {
+                const seaName = String(child.name || "").toLowerCase();
+                if (
+                  seaName === "sphere001_sea_0" ||
+                  seaName.startsWith("sphere001_sea_0.")
+                ) {
+                  child.material = this.createWaterMaterial();
+                }
+              }
             }
           });
 
@@ -401,6 +410,97 @@ export class DiscDropGame {
           gl_FragColor = vec4(color, 1.0);
         }
       `,
+    });
+  }
+
+  createWaterMaterial() {
+    const uniforms = {
+      iTime: { value: 0 },
+    };
+    this.lavaUniforms.push(uniforms);
+
+    return new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float iTime;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+            mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+            u.y
+          );
+        }
+
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.55;
+          for (int i = 0; i < 4; i++) {
+            v += a * noise(p);
+            p *= 2.0;
+            a *= 0.5;
+          }
+          return v;
+        }
+
+        void main() {
+          vec2 uv = vUv * 6.5;
+          float t = iTime * 0.14;
+
+          float waveA = fbm(uv + vec2(t * 0.9, -t * 0.35));
+          float waveB = fbm(uv * 1.7 - vec2(t * 0.4, t * 0.75));
+          float wave = waveA * 0.58 + waveB * 0.42;
+
+          float e = 0.03;
+          float waveX = fbm((uv + vec2(e, 0.0)) + vec2(t * 0.9, -t * 0.35)) * 0.58
+                      + fbm((uv + vec2(e, 0.0)) * 1.7 - vec2(t * 0.4, t * 0.75)) * 0.42;
+          float waveY = fbm((uv + vec2(0.0, e)) + vec2(t * 0.9, -t * 0.35)) * 0.58
+                      + fbm((uv + vec2(0.0, e)) * 1.7 - vec2(t * 0.4, t * 0.75)) * 0.42;
+          vec3 n = normalize(vec3((wave - waveX) * 1.8, (wave - waveY) * 1.8, 1.0));
+
+          vec3 deep = vec3(0.01, 0.16, 0.28);
+          vec3 mid = vec3(0.05, 0.36, 0.55);
+          vec3 shallow = vec3(0.14, 0.62, 0.75);
+          vec3 foam = vec3(0.78, 0.93, 0.96);
+
+          vec3 color = mix(deep, mid, smoothstep(0.18, 0.62, wave));
+          color = mix(color, shallow, smoothstep(0.52, 0.9, wave));
+
+          float crest = smoothstep(0.78, 1.0, wave);
+          color = mix(color, foam, crest * 0.45);
+
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 2.4);
+          color += vec3(0.16, 0.30, 0.34) * fresnel * 0.45;
+
+          vec3 lightDir = normalize(vec3(0.4, 0.8, 0.35));
+          float spec = pow(max(dot(reflect(-lightDir, n), viewDir), 0.0), 28.0);
+          color += vec3(1.0, 0.97, 0.85) * spec * 0.28;
+
+          gl_FragColor = vec4(color, 0.94);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
     });
   }
 
