@@ -61,6 +61,10 @@ export class DiscDropGame {
       this.gameMode === "slammer"
         ? this.arenaRadius + 8.5
         : Math.max(this.arenaRadius, FLOOR_RADIUS);
+    if (this.theme === "brainrot" && this.gameMode !== "slammer") {
+      this.arenaRadius = Math.max(this.arenaRadius, 16.5);
+      this.floorRadius = Math.max(this.floorRadius, 24);
+    }
 
     this.hasLaunched = false;
     this.hasResolved = false;
@@ -217,7 +221,8 @@ export class DiscDropGame {
   }
 
   setupArenaVisualModel() {
-    const usesProceduralArena = this.theme === "heaven" || this.gameMode === "slammer";
+    const usesProceduralArena =
+      this.theme === "heaven" || this.gameMode === "slammer";
     if (usesProceduralArena) {
       this.floorMesh.visible = true;
       this.tableMesh.visible = true;
@@ -234,7 +239,11 @@ export class DiscDropGame {
     }
 
     const arenaModelPath =
-      this.theme === "jungle-bay" ? "/3d/jbArena.glb" : "/3d/hellArena1.glb";
+      this.theme === "jungle-bay"
+        ? "/3d/jbArena.glb"
+        : this.theme === "brainrot"
+          ? "/3d/brainrotArena.glb"
+          : "/3d/hellArena1.glb";
 
     this.floorMesh.visible = false;
     this.tableMesh.visible = false;
@@ -287,6 +296,8 @@ export class DiscDropGame {
           const scale =
             this.theme === "jungle-bay"
               ? ((this.arenaRadius * 2) / Math.max(size.x, size.z, 0.001)) * 5
+              : this.theme === "brainrot"
+                ? ((this.arenaRadius * 2) / Math.max(size.x, size.z, 0.001)) * 5.25
               : 10;
 
           this.arenaVisualRoot.clear();
@@ -294,7 +305,7 @@ export class DiscDropGame {
           this.arenaVisualRoot.scale.setScalar(scale);
           this.arenaVisualRoot.position.set(
             this.theme === "jungle-bay" ? 10 : 0,
-            this.theme === "jungle-bay" ? -15 : -0.62,
+            this.theme === "jungle-bay" ? -15 : this.theme === "brainrot" ? 7.6 : -0.62,
             this.theme === "jungle-bay" ? -5 : 0
           );
           this.createArenaSurfacePhysics();
@@ -375,9 +386,24 @@ export class DiscDropGame {
       this.arenaSurfaceColliders.push(collider);
     });
 
+    // Brainrot arena needs a guaranteed full-coverage floor so caps never hover/fall
+    // through sparse mesh zones.
+    if (this.theme === "brainrot") {
+      const coverBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+      const coverCollider = this.world.createCollider(
+        RAPIER.ColliderDesc.cuboid(this.floorRadius + 6, 0.08, this.floorRadius + 6)
+          .setTranslation(0, 0.162, 0)
+          .setContactSkin(0.0015),
+        coverBody
+      );
+      this.arenaSurfaceBodies.push(coverBody);
+      this.arenaSurfaceColliders.push(coverCollider);
+    }
+
     this.useArenaMeshFloor = this.arenaSurfaceColliders.length > 0;
     // Keep base floor enabled as a safety net against deep penetration.
-    this.floorCollider.setEnabled(true);
+    // Brainrot has its own full-coverage floor collider aligned to the map.
+    this.floorCollider.setEnabled(this.theme !== "brainrot");
   }
 
   createLavaMaterial() {
@@ -1107,6 +1133,9 @@ export class DiscDropGame {
     } else if (this.theme === "jungle-bay") {
       this.floorMaterial.color.set("#d4e6ba");
       this.tableMaterial.color.set("#8cb07a");
+    } else if (this.theme === "brainrot") {
+      this.floorMaterial.color.set("#e99cff");
+      this.tableMaterial.color.set("#83f85b");
     } else {
       this.floorMaterial.color.set(
         key === "bumperGarden" ? "#2c2a5d" : "#263049"

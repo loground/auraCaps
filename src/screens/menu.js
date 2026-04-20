@@ -73,6 +73,7 @@ export function mountMenuScreen({
           <option value="heaven" ${theme === "heaven" ? "selected" : ""}>heaven</option>
           <option value="hell" ${theme === "hell" ? "selected" : ""}>hell</option>
           <option value="jungle-bay" ${theme === "jungle-bay" ? "selected" : ""}>jungle bay</option>
+          <option value="brainrot" ${theme === "brainrot" ? "selected" : ""}>brainrot</option>
         </select>
       </div>
       <div id="menuPreloader" class="menu-preloader">
@@ -100,7 +101,14 @@ export function mountMenuScreen({
   const scene = new THREE.Scene();
   const isHeaven = theme === "heaven";
   const isJungle = theme === "jungle-bay";
-  const bgColor = isHeaven ? "#8ccfff" : isJungle ? "#8edcb4" : "#170807";
+  const isBrainrot = theme === "brainrot";
+  const bgColor = isHeaven
+    ? "#8ccfff"
+    : isJungle
+      ? "#8edcb4"
+      : isBrainrot
+        ? "#25003a"
+        : "#170807";
   scene.background = new THREE.Color(bgColor);
   scene.fog = new THREE.Fog(bgColor, 18, 58);
 
@@ -126,29 +134,29 @@ export function mountMenuScreen({
   controls.update();
 
   const ambient = new THREE.AmbientLight(
-    isHeaven ? 0xe6f6ff : isJungle ? 0xf4ffd6 : 0xffb48a,
-    isHeaven ? 0.78 : isJungle ? 0.82 : 0.56
+    isHeaven ? 0xe6f6ff : isJungle ? 0xf4ffd6 : isBrainrot ? 0xffe5fb : 0xffb48a,
+    isHeaven ? 0.78 : isJungle ? 0.82 : isBrainrot ? 0.92 : 0.56
   );
   scene.add(ambient);
 
   const keyLight = new THREE.DirectionalLight(
-    isHeaven ? 0xd2ecff : isJungle ? 0xffefbd : 0xff5b31,
-    isHeaven ? 1.45 : isJungle ? 1.52 : 1.6
+    isHeaven ? 0xd2ecff : isJungle ? 0xffefbd : isBrainrot ? 0xa7ff3d : 0xff5b31,
+    isHeaven ? 1.45 : isJungle ? 1.52 : isBrainrot ? 1.75 : 1.6
   );
   keyLight.position.set(8, 10, 6);
   keyLight.castShadow = true;
   scene.add(keyLight);
 
   const fillLight = new THREE.DirectionalLight(
-    isHeaven ? 0xffffff : isJungle ? 0xd1ffd2 : 0xffda99,
-    isHeaven ? 0.88 : isJungle ? 0.76 : 0.72
+    isHeaven ? 0xffffff : isJungle ? 0xd1ffd2 : isBrainrot ? 0x77d2ff : 0xffda99,
+    isHeaven ? 0.88 : isJungle ? 0.76 : isBrainrot ? 1.04 : 0.72
   );
   fillLight.position.set(-8, 5, 2);
   scene.add(fillLight);
 
   const demonTopLight = new THREE.SpotLight(
-    isHeaven ? 0xf2fbff : isJungle ? 0xfff5ca : 0xffc58f,
-    isHeaven ? 2.0 : isJungle ? 2.18 : 2.32,
+    isHeaven ? 0xf2fbff : isJungle ? 0xfff5ca : isBrainrot ? 0xff7eea : 0xffc58f,
+    isHeaven ? 2.0 : isJungle ? 2.18 : isBrainrot ? 2.45 : 2.32,
     60,
     0.45,
     0.35,
@@ -161,7 +169,7 @@ export function mountMenuScreen({
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
     new THREE.MeshStandardMaterial({
-      color: isHeaven ? "#d4e8f6" : isJungle ? "#acc98d" : "#24100d",
+      color: isHeaven ? "#d4e8f6" : isJungle ? "#acc98d" : isBrainrot ? "#300942" : "#24100d",
       roughness: 0.92,
       metalness: 0.02,
     })
@@ -342,6 +350,81 @@ export function mountMenuScreen({
       gl_FragColor = vec4(finalmix.rgb, 1.0);
     }
   `;
+  const brainrotFragmentShader = `
+    uniform float iTime;
+    uniform vec2 iResolution;
+    varying vec2 vUv;
+
+    float rand(vec2 c){
+      return fract(sin(dot(c.xy ,vec2(12.9898,78.233))) * 43758.5453);
+    }
+
+    float noise(vec2 p, float freq ){
+      float unit = iResolution.x/freq;
+      vec2 ij = floor(p/unit);
+      vec2 xy = mod(p,unit)/unit;
+      xy = .5*(1.-cos(3.14159*xy));
+      float a = rand((ij+vec2(0.,0.)));
+      float b = rand((ij+vec2(1.,0.)));
+      float c = rand((ij+vec2(0.,1.)));
+      float d = rand((ij+vec2(1.,1.)));
+      float x1 = mix(a, b, xy.x);
+      float x2 = mix(c, d, xy.x);
+      return mix(x1, x2, xy.y);
+    }
+
+    float pNoise(vec2 p, int res){
+      float persistance = .5;
+      float n = 0.;
+      float normK = 0.;
+      float f = 4.;
+      float amp = 1.;
+      int iCount = 0;
+      for (int i = 0; i<50; i++){
+        n += amp * noise(p, f);
+        f *= 2.;
+        normK += amp;
+        amp *= persistance;
+        if (iCount == res) break;
+        iCount++;
+      }
+      float nf = n / max(normK, 0.0001);
+      return nf*nf*nf*nf;
+    }
+
+    float fbm(vec2 pos, int octaves, float lacunarity) {
+      float value = 0.0;
+      float scale = 1.0;
+      for(int i = 0; i < 12; i++) {
+        if(i >= octaves) break;
+        value += pNoise(pos * scale, 3) / scale;
+        scale *= lacunarity;
+      }
+      return value;
+    }
+
+    void main() {
+      vec2 fragCoord = vUv * iResolution.xy;
+      vec2 UV = fragCoord / iResolution.xy;
+      UV *= 500.0;
+      vec3 baseColor = vec3(0.5);
+      UV += sin(iTime) * 20.3;
+      float lowNoise = fbm(UV * fbm(UV * 30. + iTime * 20., 6, 2.0) * 199., 4, 2.0);
+      float midNoise = fbm(UV * fbm(UV * 10., 5, 2.0), 2, 2.0);
+      float highNoise = fbm(UV * fbm(UV * 20., 3, 2.0), 5, 2.0);
+      float finalNoise = lowNoise * 0.25 + midNoise * 0.25 + highNoise * 0.5;
+      vec3 color = baseColor;
+      color.rgb += sin(finalNoise * 10.0) * 0.2;
+      color.r += sin(iTime + finalNoise * 15.0) * 0.1;
+      color.g += sin(iTime + midNoise * 20.0) * 0.1;
+      color.b += sin(highNoise * 25.0) * 0.1;
+      color = clamp(color, 0.0, 1.0);
+      color = color * (1.0 - finalNoise * 0.2);
+      color -= 0.5;
+      color *= 3.0;
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `;
 
   const titleMaterial = new THREE.ShaderMaterial({
     uniforms: titleUniforms,
@@ -350,6 +433,8 @@ export function mountMenuScreen({
       ? heavenFragmentShader
       : isJungle
         ? kaleFragmentShader
+        : isBrainrot
+          ? brainrotFragmentShader
         : hellFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
@@ -396,9 +481,15 @@ export function mountMenuScreen({
     ? "/3d/heaven.glb"
     : isJungle
       ? "/3d/jbMenu.glb"
+      : isBrainrot
+        ? "/3d/tungMain.glb"
       : "/3d/demon.glb";
   const jungleMenuYDesktop = 1.38;
   const jungleMenuYMobile = 0.93;
+  const brainrotMenuYDesktop = 1.42;
+  const brainrotMenuYMobile = 1.02;
+  const brainrotMenuScaleDesktop = 9.2;
+  const brainrotMenuScaleMobile = 7.6;
   gltfLoader.load(
     menuModelPath,
     (gltf) => {
@@ -416,8 +507,12 @@ export function mountMenuScreen({
       demon.position.sub(center);
 
       demonPivot = new THREE.Group();
-      demonPivot.position.set(0, isJungle ? jungleMenuYDesktop : 1.5, -1);
-      demonPivot.scale.setScalar(10);
+      demonPivot.position.set(
+        0,
+        isJungle ? jungleMenuYDesktop : isBrainrot ? brainrotMenuYDesktop : 1.5,
+        -1
+      );
+      demonPivot.scale.setScalar(isBrainrot ? brainrotMenuScaleDesktop : 10);
       demonPivot.rotation.y = -Math.PI * 0.5;
       demonPivot.add(demon);
       scene.add(demonPivot);
@@ -626,14 +721,25 @@ export function mountMenuScreen({
       titleMesh.position.y = isMobile ? 9.25 : 8.3;
     }
     if (demonPivot) {
-      demonPivot.scale.setScalar(isMobile ? 8.2 : 10);
+      const scale = isBrainrot
+        ? isMobile
+          ? brainrotMenuScaleMobile
+          : brainrotMenuScaleDesktop
+        : isMobile
+          ? 8.2
+          : 10;
+      demonPivot.scale.setScalar(scale);
       const y = isJungle
         ? isMobile
           ? jungleMenuYMobile
           : jungleMenuYDesktop
-        : isMobile
-          ? 1.05
-          : 1.5;
+        : isBrainrot
+          ? isMobile
+            ? brainrotMenuYMobile + 0.08
+            : brainrotMenuYDesktop + 0.14
+          : isMobile
+            ? 1.05
+            : 1.5;
       demonPivot.position.set(0, y, -1);
     }
   };

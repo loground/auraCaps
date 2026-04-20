@@ -14,9 +14,10 @@ export function createRenderer(app) {
 export function createWorldScene(renderer, { theme = "hell" } = {}) {
   const isHeaven = theme === "heaven";
   const isJungle = theme === "jungle-bay";
+  const isBrainrot = theme === "brainrot";
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(
-    isHeaven ? "#8ecfff" : isJungle ? "#8ddbb2" : "#1b0706"
+    isHeaven ? "#8ecfff" : isJungle ? "#8ddbb2" : isBrainrot ? "#5c1f8e" : "#1b0706"
   );
 
   const camera = new THREE.PerspectiveCamera(
@@ -37,14 +38,14 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
   controls.maxPolarAngle = Math.PI * 0.495;
 
   const ambientLight = new THREE.AmbientLight(
-    isHeaven ? 0xe9f7ff : isJungle ? 0xf4ffd8 : 0xffccb3,
-    isHeaven ? 0.92 : isJungle ? 0.86 : 0.73
+    isHeaven ? 0xe9f7ff : isJungle ? 0xf4ffd8 : isBrainrot ? 0xffddf6 : 0xffccb3,
+    isHeaven ? 0.92 : isJungle ? 0.86 : isBrainrot ? 1.0 : 0.73
   );
   scene.add(ambientLight);
 
   const directionalLight = new THREE.DirectionalLight(
-    isHeaven ? 0xf1fbff : isJungle ? 0xfff1c4 : 0xffd2b0,
-    isHeaven ? 1.62 : isJungle ? 1.56 : 1.49
+    isHeaven ? 0xf1fbff : isJungle ? 0xfff1c4 : isBrainrot ? 0xa8ff45 : 0xffd2b0,
+    isHeaven ? 1.62 : isJungle ? 1.56 : isBrainrot ? 1.78 : 1.49
   );
   directionalLight.position.set(8, 14, 8);
   scene.add(directionalLight);
@@ -146,7 +147,7 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
   }
 
   const floorMaterial = new THREE.MeshStandardMaterial({
-    color: isHeaven ? "#e2eef8" : isJungle ? "#d0e9b6" : "#263049",
+    color: isHeaven ? "#e2eef8" : isJungle ? "#d0e9b6" : isBrainrot ? "#f49dff" : "#263049",
     metalness: 0.05,
     roughness: 0.78,
   });
@@ -158,7 +159,7 @@ export function createWorldScene(renderer, { theme = "hell" } = {}) {
   scene.add(floorMesh);
 
   const tableMaterial = new THREE.MeshStandardMaterial({
-    color: isHeaven ? "#c8deef" : isJungle ? "#96b878" : "#111827",
+    color: isHeaven ? "#c8deef" : isJungle ? "#96b878" : isBrainrot ? "#8dff55" : "#111827",
     metalness: 0.1,
     roughness: 0.88,
   });

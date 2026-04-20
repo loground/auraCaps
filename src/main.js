@@ -3,7 +3,7 @@ import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
-const THEME_OPTIONS = ["hell", "heaven", "jungle-bay"];
+const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "brainrot"];
 const hoverSfxTemplate = new Audio("/sounds/menuHover.mp3");
 hoverSfxTemplate.preload = "auto";
 const hoverTargetsSelector = "button";
