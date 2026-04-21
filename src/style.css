@@ -1389,6 +1389,19 @@ button:disabled {
     linear-gradient(180deg, #94dabf 0%, #63b594 100%);
 }
 
+#app.theme-brainrot.mode-collection {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 39, 208, 0.16) 0 16px,
+      rgba(33, 255, 163, 0.16) 16px 32px,
+      rgba(0, 191, 255, 0.16) 32px 48px
+    ),
+    radial-gradient(circle at 12% 20%, #8e00ff 0%, transparent 34%),
+    radial-gradient(circle at 82% 14%, #ff7b00 0%, transparent 32%),
+    linear-gradient(180deg, #220033 0%, #080015 100%);
+}
+
 .mode-play .panel {
   border: 1px solid rgba(255, 118, 84, 0.5);
   background: rgba(25, 7, 7, 0.82);

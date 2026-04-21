@@ -38,6 +38,17 @@ export function mountCollectionScreen({ app, onBack }) {
         details: `Wave Set ${40 + i * 9} • Tier Tide • Core Flux ${(2.4 + i * 0.2).toFixed(1)}`,
       })),
     },
+    slammers: {
+      id: "slammers",
+      label: "slammers",
+      items: [1, 2, 3].map((idx) => ({
+        number: idx,
+        name: `Slammer ${idx}`,
+        imagePath: `/caps/slammer${idx}.png`,
+        subtitle: "by eazystyler",
+        details: `Slammer Series ${300 + idx * 11} • Heavy Class • Impact Core ${(4.2 + idx * 0.35).toFixed(2)}`,
+      })),
+    },
   };
   let activeCollectionKey = app.classList.contains("theme-jungle-bay")
     ? "jungleBay"
