@@ -17,10 +17,12 @@ import {
   loadDiscTexture,
   setDiscFaceTextures,
 } from "./discs.js";
+import { getCapWeightMultiplier } from "./cap-physics.js";
 import { createRenderer, createWorldScene } from "./scene.js";
 import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 
 const ROUND_TIMEOUT_SECONDS = 8;
+const ROUND_FORCE_TIMEOUT_SECONDS = 14;
 const OUT_OF_ARENA_RADIUS_OFFSET = 1.1;
 const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
@@ -46,6 +48,8 @@ export class DiscDropGame {
       initialArenaKey = DEFAULT_ARENA_KEY,
       battleMode = "vs-ai",
       gameMode = "classic",
+      playerCapPath = null,
+      cpuCapPath = null,
     } = {}
   ) {
     this.app = app;
@@ -54,6 +58,8 @@ export class DiscDropGame {
     this.isSoundEnabled = typeof isSoundEnabled === "function" ? isSoundEnabled : null;
     this.battleMode = battleMode === "training" ? "training" : "vs-ai";
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
+    this.playerCapPath = playerCapPath;
+    this.cpuCapPath = cpuCapPath;
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey = initialArenaKey || DEFAULT_ARENA_KEY;
     this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
@@ -78,6 +84,8 @@ export class DiscDropGame {
     this.tieRounds = 0;
     this.playerTurnResult = null;
     this.cpuTurnResult = null;
+    this.playerSlammerFlips = null;
+    this.cpuSlammerFlips = null;
     this.currentThrower = "player";
     this.lockPlayerInput = false;
     this.cpuLaunchTimeoutId = null;
@@ -574,14 +582,28 @@ export class DiscDropGame {
             loadDiscTexture(this.renderer, `/caps/${idx + 1}.webp`)
           );
 
+    this.capTextureByPath = new Map();
+    const registerCapTexture = (texture) => {
+      const sourcePath = texture?.userData?.sourcePath;
+      if (sourcePath && !this.capTextureByPath.has(sourcePath)) {
+        this.capTextureByPath.set(sourcePath, texture);
+      }
+    };
+    this.capTextures.forEach(registerCapTexture);
+    this.slammerBackTextures.forEach(registerCapTexture);
+    this.backFaceTextures.forEach(registerCapTexture);
+
+    this.playerCapTexture =
+      this.resolveCapTextureFromPath(this.playerCapPath) || this.randomCapTexture();
+    this.cpuCapTexture =
+      this.resolveCapTextureFromPath(this.cpuCapPath) || this.randomCapTexture();
+
     this.lowerCapTexture = this.randomCapTexture();
     this.upperCapTexture = this.randomCapTexture();
     this.lowerBackTexture = this.randomBackTexture();
     this.upperBackTexture =
       this.gameMode === "slammer" ? this.mainBackTexture : this.randomBackTexture();
-    if (this.gameMode === "slammer") {
-      this.upperCapTexture = this.upperBackTexture;
-    }
+    this.applySelectedCapsForThrower("player", { refresh: false });
 
     if (this.gameMode === "slammer") {
       this.floorCapTextures = Array.from({ length: 6 }, () => this.randomCapTexture());
@@ -637,6 +659,40 @@ export class DiscDropGame {
     return this.backFaceTextures[
       Math.floor(Math.random() * this.backFaceTextures.length)
     ];
+  }
+
+  resolveCapTextureFromPath(path) {
+    if (!path) {
+      return null;
+    }
+    if (this.capTextureByPath?.has(path)) {
+      return this.capTextureByPath.get(path);
+    }
+    const loaded = loadDiscTexture(this.renderer, path);
+    if (loaded) {
+      this.capTextureByPath?.set(path, loaded);
+    }
+    return loaded;
+  }
+
+  applySelectedCapsForThrower(thrower, { refresh = true } = {}) {
+    const selectedTexture =
+      thrower === "cpu" ? this.cpuCapTexture : this.playerCapTexture;
+    if (!selectedTexture) {
+      return;
+    }
+
+    if (this.gameMode === "slammer") {
+      this.upperCapTexture = selectedTexture;
+      this.upperBackTexture = selectedTexture;
+    } else {
+      this.lowerCapTexture = selectedTexture;
+      this.upperCapTexture = selectedTexture;
+    }
+
+    if (refresh) {
+      this.refreshDiscArt();
+    }
   }
 
   refreshDiscArt() {
@@ -875,6 +931,8 @@ export class DiscDropGame {
     this.tieRounds = 0;
     this.playerTurnResult = null;
     this.cpuTurnResult = null;
+    this.playerSlammerFlips = null;
+    this.cpuSlammerFlips = null;
     this.currentThrower = "player";
     this.lockPlayerInput = false;
     this.cpuPlannedMove = null;
@@ -920,6 +978,13 @@ export class DiscDropGame {
     if (result === "win") return 2;
     if (result === "tie") return 1;
     return 0;
+  }
+
+  getSlammerFaceUpCount() {
+    return this.floorDiscBodies.reduce(
+      (sum, body) => sum + Number(this.topFaceColor(body) === "green"),
+      0
+    );
   }
 
   formatCpuMove(move) {
@@ -969,8 +1034,8 @@ export class DiscDropGame {
       return;
     }
     this.lockPlayerInput = true;
-    this.buildRoundBodies({ resetTurnResults: false });
     this.currentThrower = "cpu";
+    this.buildRoundBodies({ resetTurnResults: false });
     this.cpuPlannedMove = this.generateCpuMove();
     this.settings.posX = this.cpuPlannedMove.posX;
     this.settings.posZ = this.cpuPlannedMove.posZ;
@@ -1001,8 +1066,13 @@ export class DiscDropGame {
     if (this.battleMode !== "vs-ai") {
       return;
     }
-    const playerScore = this.turnScore(this.playerTurnResult);
-    const cpuScore = this.turnScore(this.cpuTurnResult);
+    const isSlammerVsAi = this.gameMode === "slammer";
+    const playerScore = isSlammerVsAi
+      ? this.playerSlammerFlips ?? 0
+      : this.turnScore(this.playerTurnResult);
+    const cpuScore = isSlammerVsAi
+      ? this.cpuSlammerFlips ?? 0
+      : this.turnScore(this.cpuTurnResult);
     let roundOutcome = "tie";
     if (playerScore > cpuScore) {
       roundOutcome = "win";
@@ -1015,7 +1085,9 @@ export class DiscDropGame {
       this.tieRounds += 1;
     }
 
-    const cpuMoveSummary = `turn ${this.cpuTurnResult ?? "tie"}`;
+    const cpuMoveSummary = isSlammerVsAi
+      ? `flips you ${playerScore} • cpu ${cpuScore}`
+      : `turn ${this.cpuTurnResult ?? "tie"}`;
     const isMatchOver = this.currentRound >= this.totalRounds;
     if (isMatchOver) {
       if (this.playerWins > this.cpuWins) {
@@ -1155,6 +1227,10 @@ export class DiscDropGame {
     const arena = ARENA_CONFIGS[this.activeArenaKey];
     const lowerStart = arena?.lowerStart || { x: 0, z: 0 };
     const lowerStartY = arena?.lowerStartY ?? LOWER_DISC_START_Y;
+    const textureWeight = (texture) =>
+      getCapWeightMultiplier(texture?.userData?.sourcePath);
+    const activeThrower = resetTurnResults ? "player" : this.currentThrower || "player";
+    this.applySelectedCapsForThrower(activeThrower, { refresh: false });
 
     for (const body of this.floorDiscBodies) {
       this.world.removeRigidBody(body);
@@ -1190,7 +1266,7 @@ export class DiscDropGame {
           RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
             .setFriction(arena.lowerFriction)
             .setRestitution(arena.lowerRestitution)
-            .setDensity(arena.lowerDensity * 1.08)
+            .setDensity(arena.lowerDensity * 1.08 * textureWeight(this.floorCapTextures[i]))
             .setContactSkin(0.0008)
             .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
           body
@@ -1212,7 +1288,11 @@ export class DiscDropGame {
         RAPIER.ColliderDesc.cylinder(slammerDiscHeight * 0.5, DISC_RADIUS)
           .setFriction(arena.upperFriction)
           .setRestitution(arena.upperRestitution)
-          .setDensity(arena.upperDensity * SLAMMER_DENSITY_MULT)
+          .setDensity(
+            arena.upperDensity *
+              SLAMMER_DENSITY_MULT *
+              textureWeight(this.upperCapTexture)
+          )
           .setContactSkin(0.0008)
           .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         this.upperDiscBody
@@ -1240,7 +1320,7 @@ export class DiscDropGame {
         RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
           .setFriction(arena.lowerFriction)
           .setRestitution(arena.lowerRestitution)
-          .setDensity(arena.lowerDensity)
+          .setDensity(arena.lowerDensity * textureWeight(this.lowerCapTexture))
           .setContactSkin(0.0008)
           .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         this.lowerDiscBody
@@ -1259,7 +1339,7 @@ export class DiscDropGame {
         RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
           .setFriction(arena.upperFriction)
           .setRestitution(arena.upperRestitution)
-          .setDensity(arena.upperDensity)
+          .setDensity(arena.upperDensity * textureWeight(this.upperCapTexture))
           .setContactSkin(0.0008)
           .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         this.upperDiscBody
@@ -1289,6 +1369,8 @@ export class DiscDropGame {
     if (resetTurnResults) {
       this.playerTurnResult = null;
       this.cpuTurnResult = null;
+      this.playerSlammerFlips = null;
+      this.cpuSlammerFlips = null;
       this.currentThrower = "player";
       this.cpuPlannedMove = null;
     }
@@ -1651,16 +1733,27 @@ export class DiscDropGame {
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Power";
     const result = this.getRoundResult();
+    const slammerFlips =
+      this.gameMode === "slammer" ? this.getSlammerFaceUpCount() : null;
     if (this.battleMode === "training") {
       if (result === "win") {
-        this.setStatus("you won", "training");
+        this.setStatus(
+          "you won",
+          this.gameMode === "slammer" ? `flips ${slammerFlips}` : "training"
+        );
         this.showCenterNotice("YOU WON", 1500);
         this.playRandomWinSfx();
       } else if (result === "lose") {
-        this.setStatus("you lost", "training");
+        this.setStatus(
+          "you lost",
+          this.gameMode === "slammer" ? `flips ${slammerFlips}` : "training"
+        );
         this.showCenterNotice("YOU LOST", 1500);
       } else {
-        this.setStatus("tie", "training");
+        this.setStatus(
+          "tie",
+          this.gameMode === "slammer" ? `flips ${slammerFlips}` : "training"
+        );
         this.showCenterNotice("TIE", 1500);
       }
       this.ui.resetBtn.textContent = "Play Again";
@@ -1670,11 +1763,22 @@ export class DiscDropGame {
     }
     if (this.currentThrower === "player") {
       this.playerTurnResult = result;
-      this.setStatus(`your turn ${result}`, "cpu preparing throw");
+      if (this.gameMode === "slammer") {
+        this.playerSlammerFlips = slammerFlips ?? 0;
+        this.setStatus(
+          `your throw ${this.playerSlammerFlips} flips`,
+          "cpu preparing throw"
+        );
+      } else {
+        this.setStatus(`your turn ${result}`, "cpu preparing throw");
+      }
       this.startComputerTurn();
       return;
     }
     this.cpuTurnResult = result;
+    if (this.gameMode === "slammer") {
+      this.cpuSlammerFlips = slammerFlips ?? 0;
+    }
     this.lockPlayerInput = false;
     this.finalizeRoundFromTurns();
   }
@@ -1724,6 +1828,38 @@ export class DiscDropGame {
     const linearSq = lin.x * lin.x + lin.y * lin.y + lin.z * lin.z;
     const angularSq = ang.x * ang.x + ang.y * ang.y + ang.z * ang.z;
     return linearSq < 0.03 && angularSq < 0.08;
+  }
+
+  hasAllCapsLanded() {
+    const bodies = [this.upperDiscBody, ...this.floorDiscBodies].filter(Boolean);
+    if (bodies.length === 0) {
+      return true;
+    }
+
+    const hoverY =
+      this.gameMode === "slammer"
+        ? LOWER_DISC_START_Y + 1.2
+        : LOWER_DISC_START_Y + 0.9;
+    const hardAirY =
+      this.gameMode === "slammer"
+        ? LOWER_DISC_START_Y + 2.6
+        : LOWER_DISC_START_Y + 2.1;
+
+    for (const body of bodies) {
+      const pos = body.translation();
+      const lin = body.linvel();
+      const speed = Math.hypot(lin.x, lin.y, lin.z);
+      if (Math.abs(lin.y) > 0.22) {
+        return false;
+      }
+      if (pos.y > hardAirY) {
+        return false;
+      }
+      if (pos.y > hoverY && speed > 0.22) {
+        return false;
+      }
+    }
+    return true;
   }
 
   currentWind(time, out) {
@@ -1886,9 +2022,12 @@ export class DiscDropGame {
       this.floorDiscBodies.length > 0
     ) {
       const allSettled =
-        this.hasSettled(this.upperDiscBody) &&
-        this.floorDiscBodies.every((body) => this.hasSettled(body));
-      if (allSettled) {
+        (this.upperDiscBody.isSleeping() || this.hasSettled(this.upperDiscBody)) &&
+        this.floorDiscBodies.every(
+          (body) => body.isSleeping() || this.hasSettled(body)
+        );
+      const allLanded = this.hasAllCapsLanded();
+      if (allSettled && allLanded) {
         this.stableFrames += 1;
         if (this.stableFrames > 35) {
           this.resolveRound();
@@ -1904,7 +2043,11 @@ export class DiscDropGame {
         this.resolveRound();
       }
 
-      if (this.roundElapsed >= ROUND_TIMEOUT_SECONDS) {
+      if (this.roundElapsed >= ROUND_TIMEOUT_SECONDS && allSettled && allLanded) {
+        this.resolveRound();
+      }
+
+      if (this.roundElapsed >= ROUND_FORCE_TIMEOUT_SECONDS) {
         this.resolveRound();
       }
     }

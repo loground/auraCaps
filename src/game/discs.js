@@ -8,6 +8,7 @@ export function loadDiscTexture(renderer, path) {
   texture.repeat.set(1, 1);
   texture.offset.set(0, 0);
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  texture.userData = { ...(texture.userData || {}), sourcePath: path };
   return texture;
 }
 

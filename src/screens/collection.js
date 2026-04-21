@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DISC_HEIGHT, DISC_RADIUS } from "../game/constants.js";
 import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
+import { getCapWeightMultiplier } from "../game/cap-physics.js";
 
 export function mountCollectionScreen({ app, onBack }) {
   const JUNGLE_BAY_CAP_PATHS = [
@@ -19,12 +20,12 @@ export function mountCollectionScreen({ app, onBack }) {
       label: "classic",
       items: Array.from({ length: 9 }, (_, i) => ({
         number: i + 1,
-        name: `Powerful cap N${i + 1}`,
+        name: `Cap number ${i + 1}`,
         imagePath: `/caps/${i + 1}.webp`,
-        subtitle: "collection INK's old (f)arts",
-        details: `Series ${100 + (i + 1) * 17} • Tier ${
-          ["Relic", "Myth", "Echo", "Prime", "Burn"][i % 5]
-        } • Core Flux ${(1.2 + i * 0.3).toFixed(1)}`,
+        subtitle: "ink's collection",
+        details: `Series beta • Weight ${getCapWeightMultiplier(
+          `/caps/${i + 1}.webp`
+        ).toFixed(2)}x`,
       })),
     },
     jungleBay: {
@@ -32,10 +33,10 @@ export function mountCollectionScreen({ app, onBack }) {
       label: "jungle bay",
       items: JUNGLE_BAY_CAP_PATHS.map((path, i) => ({
         number: i + 1,
-        name: `Jungle cap JB${i + 1}`,
+        name: `Cap number ${i + 1}`,
         imagePath: path,
-        subtitle: "collection Jungle Bay",
-        details: `Wave Set ${40 + i * 9} • Tier Tide • Core Flux ${(2.4 + i * 0.2).toFixed(1)}`,
+        subtitle: "loground's collection",
+        details: `Series beta • Weight ${getCapWeightMultiplier(path).toFixed(2)}x`,
       })),
     },
     slammers: {
@@ -43,10 +44,12 @@ export function mountCollectionScreen({ app, onBack }) {
       label: "slammers",
       items: [1, 2, 3].map((idx) => ({
         number: idx,
-        name: `Slammer ${idx}`,
+        name: `Cap number ${idx}`,
         imagePath: `/caps/slammer${idx}.png`,
-        subtitle: "by eazystyler",
-        details: `Slammer Series ${300 + idx * 11} • Heavy Class • Impact Core ${(4.2 + idx * 0.35).toFixed(2)}`,
+        subtitle: "eazystyler's collection",
+        details: `Series beta • Weight ${getCapWeightMultiplier(`/caps/slammer${idx}.png`).toFixed(
+          2
+        )}x`,
       })),
     },
   };

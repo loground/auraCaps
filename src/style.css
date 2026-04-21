@@ -823,6 +823,76 @@ button:disabled {
   min-width: 168px;
 }
 
+.caps-select-panel {
+  width: min(720px, calc(100vw - 1.4rem));
+}
+
+.cap-pick-targets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.cap-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  max-height: min(46vh, 430px);
+  overflow-y: auto;
+  padding: 0.2rem;
+}
+
+.cap-pick-card {
+  display: grid;
+  grid-template-rows: auto auto auto;
+  justify-items: center;
+  gap: 0.2rem;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 130, 92, 0.45);
+  background: rgba(57, 12, 10, 0.66);
+  padding: 0.45rem 0.35rem;
+  color: #ffe4d6;
+}
+
+.cap-pick-card img {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+}
+
+.cap-pick-name {
+  font-size: 0.78rem;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.cap-pick-weight {
+  font-size: 0.72rem;
+  opacity: 0.92;
+}
+
+.cap-pick-card.active {
+  border-color: rgba(255, 214, 156, 0.95);
+  box-shadow:
+    0 0 0 2px rgba(255, 214, 156, 0.45),
+    0 0 14px rgba(255, 103, 67, 0.4),
+    inset 0 0 12px rgba(255, 240, 214, 0.2);
+  transform: translateY(-1px);
+}
+
+.cap-pick-summary {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.cap-pick-summary .setup-hint {
+  min-height: auto;
+}
+
 .theme-heaven .play-setup-backdrop {
   background: rgba(35, 73, 108, 0.34);
 }
@@ -881,9 +951,21 @@ button:disabled {
   color: #214668;
 }
 
+.theme-heaven .cap-pick-card {
+  border: 1px solid rgba(106, 155, 209, 0.45);
+  background: rgba(222, 241, 255, 0.7);
+  color: #214668;
+}
+
 .theme-jungle-bay .play-setup-panel select {
   border: 1px solid rgba(109, 156, 88, 0.7);
   background: rgba(245, 251, 225, 0.96);
+  color: #2f603f;
+}
+
+.theme-jungle-bay .cap-pick-card {
+  border: 1px solid rgba(109, 156, 88, 0.5);
+  background: rgba(239, 249, 215, 0.72);
   color: #2f603f;
 }
 
@@ -1995,6 +2077,18 @@ button:disabled {
   color: #fff9be;
 }
 
+.theme-brainrot .cap-pick-card {
+  border: 2px dashed rgba(255, 252, 147, 0.9);
+  background:
+    linear-gradient(90deg, rgba(161, 0, 255, 0.66), rgba(255, 93, 0, 0.64)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.14) 0 6px,
+      rgba(0, 0, 0, 0.08) 6px 12px
+    );
+  color: #fffce8;
+}
+
 @media (min-width: 641px) {
   .mode-collection .global-mute-btn {
     left: calc(env(safe-area-inset-left, 0px) + 0.8rem);
@@ -2031,6 +2125,15 @@ button:disabled {
     width: min(430px, calc(100vw - 1rem));
     padding: 0.78rem 0.74rem 0.72rem;
     gap: 0.48rem;
+  }
+
+  .caps-select-panel {
+    width: min(430px, calc(100vw - 1rem));
+  }
+
+  .cap-pick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: min(42vh, 370px);
   }
 
   .play-setup-panel p {

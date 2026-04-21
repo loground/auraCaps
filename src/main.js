@@ -1,5 +1,6 @@
 import "./style.css";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
+import { getCapWeightMultiplier } from "./game/cap-physics.js";
 
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
@@ -216,7 +217,7 @@ function showPlaySetupModal({ theme }) {
           Classic: 2 caps duel. Land and spin to end with more green faces up.
         </p>
         <div class="play-setup-actions">
-          <button id="setupLaunchBtn" type="button">launch</button>
+          <button id="setupLaunchBtn" type="button">next</button>
         </div>
       </div>
     `;
@@ -333,6 +334,207 @@ function showPlaySetupModal({ theme }) {
   });
 }
 
+const CAP_OPTIONS = [
+  ...Array.from({ length: 9 }, (_, i) => ({
+    id: `classic-${i + 1}`,
+    name: `Cap ${i + 1}`,
+    imagePath: `/caps/${i + 1}.webp`,
+    collection: "ink's collection",
+    series: "beta",
+  })),
+  ...[
+    "/caps/jb/jbcap1.webp",
+    "/caps/jbcap2.webp",
+    "/caps/jb/jbcap3.webp",
+    "/caps/jb/jbcap4.webp",
+    "/caps/jb/jbcap5.webp",
+    "/caps/jb/jbcap6.webp",
+  ].map((path, i) => ({
+    id: `jungle-${i + 1}`,
+    name: `Jungle cap ${i + 1}`,
+    imagePath: path,
+    collection: "loground's collection",
+    series: "beta",
+  })),
+  ...[1, 2, 3].map((i) => ({
+    id: `slammer-${i}`,
+    name: `Slammer ${i}`,
+    imagePath: `/caps/slammer${i}.png`,
+    collection: "eazystyler's collection",
+    series: "beta",
+  })),
+];
+
+function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "play-setup-modal";
+    const isTraining = battleMode === "training";
+    overlay.innerHTML = `
+      <div class="play-setup-backdrop"></div>
+      <div class="play-setup-panel caps-select-panel">
+        <button id="capsCloseBtn" class="play-setup-close" type="button" aria-label="Close cap selection">×</button>
+        <h2>Select Caps</h2>
+        <p>${isTraining ? "Pick your cap from the grid." : "Pick caps from the grid for you and CPU."}</p>
+        <div class="cap-pick-targets">
+          <button id="pickPlayerBtn" class="mode-btn active" type="button">Selecting: You</button>
+          ${
+            isTraining
+              ? ""
+              : `<button id="pickCpuBtn" class="mode-btn" type="button">Selecting: CPU</button>`
+          }
+        </div>
+        <div id="capsGrid" class="cap-pick-grid" role="listbox" aria-label="Cap choices"></div>
+        <div class="cap-pick-summary">
+          <p id="playerCapHint" class="setup-hint"></p>
+          ${
+            isTraining
+              ? ""
+              : `<p id="cpuCapHint" class="setup-hint"></p>`
+          }
+        </div>
+        ${
+          isTraining
+            ? ""
+            : ``
+        }
+        <div class="play-setup-actions">
+          <button id="capsLaunchBtn" type="button">launch</button>
+        </div>
+      </div>
+    `;
+    app.appendChild(overlay);
+
+    const capsGrid = overlay.querySelector("#capsGrid");
+    const pickPlayerBtn = overlay.querySelector("#pickPlayerBtn");
+    const pickCpuBtn = overlay.querySelector("#pickCpuBtn");
+    const playerHint = overlay.querySelector("#playerCapHint");
+    const cpuHint = overlay.querySelector("#cpuCapHint");
+    const closeBtn = overlay.querySelector("#capsCloseBtn");
+    const launchBtn = overlay.querySelector("#capsLaunchBtn");
+    const backdrop = overlay.querySelector(".play-setup-backdrop");
+
+    const isBrainrot = theme === "brainrot";
+    const selectableCaps = CAP_OPTIONS.filter((cap) =>
+      gameMode === "slammer"
+        ? cap.id.startsWith("slammer-")
+        : !cap.id.startsWith("slammer-")
+    );
+    const byId = (id) => selectableCaps.find((cap) => cap.id === id) || selectableCaps[0];
+    const playerDefaultCandidate = gameMode === "slammer" ? "slammer-1" : "classic-1";
+    const cpuDefaultCandidate =
+      gameMode === "slammer" ? "slammer-3" : isBrainrot ? "classic-9" : "classic-8";
+    const playerDefault = byId(playerDefaultCandidate)?.id;
+    const cpuDefault = byId(cpuDefaultCandidate)?.id;
+    let selectedTarget = "player";
+    let selectedPlayerCapId = playerDefault;
+    let selectedCpuCapId = cpuDefault;
+
+    const capWeightText = (cap) => `${getCapWeightMultiplier(cap.imagePath).toFixed(2)}x`;
+    const renderHint = (label, cap) =>
+      `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}`;
+
+    const renderGrid = () => {
+      if (!capsGrid) {
+        return;
+      }
+      const selectedId =
+        selectedTarget === "cpu" && !isTraining ? selectedCpuCapId : selectedPlayerCapId;
+      capsGrid.innerHTML = selectableCaps
+        .map((cap) => {
+        const isSelected = cap.id === selectedId;
+        return `
+          <button
+            type="button"
+            class="cap-pick-card${isSelected ? " active" : ""}"
+            data-cap-id="${cap.id}"
+            role="option"
+            aria-selected="${isSelected ? "true" : "false"}"
+          >
+            <img src="${cap.imagePath}" alt="${cap.name}" loading="lazy" />
+            <span class="cap-pick-name">${cap.name}</span>
+            <span class="cap-pick-weight">Weight ${capWeightText(cap)}</span>
+          </button>
+        `;
+      })
+        .join("");
+
+      capsGrid.querySelectorAll(".cap-pick-card").forEach((button) => {
+        button.addEventListener("click", () => {
+          const capId = button.getAttribute("data-cap-id");
+          if (!capId) {
+            return;
+          }
+          if (selectedTarget === "cpu" && !isTraining) {
+            selectedCpuCapId = capId;
+          } else {
+            selectedPlayerCapId = capId;
+          }
+          updateHints();
+          renderGrid();
+        });
+      });
+    };
+
+    const updateTargetButtons = () => {
+      pickPlayerBtn?.classList.toggle("active", selectedTarget === "player");
+      pickCpuBtn?.classList.toggle("active", selectedTarget === "cpu");
+    };
+
+    const updateHints = () => {
+      if (playerHint) {
+        playerHint.textContent = renderHint("You", byId(selectedPlayerCapId));
+      }
+      if (cpuHint && !isTraining) {
+        cpuHint.textContent = renderHint("CPU", byId(selectedCpuCapId));
+      }
+    };
+    updateHints();
+    updateTargetButtons();
+    renderGrid();
+
+    const cleanup = () => {
+      pickPlayerBtn?.removeEventListener("click", onPickPlayer);
+      pickCpuBtn?.removeEventListener("click", onPickCpu);
+      closeBtn?.removeEventListener("click", onCancel);
+      launchBtn?.removeEventListener("click", onLaunch);
+      backdrop?.removeEventListener("click", onCancel);
+      overlay.remove();
+    };
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+    const onLaunch = () => {
+      const playerCap = byId(selectedPlayerCapId || playerDefault);
+      const cpuCap = byId(selectedCpuCapId || cpuDefault);
+      cleanup();
+      resolve({
+        playerCapPath: playerCap.imagePath,
+        cpuCapPath: isTraining ? null : cpuCap.imagePath,
+      });
+    };
+    const onPickPlayer = () => {
+      selectedTarget = "player";
+      updateTargetButtons();
+      renderGrid();
+    };
+    const onPickCpu = () => {
+      if (isTraining) {
+        return;
+      }
+      selectedTarget = "cpu";
+      updateTargetButtons();
+      renderGrid();
+    };
+    pickPlayerBtn?.addEventListener("click", onPickPlayer);
+    pickCpuBtn?.addEventListener("click", onPickCpu);
+    closeBtn?.addEventListener("click", onCancel);
+    launchBtn?.addEventListener("click", onLaunch);
+    backdrop?.addEventListener("click", onCancel);
+  });
+}
+
 function loadMenuModule() {
   menuModulePromise ??= import("./screens/menu.js");
   return menuModulePromise;
@@ -437,6 +639,17 @@ async function showPlay() {
   if (!setup) {
     return;
   }
+  const capSelection = await showCapSelectModal({
+    theme: currentTheme,
+    battleMode: setup.battleMode,
+    gameMode: setup.gameMode,
+  });
+  if (localVersion !== viewVersion) {
+    return;
+  }
+  if (!capSelection) {
+    return;
+  }
 
   clearCurrentScreen();
   setViewMode("play");
@@ -451,6 +664,8 @@ async function showPlay() {
     initialArenaKey: setup.arenaKey,
     battleMode: setup.battleMode,
     gameMode: setup.gameMode,
+    playerCapPath: capSelection.playerCapPath,
+    cpuCapPath: capSelection.cpuCapPath,
   });
   await game.init();
   if (localVersion !== viewVersion) {
