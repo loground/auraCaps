@@ -359,73 +359,36 @@ export function mountMenuScreen({
     uniform vec2 iResolution;
     varying vec2 vUv;
 
-    float rand(vec2 c){
-      return fract(sin(dot(c.xy ,vec2(12.9898,78.233))) * 43758.5453);
-    }
-
-    float noise(vec2 p, float freq ){
-      float unit = iResolution.x/freq;
-      vec2 ij = floor(p/unit);
-      vec2 xy = mod(p,unit)/unit;
-      xy = .5*(1.-cos(3.14159*xy));
-      float a = rand((ij+vec2(0.,0.)));
-      float b = rand((ij+vec2(1.,0.)));
-      float c = rand((ij+vec2(0.,1.)));
-      float d = rand((ij+vec2(1.,1.)));
-      float x1 = mix(a, b, xy.x);
-      float x2 = mix(c, d, xy.x);
-      return mix(x1, x2, xy.y);
-    }
-
-    float pNoise(vec2 p, int res){
-      float persistance = .5;
-      float n = 0.;
-      float normK = 0.;
-      float f = 4.;
-      float amp = 1.;
-      int iCount = 0;
-      for (int i = 0; i<50; i++){
-        n += amp * noise(p, f);
-        f *= 2.;
-        normK += amp;
-        amp *= persistance;
-        if (iCount == res) break;
-        iCount++;
-      }
-      float nf = n / max(normK, 0.0001);
-      return nf*nf*nf*nf;
-    }
-
-    float fbm(vec2 pos, int octaves, float lacunarity) {
-      float value = 0.0;
-      float scale = 1.0;
-      for(int i = 0; i < 12; i++) {
-        if(i >= octaves) break;
-        value += pNoise(pos * scale, 3) / scale;
-        scale *= lacunarity;
-      }
-      return value;
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
     }
 
     void main() {
-      vec2 fragCoord = vUv * iResolution.xy;
-      vec2 UV = fragCoord / iResolution.xy;
-      UV *= 500.0;
-      vec3 baseColor = vec3(0.5);
-      UV += sin(iTime) * 20.3;
-      float lowNoise = fbm(UV * fbm(UV * 30. + iTime * 20., 6, 2.0) * 199., 4, 2.0);
-      float midNoise = fbm(UV * fbm(UV * 10., 5, 2.0), 2, 2.0);
-      float highNoise = fbm(UV * fbm(UV * 20., 3, 2.0), 5, 2.0);
-      float finalNoise = lowNoise * 0.25 + midNoise * 0.25 + highNoise * 0.5;
-      vec3 color = baseColor;
-      color.rgb += sin(finalNoise * 10.0) * 0.2;
-      color.r += sin(iTime + finalNoise * 15.0) * 0.1;
-      color.g += sin(iTime + midNoise * 20.0) * 0.1;
-      color.b += sin(highNoise * 25.0) * 0.1;
+      vec2 uv = vUv * 2.0 - 1.0;
+      float t = iTime * 0.65;
+
+      vec3 baseA = vec3(0.18, 0.00, 0.30); // dark purple
+      vec3 baseB = vec3(0.03, 0.00, 0.10); // near-black violet
+      vec3 color = mix(baseB, baseA, vUv.y);
+
+      // Cheap animated bands and swirl.
+      float bands = sin((uv.y + t * 0.85) * 11.0) * 0.5 + 0.5;
+      float swirl = sin((uv.x * 1.7 + uv.y * 0.8 - t * 0.45) * 7.0) * 0.5 + 0.5;
+      float pulse = 0.5 + 0.5 * sin(t * 1.6);
+
+      // Tiny grain without expensive fbm loops.
+      float grain = hash(floor((uv + 1.0) * 46.0 + t * 3.0)) * 0.12;
+
+      vec3 pink = vec3(0.96, 0.23, 0.78);
+      vec3 cyan = vec3(0.20, 0.86, 1.00);
+      vec3 lime = vec3(0.74, 0.98, 0.22);
+
+      color = mix(color, pink, bands * 0.32);
+      color = mix(color, cyan, swirl * 0.28);
+      color += lime * (bands * swirl * pulse * 0.09);
+      color += grain;
       color = clamp(color, 0.0, 1.0);
-      color = color * (1.0 - finalNoise * 0.2);
-      color -= 0.5;
-      color *= 3.0;
+
       gl_FragColor = vec4(color, 1.0);
     }
   `;
@@ -551,7 +514,10 @@ export function mountMenuScreen({
   const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || "hell");
   let auraApi = null;
   let disconnectHandler = null;
+  let signinHandler = null;
   let auraSyncInFlight = false;
+  let auraSyncBurstTimer = null;
+  let auraSyncBurstLeft = 0;
 
   const normalizeAuraSession = (input) => {
     const user = input?.user || null;
@@ -578,11 +544,27 @@ export function mountMenuScreen({
     }
   };
 
+  const clearSigninHandler = () => {
+    if (signinHandler) {
+      auraLoginContainer?.removeEventListener("click", signinHandler);
+      signinHandler = null;
+    }
+  };
+
+  const stopAuraSyncBurst = () => {
+    if (auraSyncBurstTimer !== null) {
+      clearInterval(auraSyncBurstTimer);
+      auraSyncBurstTimer = null;
+    }
+    auraSyncBurstLeft = 0;
+  };
+
   const renderAuraDisconnect = () => {
     if (!auraLoginContainer) {
       return;
     }
     clearDisconnectHandler();
+    clearSigninHandler();
     auraLoginContainer.classList.remove("hidden");
     auraLoginContainer.innerHTML =
       '<button id="auraDisconnectBtn" class="theme-btn aura-disconnect-btn" type="button">disconnect</button>';
@@ -612,28 +594,63 @@ export function mountMenuScreen({
       return;
     }
     clearDisconnectHandler();
+    clearSigninHandler();
     auraLoginContainer.classList.remove("hidden");
-    auraLoginContainer.innerHTML = "";
-    if (!auraApi?.SigninButton) {
-      auraLoginContainer.innerHTML =
-        '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
-      return;
-    }
-    auraApi.SigninButton({
-      container: "#aura-login",
-      clientId: window.__AURA_CLIENT_ID__ || "your-app",
-      async onSuccess(result) {
-        const normalized = normalizeAuraSession(result);
-        if (normalized) {
-          setAuraConnectedStatus(normalized);
-          onAuraSuccess?.(normalized);
-          renderAuraDisconnect();
+    auraLoginContainer.innerHTML =
+      '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in with aura</button>';
+    signinHandler = async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest("#auraSigninBtn")) {
+        return;
+      }
+      try {
+        if (!auraApi) {
+          auraApi = await loadAuraSdk();
         }
-        await syncAuraSessionFromSdk();
-        console.log(result?.walletAddress);
-        console.log(result?.user);
-      },
-    });
+        const clientId = window.__AURA_CLIENT_ID__ || "your-app";
+
+        if (typeof auraApi?.signIn === "function") {
+          const result = await auraApi.signIn({
+            auraOrigin: AURA_ORIGIN,
+            clientId,
+            mode: "light",
+          });
+          const normalized = normalizeAuraSession(result);
+          if (normalized) {
+            setAuraConnectedStatus(normalized);
+            onAuraSuccess?.(normalized);
+            renderAuraDisconnect();
+            stopAuraSyncBurst();
+            return;
+          }
+        }
+
+        if (typeof auraApi?.SigninButton === "function") {
+          auraLoginContainer.innerHTML = "";
+          auraApi.SigninButton({
+            container: "#aura-login",
+            clientId,
+            onSuccess(result) {
+              const normalized = normalizeAuraSession(result);
+              if (normalized) {
+                setAuraConnectedStatus(normalized);
+                onAuraSuccess?.(normalized);
+                renderAuraDisconnect();
+                stopAuraSyncBurst();
+              }
+            },
+          });
+          startAuraSyncBurst();
+          return;
+        }
+
+        auraLoginContainer.innerHTML =
+          '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
+      } catch {
+        startAuraSyncBurst();
+      }
+    };
+    auraLoginContainer.addEventListener("click", signinHandler);
   };
 
   const syncAuraSessionFromSdk = async () => {
@@ -652,12 +669,34 @@ export function mountMenuScreen({
           return normalized;
         }
       }
+      if (typeof auraApi.getCurrentUser === "function") {
+        const user = await auraApi.getCurrentUser();
+        const normalized = normalizeAuraSession({ user });
+        if (normalized) {
+          setAuraConnectedStatus(normalized);
+          onAuraSuccess?.(normalized);
+          renderAuraDisconnect();
+          return normalized;
+        }
+      }
       return null;
     } catch {
       return null;
     } finally {
       auraSyncInFlight = false;
     }
+  };
+
+  const startAuraSyncBurst = () => {
+    stopAuraSyncBurst();
+    auraSyncBurstLeft = 15;
+    auraSyncBurstTimer = setInterval(async () => {
+      auraSyncBurstLeft -= 1;
+      const synced = await syncAuraSessionFromSdk();
+      if (synced || auraSyncBurstLeft <= 0) {
+        stopAuraSyncBurst();
+      }
+    }, 1200);
   };
 
   const setAuraConnectedStatus = (sessionLike) => {
@@ -824,6 +863,8 @@ export function mountMenuScreen({
     menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeSelectEl?.removeEventListener("change", onThemeSelect);
     clearDisconnectHandler();
+    clearSigninHandler();
+    stopAuraSyncBurst();
     window.removeEventListener("pointermove", onPointerMove);
     controls.dispose();
     dracoLoader.dispose();

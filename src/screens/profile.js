@@ -150,6 +150,20 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
             user: user || null,
           };
         }
+      } else if (typeof Aura?.getCurrentUser === "function") {
+        const user = await Aura.getCurrentUser();
+        const walletAddress =
+          user?.address ||
+          user?.walletAddress ||
+          (Array.isArray(user?.addresses) ? user.addresses[0] : "") ||
+          "";
+        if (user || walletAddress) {
+          sdkSession = {
+            connected: true,
+            walletAddress,
+            user: user || null,
+          };
+        }
       }
     } catch {
       // Ignore SDK fetch/read errors and fallback to stored session.
