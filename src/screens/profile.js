@@ -7,6 +7,36 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+const AURA_ORIGIN = "https://auramaxx.gg";
+const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
+
+function loadAuraSdk() {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== "undefined" && window.Aura) {
+      resolve(window.Aura);
+      return;
+    }
+    const existing = document.querySelector('script[data-aura-sdk="true"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(window.Aura), { once: true });
+      existing.addEventListener(
+        "error",
+        () => reject(new Error("Failed to load Aura SDK")),
+        { once: true }
+      );
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = AURA_SDK_URL;
+    script.async = true;
+    script.dataset.auraSdk = "true";
+    script.dataset.auraOrigin = AURA_ORIGIN;
+    script.onload = () => resolve(window.Aura);
+    script.onerror = () => reject(new Error("Failed to load Aura SDK"));
+    document.head.appendChild(script);
+  });
+}
+
 function pickLookupCandidates(auraSession) {
   const user = auraSession?.user || {};
   const candidates = [];
@@ -101,58 +131,85 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
   const profileCard = app.querySelector("#profileCard");
   backBtn?.addEventListener("click", onBack);
 
-  if (!auraSession?.connected) {
-    renderProfileError(
-      profileCard,
-      "Connect with Aura in main menu first to load profile data."
-    );
-  } else {
-    const candidates = pickLookupCandidates(auraSession);
+  let aborted = false;
+  const run = async () => {
+    let sdkSession = null;
+    try {
+      const Aura = await loadAuraSdk();
+      if (typeof Aura?.getUser === "function") {
+        const user = await Aura.getUser();
+        const walletAddress =
+          user?.address ||
+          user?.walletAddress ||
+          (Array.isArray(user?.addresses) ? user.addresses[0] : "") ||
+          "";
+        if (user || walletAddress) {
+          sdkSession = {
+            connected: true,
+            walletAddress,
+            user: user || null,
+          };
+        }
+      }
+    } catch {
+      // Ignore SDK fetch/read errors and fallback to stored session.
+    }
+
+    const effectiveSession = sdkSession || auraSession || null;
+    const candidates = pickLookupCandidates(effectiveSession);
+
     if (candidates.length === 0) {
-      renderProfileError(
-        profileCard,
-        "No Aura username, wallet, or user id found in current session."
-      );
-    } else {
-      let aborted = false;
-      const run = async () => {
-        for (const candidate of candidates) {
-          try {
-            const url =
-              candidate.type === "userId"
-                ? `https://api.auramaxx.gg/api/users/${encodeURIComponent(candidate.value)}`
-                : `https://api.auramaxx.gg/api/users/lookup?username=${encodeURIComponent(
-                    candidate.value
-                  )}`;
-            const response = await fetch(url);
-            if (!response.ok) {
-              continue;
-            }
-            const json = await response.json();
-            const profile = json?.user || json?.data || json;
-            if (!profile || typeof profile !== "object") {
-              continue;
-            }
-            if (!aborted) {
-              renderProfileData(profileCard, profile);
-            }
-            return;
-          } catch {
-            // try next candidate
-          }
+      if (!aborted) {
+        renderProfileError(
+          profileCard,
+          "No Aura username, wallet, or user id found. Connect with Aura first."
+        );
+      }
+      return;
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const url =
+          candidate.type === "userId"
+            ? `https://api.auramaxx.gg/api/users/${encodeURIComponent(candidate.value)}`
+            : `https://api.auramaxx.gg/api/users/lookup?username=${encodeURIComponent(
+                candidate.value
+              )}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+          continue;
+        }
+        const json = await response.json();
+        const profile = json?.user || json?.data || json;
+        if (!profile || typeof profile !== "object") {
+          continue;
         }
         if (!aborted) {
-          renderProfileError(
-            profileCard,
-            "Could not load Aura profile with current session identifiers."
-          );
+          renderProfileData(profileCard, profile);
         }
-      };
-      run();
+        return;
+      } catch {
+        // try next candidate
+      }
     }
-  }
+
+    if (!aborted && effectiveSession?.user) {
+      renderProfileData(profileCard, effectiveSession.user);
+      return;
+    }
+
+    if (!aborted) {
+      renderProfileError(
+        profileCard,
+        "Could not load Aura profile right now."
+      );
+    }
+  };
+  run();
 
   return () => {
+    aborted = true;
     backBtn?.removeEventListener("click", onBack);
   };
 }

@@ -551,6 +551,25 @@ export function mountMenuScreen({
   const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || "hell");
   let auraApi = null;
   let disconnectHandler = null;
+  let auraSyncInFlight = false;
+
+  const normalizeAuraSession = (input) => {
+    const user = input?.user || null;
+    const walletAddress =
+      input?.walletAddress ||
+      user?.address ||
+      user?.walletAddress ||
+      (Array.isArray(user?.addresses) ? user.addresses[0] : "") ||
+      "";
+    if (!walletAddress && !user) {
+      return null;
+    }
+    return {
+      connected: true,
+      walletAddress,
+      user,
+    };
+  };
 
   const clearDisconnectHandler = () => {
     if (disconnectHandler) {
@@ -575,6 +594,8 @@ export function mountMenuScreen({
       try {
         if (auraApi && typeof auraApi.SignOut === "function") {
           await auraApi.SignOut();
+        } else if (auraApi && typeof auraApi.signOut === "function") {
+          await auraApi.signOut();
         }
       } catch {
         // Ignore sign-out API errors, local disconnect still applies.
@@ -601,18 +622,42 @@ export function mountMenuScreen({
     auraApi.SigninButton({
       container: "#aura-login",
       clientId: window.__AURA_CLIENT_ID__ || "your-app",
-      onSuccess(result) {
-        setAuraConnectedStatus({
-          connected: true,
-          walletAddress: result?.walletAddress,
-          user: result?.user,
-        });
-        onAuraSuccess?.(result);
-        renderAuraDisconnect();
+      async onSuccess(result) {
+        const normalized = normalizeAuraSession(result);
+        if (normalized) {
+          setAuraConnectedStatus(normalized);
+          onAuraSuccess?.(normalized);
+          renderAuraDisconnect();
+        }
+        await syncAuraSessionFromSdk();
         console.log(result?.walletAddress);
         console.log(result?.user);
       },
     });
+  };
+
+  const syncAuraSessionFromSdk = async () => {
+    if (!auraApi || auraSyncInFlight) {
+      return null;
+    }
+    auraSyncInFlight = true;
+    try {
+      if (typeof auraApi.getUser === "function") {
+        const user = await auraApi.getUser();
+        const normalized = normalizeAuraSession({ user });
+        if (normalized) {
+          setAuraConnectedStatus(normalized);
+          onAuraSuccess?.(normalized);
+          renderAuraDisconnect();
+          return normalized;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      auraSyncInFlight = false;
+    }
   };
 
   const setAuraConnectedStatus = (sessionLike) => {
@@ -634,28 +679,9 @@ export function mountMenuScreen({
     loadAuraSdk()
     .then(async (Aura) => {
       auraApi = Aura;
-      try {
-        if (typeof auraApi?.getUser === "function") {
-          const user = await auraApi.getUser();
-          const walletAddress =
-            user?.address ||
-            user?.walletAddress ||
-            (Array.isArray(user?.addresses) ? user.addresses[0] : "") ||
-            "";
-          if (user || walletAddress) {
-            const normalized = {
-              connected: true,
-              walletAddress,
-              user: user || null,
-            };
-            setAuraConnectedStatus(normalized);
-            onAuraSuccess?.(normalized);
-            renderAuraDisconnect();
-            return;
-          }
-        }
-      } catch {
-        // If no active Aura session is available via SDK, show sign-in button.
+      const restored = await syncAuraSessionFromSdk();
+      if (restored) {
+        return;
       }
       renderAuraSignin();
     })
@@ -667,10 +693,17 @@ export function mountMenuScreen({
     loadAuraSdk()
       .then((Aura) => {
         auraApi = Aura;
+        syncAuraSessionFromSdk();
       })
       .catch(() => {});
     renderAuraDisconnect();
   }
+
+  const onWindowFocus = () => {
+    syncAuraSessionFromSdk();
+  };
+  window.addEventListener("focus", onWindowFocus);
+  document.addEventListener("visibilitychange", onWindowFocus);
 
   const revealMenu = () => {
     preloader.classList.add("hidden");
@@ -783,6 +816,8 @@ export function mountMenuScreen({
       cancelAnimationFrame(rafId);
     }
     window.removeEventListener("resize", handleResize);
+    window.removeEventListener("focus", onWindowFocus);
+    document.removeEventListener("visibilitychange", onWindowFocus);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
     profileButton?.removeEventListener("click", onProfile);
