@@ -156,6 +156,7 @@ let viewVersion = 0;
 let currentTheme = pickRefreshTheme();
 let menuModulePromise = null;
 let collectionModulePromise = null;
+let profileModulePromise = null;
 let gameModulePromise = null;
 
 function pickRefreshTheme() {
@@ -545,6 +546,11 @@ function loadCollectionModule() {
   return collectionModulePromise;
 }
 
+function loadProfileModule() {
+  profileModulePromise ??= import("./screens/profile.js");
+  return profileModulePromise;
+}
+
 function loadGameModule() {
   gameModulePromise ??= import("./game/DiscDropGame.js");
   return gameModulePromise;
@@ -627,6 +633,7 @@ async function showMenu() {
     },
     onPlay: showPlay,
     onCollection: showCollection,
+    onProfile: showProfile,
   });
 }
 
@@ -684,6 +691,20 @@ async function showCollection() {
   }
   cleanupScreen = composeCleanups(
     mountCollectionScreen({ app, onBack: showMenu }),
+    addGlobalMuteButton()
+  );
+}
+
+async function showProfile() {
+  const localVersion = ++viewVersion;
+  clearCurrentScreen();
+  setViewMode("profile");
+  const { mountProfileScreen } = await loadProfileModule();
+  if (localVersion !== viewVersion) {
+    return;
+  }
+  cleanupScreen = composeCleanups(
+    mountProfileScreen({ app, onBack: showMenu, auraSession }),
     addGlobalMuteButton()
   );
 }

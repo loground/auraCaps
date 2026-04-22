@@ -1084,6 +1084,112 @@ button:disabled {
   overflow: hidden;
 }
 
+.profile-screen {
+  width: 100%;
+  height: 100%;
+  padding: 2.2rem 1.2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+}
+
+.profile-screen h2 {
+  margin: 0 0 0.7rem;
+  font-family: "Hell", "Teko", sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  color: #ffb08a;
+}
+
+.profile-card {
+  width: min(900px, 96vw);
+  border: 1px solid rgba(255, 126, 87, 0.42);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(55, 14, 12, 0.78), rgba(22, 6, 5, 0.78));
+  box-shadow: inset 0 0 22px rgba(255, 90, 45, 0.12);
+  padding: 1rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.profile-status {
+  margin: 0;
+  color: #f4b694;
+}
+
+.profile-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.profile-avatar {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 170, 132, 0.7);
+}
+
+.profile-avatar.placeholder {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, #5b1f18, #180607);
+  color: #ffe7d7;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.profile-title-block h3 {
+  margin: 0;
+  color: #ffd0bb;
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+}
+
+.profile-username {
+  margin: 0.2rem 0 0;
+  color: #f4b694;
+  font-size: 0.95rem;
+}
+
+.profile-bio {
+  margin: 0;
+  color: #ffdccc;
+  line-height: 1.4;
+}
+
+.profile-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.58rem;
+}
+
+.profile-meta-item {
+  border: 1px solid rgba(255, 151, 112, 0.32);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(66, 17, 14, 0.4);
+  display: grid;
+  gap: 0.14rem;
+}
+
+.profile-meta-item span {
+  color: #f4b694;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.profile-meta-item strong {
+  color: #ffe6d9;
+  font-size: 0.86rem;
+  word-break: break-word;
+}
+
 .mode-play {
   background:
     radial-gradient(circle at 16% 12%, #5f1812 0%, transparent 34%),
@@ -1472,6 +1578,19 @@ button:disabled {
 }
 
 #app.theme-brainrot.mode-collection {
+  background:
+    repeating-linear-gradient(
+      135deg,
+      rgba(255, 39, 208, 0.16) 0 16px,
+      rgba(33, 255, 163, 0.16) 16px 32px,
+      rgba(0, 191, 255, 0.16) 32px 48px
+    ),
+    radial-gradient(circle at 12% 20%, #8e00ff 0%, transparent 34%),
+    radial-gradient(circle at 82% 14%, #ff7b00 0%, transparent 32%),
+    linear-gradient(180deg, #220033 0%, #080015 100%);
+}
+
+#app.theme-brainrot.mode-profile {
   background:
     repeating-linear-gradient(
       135deg,
@@ -2089,6 +2208,42 @@ button:disabled {
   color: #fffce8;
 }
 
+.theme-brainrot .profile-card {
+  border: 2px dashed rgba(255, 246, 127, 0.86);
+  background:
+    linear-gradient(135deg, rgba(126, 0, 194, 0.68), rgba(0, 112, 195, 0.62)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.12) 0 6px,
+      rgba(0, 0, 0, 0.08) 6px 12px
+    );
+  box-shadow: 0 0 0 2px rgba(88, 0, 136, 0.5), 0 0 20px rgba(255, 122, 45, 0.4);
+}
+
+.theme-brainrot .profile-screen h2,
+.theme-brainrot .profile-title-block h3 {
+  color: #fff8be;
+}
+
+.theme-brainrot .profile-status,
+.theme-brainrot .profile-username,
+.theme-brainrot .profile-bio,
+.theme-brainrot .profile-meta-item span,
+.theme-brainrot .profile-meta-item strong {
+  color: #fff8be;
+}
+
+.theme-brainrot .profile-meta-item {
+  border: 1px dashed rgba(255, 252, 147, 0.9);
+  background:
+    linear-gradient(90deg, rgba(161, 0, 255, 0.66), rgba(255, 93, 0, 0.64)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.14) 0 6px,
+      rgba(0, 0, 0, 0.08) 6px 12px
+    );
+}
+
 @media (min-width: 641px) {
   .mode-collection .global-mute-btn {
     left: calc(env(safe-area-inset-left, 0px) + 0.8rem);
@@ -2276,6 +2431,21 @@ button:disabled {
     flex-direction: column;
     gap: 0.75rem;
     padding-bottom: 0.75rem;
+  }
+
+  .profile-card {
+    width: min(440px, 100%);
+    padding: 0.75rem;
+  }
+
+  .profile-header {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .profile-meta-grid {
+    grid-template-columns: 1fr;
   }
 
   .collection-screen {
