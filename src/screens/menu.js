@@ -756,10 +756,20 @@ export function mountMenuScreen({
             onClose(error) {
               auraDebugLog("Aura.SigninButton onClose", error);
               setAuraHint(error?.message || "Aura login closed.");
+              readAuraSessionFromSdk().then((restoredFromSdk) => {
+                auraDebugLog("onClose restoredFromSdk", restoredFromSdk);
+                if (restoredFromSdk) {
+                  applyConnectedSession(restoredFromSdk);
+                  setAuraHint("");
+                  return;
+                }
+                startAuraSyncBurst();
+              });
             },
             onError(error) {
               auraDebugLog("Aura.SigninButton onError", error);
               setAuraHint(error?.message || "Aura login failed.");
+              startAuraSyncBurst();
             },
             onSuccess(result) {
               auraDebugLog("Aura.SigninButton onSuccess", result);
