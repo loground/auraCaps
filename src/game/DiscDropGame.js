@@ -409,9 +409,35 @@ export class DiscDropGame {
     }
 
     this.useArenaMeshFloor = this.arenaSurfaceColliders.length > 0;
-    // Keep base floor enabled as a safety net against deep penetration.
-    // Brainrot has its own full-coverage floor collider aligned to the map.
-    this.floorCollider.setEnabled(this.theme !== "brainrot");
+    // When arena mesh floor exists, disable the flat fallback floor collider so
+    // holes/lava/edges behave naturally in themed arenas.
+    this.floorCollider.setEnabled(!this.useArenaMeshFloor);
+  }
+
+  getArenaSurfaceSpawnY(x, z, fallbackY) {
+    if (!this.useArenaMeshFloor || !this.arenaVisualRoot) {
+      return fallbackY;
+    }
+
+    const meshes = [];
+    this.arenaVisualRoot.traverse((child) => {
+      if (child.isMesh && child.visible) {
+        meshes.push(child);
+      }
+    });
+    if (meshes.length === 0) {
+      return fallbackY;
+    }
+
+    const raycaster = this._raycaster ?? new THREE.Raycaster();
+    const rayOriginY = 80;
+    raycaster.set(new THREE.Vector3(x, rayOriginY, z), new THREE.Vector3(0, -1, 0));
+    const hits = raycaster.intersectObjects(meshes, false);
+    if (!hits.length) {
+      return fallbackY;
+    }
+
+    return hits[0].point.y + DISC_HALF_HEIGHT + 0.003;
   }
 
   createLavaMaterial() {
@@ -1227,6 +1253,11 @@ export class DiscDropGame {
     const arena = ARENA_CONFIGS[this.activeArenaKey];
     const lowerStart = arena?.lowerStart || { x: 0, z: 0 };
     const lowerStartY = arena?.lowerStartY ?? LOWER_DISC_START_Y;
+    const lowerSpawnY = this.getArenaSurfaceSpawnY(
+      lowerStart.x,
+      lowerStart.z,
+      lowerStartY
+    );
     const textureWeight = (texture) =>
       getCapWeightMultiplier(texture?.userData?.sourcePath);
     const activeThrower = resetTurnResults ? "player" : this.currentThrower || "player";
@@ -1307,7 +1338,7 @@ export class DiscDropGame {
       this.lowerDiscBody = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.dynamic().setTranslation(
           lowerStart.x,
-          lowerStartY,
+          lowerSpawnY,
           lowerStart.z
         )
       );
@@ -1349,7 +1380,7 @@ export class DiscDropGame {
       this.upperDiscBody.setAdditionalSolverIterations(8);
       this.upperDiscBody.enableCcd(true);
       this.upperDiscBody.setSoftCcdPrediction(0.3);
-      this.minLaunchClearance = LOWER_DISC_START_Y + DISC_HEIGHT * 2.4;
+      this.minLaunchClearance = lowerSpawnY + DISC_HEIGHT * 2.4;
     }
 
     this.hasLaunched = false;
