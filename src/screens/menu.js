@@ -8,6 +8,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 const AURA_ORIGIN = "https://auramaxx.gg";
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
+const AURA_CLIENT_ID_STORAGE_KEY = "aura_client_id";
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -36,6 +37,25 @@ function loadAuraSdk() {
     script.onerror = () => reject(new Error("Failed to load Aura SDK"));
     document.head.appendChild(script);
   });
+}
+
+function safeCall(fn, context) {
+  try {
+    const value = fn.call(context);
+    return Promise.resolve(value).catch(() => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+function pickFirstString(...values) {
+  for (const value of values) {
+    const s = String(value || "").trim();
+    if (s) {
+      return s;
+    }
+  }
+  return "";
 }
 
 export function mountMenuScreen({
@@ -518,16 +538,83 @@ export function mountMenuScreen({
   let auraSyncInFlight = false;
   let auraSyncBurstTimer = null;
   let auraSyncBurstLeft = 0;
+  const resolveAuraClientId = () => {
+    const fromWindow = pickFirstString(window.__AURA_CLIENT_ID__);
+    const fromMeta = pickFirstString(
+      document.querySelector('meta[name="aura-client-id"]')?.getAttribute("content")
+    );
+    const fromStorage = pickFirstString(
+      window.localStorage.getItem(AURA_CLIENT_ID_STORAGE_KEY)
+    );
+    const fromHostname =
+      window.location.hostname && window.location.hostname !== "localhost"
+        ? `aura-caps-${window.location.hostname}`
+        : "";
+    return fromWindow || fromMeta || fromStorage || fromHostname || "your-app";
+  };
+
+  const extractLikelyPayloads = (input) => {
+    const queue = [input];
+    const out = [];
+    const seen = new Set();
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item || typeof item !== "object" || seen.has(item)) {
+        continue;
+      }
+      seen.add(item);
+      out.push(item);
+      queue.push(item.result, item.data, item.payload, item.session, item.user);
+    }
+    return out;
+  };
 
   const normalizeAuraSession = (input) => {
-    const user = input?.user || null;
-    const walletAddress =
-      input?.walletAddress ||
-      user?.address ||
-      user?.walletAddress ||
-      (Array.isArray(user?.addresses) ? user.addresses[0] : "") ||
-      "";
-    if (!walletAddress && !user) {
+    const payloads = extractLikelyPayloads(input);
+    let user = null;
+    let walletAddress = "";
+
+    for (const payload of payloads) {
+      const candidateUser =
+        payload?.user ||
+        payload?.profile ||
+        payload?.account ||
+        payload?.data?.user ||
+        payload?.data?.profile ||
+        payload?.result?.user ||
+        payload?.result?.profile ||
+        null;
+      if (!user && candidateUser && typeof candidateUser === "object") {
+        user = candidateUser;
+      }
+
+      const candidateWallet = pickFirstString(
+        payload?.walletAddress,
+        payload?.wallet,
+        payload?.address,
+        payload?.ethAddress,
+        payload?.user?.walletAddress,
+        payload?.user?.wallet,
+        payload?.user?.address,
+        payload?.profile?.walletAddress,
+        payload?.profile?.wallet,
+        payload?.profile?.address,
+        payload?.account?.walletAddress,
+        payload?.account?.address,
+        Array.isArray(payload?.addresses) ? payload.addresses[0] : "",
+        Array.isArray(payload?.user?.addresses) ? payload.user.addresses[0] : ""
+      );
+      if (!walletAddress && candidateWallet) {
+        walletAddress = candidateWallet;
+      }
+    }
+
+    const hasIdentity =
+      Boolean(walletAddress) ||
+      Boolean(user) ||
+      Boolean(input?.connected) ||
+      Boolean(input?.isConnected);
+    if (!hasIdentity) {
       return null;
     }
     return {
@@ -607,7 +694,12 @@ export function mountMenuScreen({
         if (!auraApi) {
           auraApi = await loadAuraSdk();
         }
-        const clientId = window.__AURA_CLIENT_ID__ || "your-app";
+        const clientId = resolveAuraClientId();
+        try {
+          window.localStorage.setItem(AURA_CLIENT_ID_STORAGE_KEY, clientId);
+        } catch {
+          // Ignore storage errors.
+        }
 
         if (typeof auraApi?.signIn === "function") {
           const result = await auraApi.signIn({
@@ -615,12 +707,13 @@ export function mountMenuScreen({
             clientId,
             mode: "light",
           });
-          const normalized = normalizeAuraSession(result);
+          const normalized = applyConnectedSession(result);
           if (normalized) {
-            setAuraConnectedStatus(normalized);
-            onAuraSuccess?.(normalized);
-            renderAuraDisconnect();
-            stopAuraSyncBurst();
+            return;
+          }
+          const restoredFromSdk = await readAuraSessionFromSdk();
+          if (restoredFromSdk) {
+            applyConnectedSession(restoredFromSdk);
             return;
           }
         }
@@ -631,13 +724,15 @@ export function mountMenuScreen({
             container: "#aura-login",
             clientId,
             onSuccess(result) {
-              const normalized = normalizeAuraSession(result);
+              const normalized = applyConnectedSession(result);
               if (normalized) {
-                setAuraConnectedStatus(normalized);
-                onAuraSuccess?.(normalized);
-                renderAuraDisconnect();
-                stopAuraSyncBurst();
+                return;
               }
+              readAuraSessionFromSdk().then((restoredFromSdk) => {
+                if (restoredFromSdk) {
+                  applyConnectedSession(restoredFromSdk);
+                }
+              });
             },
           });
           startAuraSyncBurst();
@@ -653,33 +748,67 @@ export function mountMenuScreen({
     auraLoginContainer.addEventListener("click", signinHandler);
   };
 
+  const readAuraSessionFromSdk = async () => {
+    if (!auraApi) {
+      return null;
+    }
+
+    let normalized = null;
+    if (typeof auraApi.getSession === "function") {
+      const session = await safeCall(auraApi.getSession, auraApi);
+      normalized = normalizeAuraSession(session);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    if (typeof auraApi.getCurrentUser === "function") {
+      const user = await safeCall(auraApi.getCurrentUser, auraApi);
+      normalized = normalizeAuraSession({ user });
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    if (typeof auraApi.getWalletAddress === "function") {
+      const walletAddress = await safeCall(auraApi.getWalletAddress, auraApi);
+      normalized = normalizeAuraSession({ walletAddress });
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    if (typeof auraApi.getUser === "function") {
+      const user = await safeCall(auraApi.getUser, auraApi);
+      normalized = normalizeAuraSession({ user });
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    return null;
+  };
+
+  const applyConnectedSession = (sessionLike) => {
+    const normalized = normalizeAuraSession(sessionLike);
+    if (!normalized) {
+      return null;
+    }
+    setAuraConnectedStatus(normalized);
+    onAuraSuccess?.(normalized);
+    renderAuraDisconnect();
+    stopAuraSyncBurst();
+    return normalized;
+  };
+
   const syncAuraSessionFromSdk = async () => {
     if (!auraApi || auraSyncInFlight) {
       return null;
     }
     auraSyncInFlight = true;
     try {
-      if (typeof auraApi.getUser === "function") {
-        const user = await auraApi.getUser();
-        const normalized = normalizeAuraSession({ user });
-        if (normalized) {
-          setAuraConnectedStatus(normalized);
-          onAuraSuccess?.(normalized);
-          renderAuraDisconnect();
-          return normalized;
-        }
-      }
-      if (typeof auraApi.getCurrentUser === "function") {
-        const user = await auraApi.getCurrentUser();
-        const normalized = normalizeAuraSession({ user });
-        if (normalized) {
-          setAuraConnectedStatus(normalized);
-          onAuraSuccess?.(normalized);
-          renderAuraDisconnect();
-          return normalized;
-        }
-      }
-      return null;
+      const normalized = await readAuraSessionFromSdk();
+      return normalized ? applyConnectedSession(normalized) : null;
     } catch {
       return null;
     } finally {
@@ -706,6 +835,18 @@ export function mountMenuScreen({
     const connected = Boolean(sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected);
     auraConnectedStatus.classList.toggle("visible", connected);
     auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : "";
+  };
+
+  const onAuraMessage = (event) => {
+    if (event.origin !== AURA_ORIGIN) {
+      return;
+    }
+    const type = event.data?.type;
+    if (type !== "aura.login.result") {
+      return;
+    }
+    const payload = event.data?.result ?? event.data;
+    applyConnectedSession(payload);
   };
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
@@ -742,6 +883,7 @@ export function mountMenuScreen({
     syncAuraSessionFromSdk();
   };
   window.addEventListener("focus", onWindowFocus);
+  window.addEventListener("message", onAuraMessage);
   document.addEventListener("visibilitychange", onWindowFocus);
 
   const revealMenu = () => {
@@ -856,6 +998,7 @@ export function mountMenuScreen({
     }
     window.removeEventListener("resize", handleResize);
     window.removeEventListener("focus", onWindowFocus);
+    window.removeEventListener("message", onAuraMessage);
     document.removeEventListener("visibilitychange", onWindowFocus);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);

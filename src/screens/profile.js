@@ -9,6 +9,7 @@ function escapeHtml(value) {
 
 const AURA_ORIGIN = "https://auramaxx.gg";
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
+const AURA_SESSION_KEY = "aura_session_v1";
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -35,6 +36,29 @@ function loadAuraSdk() {
     script.onerror = () => reject(new Error("Failed to load Aura SDK"));
     document.head.appendChild(script);
   });
+}
+
+function readStoredAuraSession() {
+  try {
+    const raw = window.localStorage.getItem(AURA_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    const hasIdentity = Boolean(parsed?.connected || parsed?.walletAddress || parsed?.user);
+    return hasIdentity
+      ? {
+          connected: true,
+          walletAddress: parsed.walletAddress || "",
+          user: parsed.user || null,
+        }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function pickLookupCandidates(auraSession) {
@@ -133,11 +157,27 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
 
   let aborted = false;
   const run = async () => {
+    const storedSession = readStoredAuraSession();
     let sdkSession = null;
     try {
       const Aura = await loadAuraSdk();
-      if (typeof Aura?.getUser === "function") {
-        const user = await Aura.getUser();
+      if (typeof Aura?.getSession === "function") {
+        const session = await Aura.getSession();
+        const walletAddress =
+          session?.walletAddress ||
+          session?.user?.address ||
+          session?.user?.walletAddress ||
+          "";
+        if (session?.user || walletAddress || session?.connected || session?.authenticated) {
+          sdkSession = {
+            connected: true,
+            walletAddress,
+            user: session?.user || null,
+          };
+        }
+      }
+      if (!sdkSession && typeof Aura?.getCurrentUser === "function") {
+        const user = await Aura.getCurrentUser();
         const walletAddress =
           user?.address ||
           user?.walletAddress ||
@@ -150,8 +190,9 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
             user: user || null,
           };
         }
-      } else if (typeof Aura?.getCurrentUser === "function") {
-        const user = await Aura.getCurrentUser();
+      }
+      if (!sdkSession && typeof Aura?.getUser === "function") {
+        const user = await Aura.getUser();
         const walletAddress =
           user?.address ||
           user?.walletAddress ||
@@ -169,7 +210,10 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       // Ignore SDK fetch/read errors and fallback to stored session.
     }
 
-    const effectiveSession = sdkSession || auraSession || null;
+    const effectiveSession = sdkSession || storedSession || auraSession || null;
+    if (!aborted && effectiveSession?.user) {
+      renderProfileData(profileCard, effectiveSession.user);
+    }
     const candidates = pickLookupCandidates(effectiveSession);
 
     if (candidates.length === 0) {

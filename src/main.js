@@ -21,15 +21,20 @@ function loadAuraSession() {
       return null;
     }
     const parsed = JSON.parse(raw);
+    const walletAddress =
+      parsed?.walletAddress ||
+      parsed?.user?.walletAddress ||
+      parsed?.user?.address ||
+      "";
     const hasUserIdentity = Boolean(
-      parsed?.connected || parsed?.walletAddress || parsed?.user
+      parsed?.connected || parsed?.authenticated || walletAddress || parsed?.user
     );
     if (!parsed || !hasUserIdentity) {
       return null;
     }
     return {
       connected: true,
-      walletAddress: parsed.walletAddress || "",
+      walletAddress,
       user: parsed.user || null,
     };
   } catch {
