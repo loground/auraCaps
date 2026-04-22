@@ -753,6 +753,14 @@ export function mountMenuScreen({
             container: "#aura-login",
             clientId,
             mode: "light",
+            onClose(error) {
+              auraDebugLog("Aura.SigninButton onClose", error);
+              setAuraHint(error?.message || "Aura login closed.");
+            },
+            onError(error) {
+              auraDebugLog("Aura.SigninButton onError", error);
+              setAuraHint(error?.message || "Aura login failed.");
+            },
             onSuccess(result) {
               auraDebugLog("Aura.SigninButton onSuccess", result);
               const normalized = applyConnectedSession(result);
@@ -878,14 +886,14 @@ export function mountMenuScreen({
 
   const startAuraSyncBurst = () => {
     stopAuraSyncBurst();
-    auraSyncBurstLeft = 15;
+    auraSyncBurstLeft = 50;
     auraSyncBurstTimer = setInterval(async () => {
       auraSyncBurstLeft -= 1;
       const synced = await syncAuraSessionFromSdk();
       if (synced || auraSyncBurstLeft <= 0) {
         stopAuraSyncBurst();
       }
-    }, 1200);
+    }, 1500);
   };
 
   const setAuraConnectedStatus = (sessionLike) => {
