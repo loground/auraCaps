@@ -21,7 +21,10 @@ function loadAuraSession() {
       return null;
     }
     const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.connected) {
+    const hasUserIdentity = Boolean(
+      parsed?.connected || parsed?.walletAddress || parsed?.user
+    );
+    if (!parsed || !hasUserIdentity) {
       return null;
     }
     return {

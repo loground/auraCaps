@@ -58,6 +58,8 @@ export function mountMenuScreen({
     }
     return "connected with aura";
   };
+  const hasConnectedSession = (sessionLike) =>
+    Boolean(sessionLike?.connected || sessionLike?.walletAddress || sessionLike?.user);
 
   app.innerHTML = `
     <div class="menu-overlay">
@@ -628,10 +630,33 @@ export function mountMenuScreen({
   themeSelectEl?.addEventListener("change", onThemeSelect);
   menuButtons.classList.add("disabled");
 
-  if (!auraSession?.connected) {
+  if (!hasConnectedSession(auraSession)) {
     loadAuraSdk()
-    .then((Aura) => {
+    .then(async (Aura) => {
       auraApi = Aura;
+      try {
+        if (typeof auraApi?.getUser === "function") {
+          const user = await auraApi.getUser();
+          const walletAddress =
+            user?.address ||
+            user?.walletAddress ||
+            (Array.isArray(user?.addresses) ? user.addresses[0] : "") ||
+            "";
+          if (user || walletAddress) {
+            const normalized = {
+              connected: true,
+              walletAddress,
+              user: user || null,
+            };
+            setAuraConnectedStatus(normalized);
+            onAuraSuccess?.(normalized);
+            renderAuraDisconnect();
+            return;
+          }
+        }
+      } catch {
+        // If no active Aura session is available via SDK, show sign-in button.
+      }
       renderAuraSignin();
     })
     .catch(() => {
