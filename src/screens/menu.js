@@ -65,9 +65,7 @@ function auraDebugLog(...args) {
       console.log("[AURA]", ...args);
       return;
     }
-    const enabled =
-      window.localStorage.getItem(AURA_DEBUG_KEY) === "1" ||
-      false;
+    const enabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
     if (enabled) {
       console.log("[AURA]", ...args);
     }
@@ -710,13 +708,8 @@ export function mountMenuScreen({
     clearDisconnectHandler();
     clearSigninHandler();
     auraLoginContainer.classList.remove("hidden");
-    auraLoginContainer.innerHTML =
-      '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in with aura</button>';
-    signinHandler = async (event) => {
-      const target = event.target;
-      if (!(target instanceof Element) || !target.closest("#auraSigninBtn")) {
-        return;
-      }
+    auraLoginContainer.innerHTML = "";
+    signinHandler = async () => {
       try {
         if (!auraApi) {
           auraApi = await loadAuraSdk();
@@ -730,31 +723,12 @@ export function mountMenuScreen({
           // Ignore storage errors.
         }
 
-        if (typeof auraApi?.signIn === "function") {
-          const result = await auraApi.signIn({
-            auraOrigin: AURA_ORIGIN,
-            clientId,
-            mode: "light",
-          });
-          auraDebugLog("Aura.signIn result", result);
-          const normalized = applyConnectedSession(result);
-          if (normalized) {
-            return;
-          }
-          const restoredFromSdk = await readAuraSessionFromSdk();
-          auraDebugLog("Aura.signIn fallback restoredFromSdk", restoredFromSdk);
-          if (restoredFromSdk) {
-            applyConnectedSession(restoredFromSdk);
-            return;
-          }
-        }
-
         if (typeof auraApi?.SigninButton === "function") {
-          auraLoginContainer.innerHTML = "";
           auraDebugLog("mounting Aura.SigninButton");
           auraApi.SigninButton({
             container: "#aura-login",
             clientId,
+            mode: "light",
             onSuccess(result) {
               auraDebugLog("Aura.SigninButton onSuccess", result);
               const normalized = applyConnectedSession(result);
@@ -774,13 +748,30 @@ export function mountMenuScreen({
         }
 
         auraLoginContainer.innerHTML =
-          '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
+          '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in with aura</button>';
+        const fallbackBtn = auraLoginContainer.querySelector("#auraSigninBtn");
+        fallbackBtn?.addEventListener(
+          "click",
+          async () => {
+            if (typeof auraApi?.signIn !== "function") {
+              return;
+            }
+            const result = await auraApi.signIn({
+              auraOrigin: AURA_ORIGIN,
+              clientId,
+              mode: "light",
+            });
+            auraDebugLog("Aura.signIn fallback result", result);
+            applyConnectedSession(result);
+          },
+          { once: true }
+        );
       } catch {
         auraDebugLog("sign-in failed, starting sync burst");
         startAuraSyncBurst();
       }
     };
-    auraLoginContainer.addEventListener("click", signinHandler);
+    signinHandler();
   };
 
   const readAuraSessionFromSdk = async () => {
