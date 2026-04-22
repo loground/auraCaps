@@ -10,6 +10,7 @@ const AURA_ORIGIN = "https://auramaxx.gg";
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
 const AURA_CLIENT_ID_STORAGE_KEY = "aura_client_id";
 const AURA_DEBUG_KEY = "aura_debug";
+const AURA_DEFAULT_CLIENT_ID = "your-app";
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -127,6 +128,7 @@ export function mountMenuScreen({
       <div id="auraConnectedStatus" class="menu-aura-status ${auraSession?.connected ? "visible" : ""}">
         ${auraSession?.connected ? formatAuraStatus(auraSession) : ""}
       </div>
+      <div id="auraHintStatus" class="menu-aura-status"></div>
     </div>
   `;
 
@@ -537,6 +539,7 @@ export function mountMenuScreen({
   const themeSelectEl = app.querySelector("#menuThemeSelect");
   const auraLoginContainer = app.querySelector("#aura-login");
   const auraConnectedStatus = app.querySelector("#auraConnectedStatus");
+  const auraHintStatus = app.querySelector("#auraHintStatus");
   const preloader = app.querySelector("#menuPreloader");
   const menuButtons = app.querySelector(".menu-buttons");
   const updateSoundButton = (enabled) => {
@@ -555,6 +558,7 @@ export function mountMenuScreen({
   let auraSyncBurstTimer = null;
   let auraSyncBurstLeft = 0;
   const resolveAuraClientId = () => {
+    const fromEnv = pickFirstString(import.meta.env?.VITE_AURA_CLIENT_ID);
     const fromWindow = pickFirstString(window.__AURA_CLIENT_ID__);
     const fromMeta = pickFirstString(
       document.querySelector('meta[name="aura-client-id"]')?.getAttribute("content")
@@ -566,7 +570,15 @@ export function mountMenuScreen({
       window.location.hostname && window.location.hostname !== "localhost"
         ? `aura-caps-${window.location.hostname}`
         : "";
-    return fromWindow || fromMeta || fromStorage || fromHostname || "your-app";
+    return fromEnv || fromWindow || fromMeta || fromStorage || fromHostname || AURA_DEFAULT_CLIENT_ID;
+  };
+  const setAuraHint = (message) => {
+    if (!auraHintStatus) {
+      return;
+    }
+    const hasMessage = Boolean(String(message || "").trim());
+    auraHintStatus.classList.toggle("visible", hasMessage);
+    auraHintStatus.textContent = hasMessage ? String(message) : "";
   };
 
   const extractLikelyPayloads = (input) => {
@@ -696,6 +708,7 @@ export function mountMenuScreen({
       onAuraDisconnect?.();
       auraDebugLog("local disconnect completed");
       setAuraConnectedStatus(null);
+      setAuraHint("");
       renderAuraSignin();
     };
     auraLoginContainer.addEventListener("click", disconnectHandler);
@@ -717,6 +730,10 @@ export function mountMenuScreen({
         }
         const clientId = resolveAuraClientId();
         auraDebugLog("sign-in requested", { clientId });
+        setAuraHint(`Aura login ready (${clientId})`);
+        if (clientId === AURA_DEFAULT_CLIENT_ID) {
+          setAuraHint("Aura clientId is not configured. Set VITE_AURA_CLIENT_ID.");
+        }
         try {
           window.localStorage.setItem(AURA_CLIENT_ID_STORAGE_KEY, clientId);
         } catch {
@@ -733,12 +750,14 @@ export function mountMenuScreen({
               auraDebugLog("Aura.SigninButton onSuccess", result);
               const normalized = applyConnectedSession(result);
               if (normalized) {
+                setAuraHint("");
                 return;
               }
               readAuraSessionFromSdk().then((restoredFromSdk) => {
                 auraDebugLog("SigninButton fallback restoredFromSdk", restoredFromSdk);
                 if (restoredFromSdk) {
                   applyConnectedSession(restoredFromSdk);
+                  setAuraHint("");
                 }
               });
             },
@@ -768,6 +787,7 @@ export function mountMenuScreen({
         );
       } catch {
         auraDebugLog("sign-in failed, starting sync burst");
+        setAuraHint("Aura popup closed but no auth callback received.");
         startAuraSyncBurst();
       }
     };
@@ -827,6 +847,7 @@ export function mountMenuScreen({
     }
     auraDebugLog("applyConnectedSession success", normalized);
     setAuraConnectedStatus(normalized);
+    setAuraHint("");
     onAuraSuccess?.(normalized);
     renderAuraDisconnect();
     stopAuraSyncBurst();
@@ -880,6 +901,7 @@ export function mountMenuScreen({
     }
     const type = event.data?.type;
     auraDebugLog("window message", { origin, type, data: event.data });
+    setAuraHint(`Aura message: ${type || "unknown"} from ${origin}`);
     const payload =
       event.data?.result ??
       event.data?.data ??
@@ -908,16 +930,20 @@ export function mountMenuScreen({
       auraApi = Aura;
       const restored = await syncAuraSessionFromSdk();
       if (restored) {
+        setAuraHint("");
         return;
       }
+      setAuraHint("Not connected. Use Login with Aura.");
       renderAuraSignin();
     })
     .catch(() => {
+      setAuraHint("Failed to load Aura SDK.");
       renderAuraSignin();
     });
   } else {
     auraDebugLog("initial state: connected from app session", auraSession);
     setAuraConnectedStatus(auraSession);
+    setAuraHint("");
     loadAuraSdk()
       .then((Aura) => {
         auraApi = Aura;
