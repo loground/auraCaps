@@ -557,20 +557,27 @@ export function mountMenuScreen({
   let auraSyncInFlight = false;
   let auraSyncBurstTimer = null;
   let auraSyncBurstLeft = 0;
+  const isValidAuraClientId = (value) => /^[a-z0-9][a-z0-9_-]{1,63}$/i.test(value);
   const resolveAuraClientId = () => {
     const fromEnv = pickFirstString(import.meta.env?.VITE_AURA_CLIENT_ID);
     const fromWindow = pickFirstString(window.__AURA_CLIENT_ID__);
     const fromMeta = pickFirstString(
       document.querySelector('meta[name="aura-client-id"]')?.getAttribute("content")
     );
-    const fromStorage = pickFirstString(
+    const fromStorageRaw = pickFirstString(
       window.localStorage.getItem(AURA_CLIENT_ID_STORAGE_KEY)
     );
-    const fromHostname =
-      window.location.hostname && window.location.hostname !== "localhost"
-        ? `aura-caps-${window.location.hostname}`
-        : "";
-    return fromEnv || fromWindow || fromMeta || fromStorage || fromHostname || AURA_DEFAULT_CLIENT_ID;
+    const hostLabel = pickFirstString(window.location.hostname?.split(".")?.[0]);
+    const candidates = [fromEnv, fromWindow, fromMeta, fromStorageRaw, hostLabel];
+    const resolved = candidates.find((candidate) => isValidAuraClientId(candidate));
+    if (fromStorageRaw && !isValidAuraClientId(fromStorageRaw)) {
+      try {
+        window.localStorage.removeItem(AURA_CLIENT_ID_STORAGE_KEY);
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+    return resolved || AURA_DEFAULT_CLIENT_ID;
   };
   const setAuraHint = (message) => {
     if (!auraHintStatus) {
