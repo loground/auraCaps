@@ -552,7 +552,7 @@ export function mountMenuScreen({
   };
   const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || "hell");
   let auraApi = null;
-  let disconnectHandler = null;
+  let connectedActionHandler = null;
   let signinHandler = null;
   let auraSyncInFlight = false;
   let auraSyncBurstTimer = null;
@@ -665,10 +665,10 @@ export function mountMenuScreen({
     };
   };
 
-  const clearDisconnectHandler = () => {
-    if (disconnectHandler) {
-      auraLoginContainer?.removeEventListener("click", disconnectHandler);
-      disconnectHandler = null;
+  const clearConnectedActionHandler = () => {
+    if (connectedActionHandler) {
+      auraLoginContainer?.removeEventListener("click", connectedActionHandler);
+      connectedActionHandler = null;
     }
   };
 
@@ -687,45 +687,30 @@ export function mountMenuScreen({
     auraSyncBurstLeft = 0;
   };
 
-  const renderAuraDisconnect = () => {
+  const renderAuraConnectedAction = () => {
     if (!auraLoginContainer) {
       return;
     }
-    clearDisconnectHandler();
+    clearConnectedActionHandler();
     clearSigninHandler();
     auraLoginContainer.classList.remove("hidden");
     auraLoginContainer.innerHTML =
-      '<button id="auraDisconnectBtn" class="theme-btn aura-disconnect-btn" type="button">disconnect</button>';
-    disconnectHandler = async (event) => {
+      '<button id="auraProfileBtn" class="theme-btn aura-disconnect-btn" type="button">profile</button>';
+    connectedActionHandler = async (event) => {
       const target = event.target;
-      if (!(target instanceof Element) || !target.closest("#auraDisconnectBtn")) {
+      if (!(target instanceof Element) || !target.closest("#auraProfileBtn")) {
         return;
       }
-      try {
-        if (auraApi && typeof auraApi.SignOut === "function") {
-          auraDebugLog("disconnect via Aura.SignOut");
-          await auraApi.SignOut();
-        } else if (auraApi && typeof auraApi.signOut === "function") {
-          auraDebugLog("disconnect via Aura.signOut");
-          await auraApi.signOut();
-        }
-      } catch {
-        // Ignore sign-out API errors, local disconnect still applies.
-      }
-      onAuraDisconnect?.();
-      auraDebugLog("local disconnect completed");
-      setAuraConnectedStatus(null);
-      setAuraHint("");
-      renderAuraSignin();
+      onProfile?.();
     };
-    auraLoginContainer.addEventListener("click", disconnectHandler);
+    auraLoginContainer.addEventListener("click", connectedActionHandler);
   };
 
   const renderAuraSignin = () => {
     if (!auraLoginContainer) {
       return;
     }
-    clearDisconnectHandler();
+    clearConnectedActionHandler();
     clearSigninHandler();
     auraLoginContainer.classList.remove("hidden");
     auraLoginContainer.innerHTML = "";
@@ -874,7 +859,7 @@ export function mountMenuScreen({
     setAuraConnectedStatus(normalized);
     setAuraHint("");
     onAuraSuccess?.(normalized);
-    renderAuraDisconnect();
+    renderAuraConnectedAction();
     stopAuraSyncBurst();
     return normalized;
   };
@@ -975,7 +960,7 @@ export function mountMenuScreen({
         syncAuraSessionFromSdk();
       })
       .catch(() => {});
-    renderAuraDisconnect();
+    renderAuraConnectedAction();
   }
 
   const onWindowFocus = () => {
@@ -1104,7 +1089,7 @@ export function mountMenuScreen({
     profileButton?.removeEventListener("click", onProfile);
     menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeSelectEl?.removeEventListener("change", onThemeSelect);
-    clearDisconnectHandler();
+    clearConnectedActionHandler();
     clearSigninHandler();
     stopAuraSyncBurst();
     window.removeEventListener("pointermove", onPointerMove);
