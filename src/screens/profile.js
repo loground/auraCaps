@@ -10,6 +10,7 @@ function escapeHtml(value) {
 const AURA_ORIGIN = "https://auramaxx.gg";
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
 const AURA_SESSION_KEY = "aura_session_v1";
+const AURA_DEBUG_KEY = "aura_debug";
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -58,6 +59,23 @@ function readStoredAuraSession() {
       : null;
   } catch {
     return null;
+  }
+}
+
+function auraDebugLog(...args) {
+  try {
+    if (window.__AURA_DEBUG__ === true) {
+      console.log("[AURA][PROFILE]", ...args);
+      return;
+    }
+    const enabled =
+      window.localStorage.getItem(AURA_DEBUG_KEY) === "1" ||
+      false;
+    if (enabled) {
+      console.log("[AURA][PROFILE]", ...args);
+    }
+  } catch {
+    // Ignore logging failures.
   }
 }
 
@@ -158,11 +176,14 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
   let aborted = false;
   const run = async () => {
     const storedSession = readStoredAuraSession();
+    auraDebugLog("storedSession", storedSession);
     let sdkSession = null;
     try {
       const Aura = await loadAuraSdk();
+      auraDebugLog("Aura SDK loaded", Object.keys(Aura || {}));
       if (typeof Aura?.getSession === "function") {
         const session = await Aura.getSession();
+        auraDebugLog("Aura.getSession()", session);
         const walletAddress =
           session?.walletAddress ||
           session?.user?.address ||
@@ -178,6 +199,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       }
       if (!sdkSession && typeof Aura?.getCurrentUser === "function") {
         const user = await Aura.getCurrentUser();
+        auraDebugLog("Aura.getCurrentUser()", user);
         const walletAddress =
           user?.address ||
           user?.walletAddress ||
@@ -193,6 +215,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       }
       if (!sdkSession && typeof Aura?.getUser === "function") {
         const user = await Aura.getUser();
+        auraDebugLog("Aura.getUser()", user);
         const walletAddress =
           user?.address ||
           user?.walletAddress ||
@@ -207,14 +230,17 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         }
       }
     } catch {
+      auraDebugLog("Aura SDK/profile read failed");
       // Ignore SDK fetch/read errors and fallback to stored session.
     }
 
     const effectiveSession = sdkSession || storedSession || auraSession || null;
+    auraDebugLog("effectiveSession", effectiveSession);
     if (!aborted && effectiveSession?.user) {
       renderProfileData(profileCard, effectiveSession.user);
     }
     const candidates = pickLookupCandidates(effectiveSession);
+    auraDebugLog("lookup candidates", candidates);
 
     if (candidates.length === 0) {
       if (!aborted) {
@@ -235,10 +261,12 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
                 candidate.value
               )}`;
         const response = await fetch(url);
+        auraDebugLog("profile fetch", { url, ok: response.ok, status: response.status });
         if (!response.ok) {
           continue;
         }
         const json = await response.json();
+        auraDebugLog("profile fetch json", json);
         const profile = json?.user || json?.data || json;
         if (!profile || typeof profile !== "object") {
           continue;

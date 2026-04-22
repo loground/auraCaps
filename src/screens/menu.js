@@ -9,6 +9,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 const AURA_ORIGIN = "https://auramaxx.gg";
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
 const AURA_CLIENT_ID_STORAGE_KEY = "aura_client_id";
+const AURA_DEBUG_KEY = "aura_debug";
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,23 @@ function pickFirstString(...values) {
     }
   }
   return "";
+}
+
+function auraDebugLog(...args) {
+  try {
+    if (window.__AURA_DEBUG__ === true) {
+      console.log("[AURA]", ...args);
+      return;
+    }
+    const enabled =
+      window.localStorage.getItem(AURA_DEBUG_KEY) === "1" ||
+      false;
+    if (enabled) {
+      console.log("[AURA]", ...args);
+    }
+  } catch {
+    // Ignore logging failures.
+  }
 }
 
 export function mountMenuScreen({
@@ -570,6 +588,7 @@ export function mountMenuScreen({
   };
 
   const normalizeAuraSession = (input) => {
+    auraDebugLog("normalizeAuraSession input", input);
     const payloads = extractLikelyPayloads(input);
     let user = null;
     let walletAddress = "";
@@ -614,6 +633,11 @@ export function mountMenuScreen({
       Boolean(user) ||
       Boolean(input?.connected) ||
       Boolean(input?.isConnected);
+    auraDebugLog("normalizeAuraSession parsed", {
+      hasIdentity,
+      walletAddress,
+      hasUser: Boolean(user),
+    });
     if (!hasIdentity) {
       return null;
     }
@@ -662,14 +686,17 @@ export function mountMenuScreen({
       }
       try {
         if (auraApi && typeof auraApi.SignOut === "function") {
+          auraDebugLog("disconnect via Aura.SignOut");
           await auraApi.SignOut();
         } else if (auraApi && typeof auraApi.signOut === "function") {
+          auraDebugLog("disconnect via Aura.signOut");
           await auraApi.signOut();
         }
       } catch {
         // Ignore sign-out API errors, local disconnect still applies.
       }
       onAuraDisconnect?.();
+      auraDebugLog("local disconnect completed");
       setAuraConnectedStatus(null);
       renderAuraSignin();
     };
@@ -693,8 +720,10 @@ export function mountMenuScreen({
       try {
         if (!auraApi) {
           auraApi = await loadAuraSdk();
+          auraDebugLog("Aura SDK loaded", Object.keys(auraApi || {}));
         }
         const clientId = resolveAuraClientId();
+        auraDebugLog("sign-in requested", { clientId });
         try {
           window.localStorage.setItem(AURA_CLIENT_ID_STORAGE_KEY, clientId);
         } catch {
@@ -707,11 +736,13 @@ export function mountMenuScreen({
             clientId,
             mode: "light",
           });
+          auraDebugLog("Aura.signIn result", result);
           const normalized = applyConnectedSession(result);
           if (normalized) {
             return;
           }
           const restoredFromSdk = await readAuraSessionFromSdk();
+          auraDebugLog("Aura.signIn fallback restoredFromSdk", restoredFromSdk);
           if (restoredFromSdk) {
             applyConnectedSession(restoredFromSdk);
             return;
@@ -720,15 +751,18 @@ export function mountMenuScreen({
 
         if (typeof auraApi?.SigninButton === "function") {
           auraLoginContainer.innerHTML = "";
+          auraDebugLog("mounting Aura.SigninButton");
           auraApi.SigninButton({
             container: "#aura-login",
             clientId,
             onSuccess(result) {
+              auraDebugLog("Aura.SigninButton onSuccess", result);
               const normalized = applyConnectedSession(result);
               if (normalized) {
                 return;
               }
               readAuraSessionFromSdk().then((restoredFromSdk) => {
+                auraDebugLog("SigninButton fallback restoredFromSdk", restoredFromSdk);
                 if (restoredFromSdk) {
                   applyConnectedSession(restoredFromSdk);
                 }
@@ -742,6 +776,7 @@ export function mountMenuScreen({
         auraLoginContainer.innerHTML =
           '<button class="theme-btn aura-login-fallback" type="button">login unavailable</button>';
       } catch {
+        auraDebugLog("sign-in failed, starting sync burst");
         startAuraSyncBurst();
       }
     };
@@ -756,6 +791,7 @@ export function mountMenuScreen({
     let normalized = null;
     if (typeof auraApi.getSession === "function") {
       const session = await safeCall(auraApi.getSession, auraApi);
+      auraDebugLog("Aura.getSession()", session);
       normalized = normalizeAuraSession(session);
       if (normalized) {
         return normalized;
@@ -764,6 +800,7 @@ export function mountMenuScreen({
 
     if (typeof auraApi.getCurrentUser === "function") {
       const user = await safeCall(auraApi.getCurrentUser, auraApi);
+      auraDebugLog("Aura.getCurrentUser()", user);
       normalized = normalizeAuraSession({ user });
       if (normalized) {
         return normalized;
@@ -772,6 +809,7 @@ export function mountMenuScreen({
 
     if (typeof auraApi.getWalletAddress === "function") {
       const walletAddress = await safeCall(auraApi.getWalletAddress, auraApi);
+      auraDebugLog("Aura.getWalletAddress()", walletAddress);
       normalized = normalizeAuraSession({ walletAddress });
       if (normalized) {
         return normalized;
@@ -780,6 +818,7 @@ export function mountMenuScreen({
 
     if (typeof auraApi.getUser === "function") {
       const user = await safeCall(auraApi.getUser, auraApi);
+      auraDebugLog("Aura.getUser()", user);
       normalized = normalizeAuraSession({ user });
       if (normalized) {
         return normalized;
@@ -792,8 +831,10 @@ export function mountMenuScreen({
   const applyConnectedSession = (sessionLike) => {
     const normalized = normalizeAuraSession(sessionLike);
     if (!normalized) {
+      auraDebugLog("applyConnectedSession skipped: no normalized session");
       return null;
     }
+    auraDebugLog("applyConnectedSession success", normalized);
     setAuraConnectedStatus(normalized);
     onAuraSuccess?.(normalized);
     renderAuraDisconnect();
@@ -838,14 +879,28 @@ export function mountMenuScreen({
   };
 
   const onAuraMessage = (event) => {
-    if (event.origin !== AURA_ORIGIN) {
+    const origin = String(event.origin || "");
+    const isAuraOrigin =
+      origin === AURA_ORIGIN ||
+      origin.endsWith(".auramaxx.gg") ||
+      origin.includes("auramaxx.gg");
+    if (!isAuraOrigin) {
       return;
     }
     const type = event.data?.type;
-    if (type !== "aura.login.result") {
+    auraDebugLog("window message", { origin, type, data: event.data });
+    const payload =
+      event.data?.result ??
+      event.data?.data ??
+      event.data?.payload ??
+      event.data;
+    const looksLikeAuraLogin =
+      type === "aura.login.result" ||
+      String(type || "").includes("aura") ||
+      Boolean(payload?.walletAddress || payload?.user || payload?.authenticated);
+    if (!looksLikeAuraLogin) {
       return;
     }
-    const payload = event.data?.result ?? event.data;
     applyConnectedSession(payload);
   };
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
@@ -856,6 +911,7 @@ export function mountMenuScreen({
   menuButtons.classList.add("disabled");
 
   if (!hasConnectedSession(auraSession)) {
+    auraDebugLog("initial state: disconnected");
     loadAuraSdk()
     .then(async (Aura) => {
       auraApi = Aura;
@@ -869,6 +925,7 @@ export function mountMenuScreen({
       renderAuraSignin();
     });
   } else {
+    auraDebugLog("initial state: connected from app session", auraSession);
     setAuraConnectedStatus(auraSession);
     loadAuraSdk()
       .then((Aura) => {
