@@ -142,7 +142,7 @@ function renderProfileError(container, message) {
   `;
 }
 
-function renderProfileData(container, profile) {
+function renderProfileData(container, profile, inventoryMeta = null) {
   const avatar =
     profile.avatar ||
     profile.avatarUrl ||
@@ -164,6 +164,9 @@ function renderProfileData(container, profile) {
   const discord = profile.discordVerified ?? profile.discord?.verified;
   const xVerified = profile.xVerified ?? profile.twitterVerified;
   const userId = profile.id || profile._id || profile.userId || "—";
+  const inventorySummary =
+    inventoryMeta?.summary ||
+    (inventoryMeta?.error ? `inventory error: ${inventoryMeta.error}` : "inventory: not loaded");
 
   container.innerHTML = `
     <div class="profile-header">
@@ -185,6 +188,7 @@ function renderProfileData(container, profile) {
       <div class="profile-meta-item"><span>Following</span><strong>${escapeHtml(following)}</strong></div>
       <div class="profile-meta-item"><span>X Verified</span><strong>${xVerified ? "yes" : "no"}</strong></div>
       <div class="profile-meta-item"><span>Discord Verified</span><strong>${discord ? "yes" : "no"}</strong></div>
+      <div class="profile-meta-item"><span>Inventory</span><strong>${escapeHtml(inventorySummary)}</strong></div>
     </div>
   `;
 }
@@ -245,6 +249,44 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     return payload?.user || payload?.data || payload || null;
   };
 
+  const callInventoryApi = async (userId) => {
+    const id = String(userId || "").trim();
+    if (!id) return null;
+    const url = `/api/aura-inventory?userId=${encodeURIComponent(id)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`;
+    auraDebugLog("inventory fetch start", { url, userId: id });
+    const response = await fetch(url);
+    const json = await response.json().catch(() => null);
+    auraDebugLog("inventory fetch response", {
+      ok: response.ok,
+      status: response.status,
+      body: json,
+    });
+    if (!response.ok) {
+      return { error: `http ${response.status}` };
+    }
+
+    const payload = json?.data || json;
+    const items = Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : Array.isArray(payload)
+          ? payload
+          : [];
+    const total =
+      payload?.meta?.total ??
+      payload?.total ??
+      payload?.count ??
+      items.length ??
+      0;
+    const page = payload?.meta?.page ?? payload?.page ?? 1;
+    const totalPages = payload?.meta?.totalPages ?? payload?.totalPages ?? 1;
+    return {
+      raw: payload,
+      summary: `items: ${total} • page ${page}/${totalPages}`,
+    };
+  };
+
   const loadProfileByValue = async (value) => {
     const lookupValue = String(value || "").trim();
     if (!lookupValue || inFlight) {
@@ -261,7 +303,20 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         return false;
       }
       if (profile && typeof profile === "object" && !aborted) {
-        renderProfileData(profileCard, profile);
+        const userId = profile.id || profile._id || profile.userId || "";
+        let inventoryMeta = null;
+        if (userId) {
+          try {
+            inventoryMeta = await callInventoryApi(userId);
+          } catch (error) {
+            inventoryMeta = { error: String(error?.message || error) };
+            auraDebugLog("inventory fetch failed", inventoryMeta);
+          }
+        } else {
+          inventoryMeta = { error: "no user id for inventory route" };
+          auraDebugLog("inventory fetch skipped", { reason: "no user id", profile });
+        }
+        renderProfileData(profileCard, profile, inventoryMeta);
         try {
           window.localStorage.setItem(AURA_LAST_LOOKUP_KEY, lookupValue);
         } catch {
@@ -371,7 +426,9 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     }
     const ok = await loadProfileByValue(bootLookup);
     if (!ok && !aborted && effectiveSession?.user) {
-      renderProfileData(profileCard, effectiveSession.user);
+      renderProfileData(profileCard, effectiveSession.user, {
+        error: "lookup failed; session-only fallback",
+      });
     }
   };
   run();
@@ -402,7 +459,9 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       if (lookup) {
         const ok = await loadProfileByValue(lookup);
         if (!ok && session?.user) {
-          renderProfileData(profileCard, session.user);
+          renderProfileData(profileCard, session.user, {
+            error: "lookup failed; session-only fallback",
+          });
         }
       } else {
         renderProfileError(
