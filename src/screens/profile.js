@@ -195,6 +195,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
 
   let aborted = false;
   let inFlight = false;
+  let loadSeq = 0;
   let auraApi = null;
   let currentSession = readStoredAuraSession() || auraSession || null;
 
@@ -255,10 +256,16 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     if (!lookupValue || inFlight) {
       return false;
     }
+    const seq = ++loadSeq;
     inFlight = true;
-    renderProfileError(profileCard, "Loading Aura profile...");
+    if (!aborted) {
+      renderProfileError(profileCard, "Loading Aura profile...");
+    }
     try {
       const profile = await callLookupApi(lookupValue);
+      if (seq !== loadSeq) {
+        return false;
+      }
       if (profile && typeof profile === "object" && !aborted) {
         renderProfileData(profileCard, profile);
         try {
@@ -268,12 +275,12 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         }
         return true;
       }
-      if (!aborted) {
+      if (!aborted && seq === loadSeq) {
         renderProfileError(profileCard, "No profile found for this username/wallet.");
       }
       return false;
     } catch {
-      if (!aborted) {
+      if (!aborted && seq === loadSeq) {
         renderProfileError(profileCard, "Could not load Aura profile right now.");
       }
       return false;
@@ -359,21 +366,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         }
       })();
 
-    if (bootLookup) {
-      const ok = await loadProfileByValue(bootLookup);
-      if (ok) {
-        return;
-      }
-    }
-
-    if (!aborted && effectiveSession?.user) {
-      renderProfileData(profileCard, effectiveSession.user);
-      return;
-    }
-    const candidates = pickLookupCandidates(effectiveSession);
-    auraDebugLog("lookup candidates", candidates);
-
-    if (candidates.length === 0) {
+    if (!bootLookup) {
       if (!aborted) {
         renderProfileError(
           profileCard,
@@ -382,45 +375,9 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       }
       return;
     }
-
-    for (const candidate of candidates) {
-      try {
-        const url =
-          candidate.type === "userId"
-            ? `https://api.auramaxx.gg/api/users/${encodeURIComponent(candidate.value)}`
-            : `https://api.auramaxx.gg/api/users/lookup?username=${encodeURIComponent(
-                candidate.value
-              )}`;
-        const response = await fetch(url);
-        auraDebugLog("profile fetch", { url, ok: response.ok, status: response.status });
-        if (!response.ok) {
-          continue;
-        }
-        const json = await response.json();
-        auraDebugLog("profile fetch json", json);
-        const profile = json?.user || json?.data || json;
-        if (!profile || typeof profile !== "object") {
-          continue;
-        }
-        if (!aborted) {
-          renderProfileData(profileCard, profile);
-        }
-        return;
-      } catch {
-        // try next candidate
-      }
-    }
-
-    if (!aborted && effectiveSession?.user) {
+    const ok = await loadProfileByValue(bootLookup);
+    if (!ok && !aborted && effectiveSession?.user) {
       renderProfileData(profileCard, effectiveSession.user);
-      return;
-    }
-
-    if (!aborted) {
-      renderProfileError(
-        profileCard,
-        "Could not load Aura profile right now."
-      );
     }
   };
   run();
@@ -433,20 +390,16 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         currentSession?.connected || currentSession?.walletAddress || currentSession?.user
       );
       if (isConnected) {
-        if (typeof auraApi?.SignOut === "function") {
-          await auraApi.SignOut();
-        } else if (typeof auraApi?.signOut === "function") {
-          await auraApi.signOut();
+        if (typeof auraApi?.clearSession === "function") {
+          auraApi.clearSession();
         }
-        const sessionAfterSignOut =
-          typeof auraApi?.getSession === "function" ? await auraApi.getSession() : null;
-        if (sessionAfterSignOut?.walletAddress || sessionAfterSignOut?.user) {
-          applyAuraSession(sessionAfterSignOut);
-          renderProfileError(profileCard, "Still connected in Aura popup session.");
-        } else {
-          applyAuraSession(null);
-          renderProfileError(profileCard, "Disconnected from Aura.");
+        applyAuraSession(null);
+        try {
+          window.localStorage.removeItem(AURA_LAST_LOOKUP_KEY);
+        } catch {
+          // Ignore storage errors.
         }
+        renderProfileError(profileCard, "Disconnected from Aura.");
         return;
       }
 
