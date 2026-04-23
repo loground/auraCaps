@@ -62,13 +62,18 @@ function pickFirstString(...values) {
 
 function auraDebugLog(...args) {
   try {
-    if (window.__AURA_DEBUG__ === true) {
-      console.log("[AURA]", ...args);
-      return;
-    }
-    const enabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
-    if (enabled) {
-      console.log("[AURA]", ...args);
+    const entry = {
+      scope: "menu",
+      at: new Date().toISOString(),
+      args,
+    };
+    window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__)
+      ? window.__AURA_LOGS__
+      : [];
+    window.__AURA_LOGS__.push(entry);
+    console.log("[AURA][MENU]", ...args);
+    if (window.localStorage.getItem(AURA_DEBUG_KEY) === "1") {
+      console.log("[AURA][MENU][DEBUG]", ...args);
     }
   } catch {
     // Ignore logging failures.

@@ -78,15 +78,18 @@ function saveStoredAuraSession(session) {
 
 function auraDebugLog(...args) {
   try {
-    if (window.__AURA_DEBUG__ === true) {
-      console.log("[AURA][PROFILE]", ...args);
-      return;
-    }
-    const enabled =
-      window.localStorage.getItem(AURA_DEBUG_KEY) === "1" ||
-      false;
-    if (enabled) {
-      console.log("[AURA][PROFILE]", ...args);
+    const entry = {
+      scope: "profile",
+      at: new Date().toISOString(),
+      args,
+    };
+    window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__)
+      ? window.__AURA_LOGS__
+      : [];
+    window.__AURA_LOGS__.push(entry);
+    console.log("[AURA][PROFILE]", ...args);
+    if (window.localStorage.getItem(AURA_DEBUG_KEY) === "1") {
+      console.log("[AURA][PROFILE][DEBUG]", ...args);
     }
   } catch {
     // Ignore logging failures.
