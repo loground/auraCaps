@@ -237,11 +237,12 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
   const callLookupApi = async (value) => {
     const v = String(value || "").trim();
     if (!v) return null;
-    const url = `https://api.auramaxx.gg/api/users/lookup?username=${encodeURIComponent(v)}`;
+    const url = `/api/aura-profile?username=${encodeURIComponent(v)}`;
     const response = await fetch(url);
     if (!response.ok) return null;
     const json = await response.json();
-    return json?.user || json?.data || json || null;
+    const payload = json?.data || json;
+    return payload?.user || payload?.data || payload || null;
   };
 
   const loadProfileByValue = async (value) => {
