@@ -213,10 +213,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
 
   const updateAuraAuthButton = () => {
     if (!profileAuraAuthBtn) return;
-    const connected = Boolean(
-      currentSession?.connected || currentSession?.walletAddress || currentSession?.user
-    );
-    profileAuraAuthBtn.textContent = connected ? "disconnect aura" : "log in with aura";
+    profileAuraAuthBtn.textContent = "aura";
   };
 
   const applyAuraSession = (sessionLike) => {
@@ -232,13 +229,6 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       : null;
     saveStoredAuraSession(currentSession);
     updateAuraAuthButton();
-    if (connected) {
-      const lookup =
-        user?.username || user?.handle || walletAddress || "";
-      if (lookup) {
-        loadProfileByValue(lookup);
-      }
-    }
   };
 
   const callLookupApi = async (value) => {
@@ -383,36 +373,38 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
   run();
 
   updateAuraAuthButton();
+  const getLookupFromSession = (sessionLike) =>
+    sessionLike?.user?.username ||
+    sessionLike?.user?.handle ||
+    sessionLike?.walletAddress ||
+    sessionLike?.user?.walletAddress ||
+    sessionLike?.user?.address ||
+    "";
   const onAuraAuth = async () => {
     try {
       auraApi = auraApi || (await loadAuraSdk());
-      const isConnected = Boolean(
-        currentSession?.connected || currentSession?.walletAddress || currentSession?.user
-      );
-      if (isConnected) {
-        if (typeof auraApi?.clearSession === "function") {
-          auraApi.clearSession();
-        }
-        applyAuraSession(null);
-        try {
-          window.localStorage.removeItem(AURA_LAST_LOOKUP_KEY);
-        } catch {
-          // Ignore storage errors.
-        }
-        renderProfileError(profileCard, "Disconnected from Aura.");
-        return;
-      }
-
       const clientId = resolveAuraClientId();
-      const result =
-        typeof auraApi?.signIn === "function"
-          ? await auraApi.signIn({ auraOrigin: AURA_ORIGIN, clientId, mode: "light" })
-          : null;
-      if (result) {
-        applyAuraSession(result);
-      } else if (typeof auraApi?.getSession === "function") {
-        const session = await auraApi.getSession();
-        applyAuraSession(session);
+      if (typeof auraApi?.signIn === "function") {
+        try {
+          await auraApi.signIn({ auraOrigin: AURA_ORIGIN, clientId, mode: "light" });
+        } catch {
+          // Ignore close/cancel; we'll sync current SDK session next.
+        }
+      }
+      const session =
+        typeof auraApi?.getSession === "function" ? await auraApi.getSession() : null;
+      applyAuraSession(session);
+      const lookup = getLookupFromSession(session);
+      if (lookup) {
+        const ok = await loadProfileByValue(lookup);
+        if (!ok && session?.user) {
+          renderProfileData(profileCard, session.user);
+        }
+      } else {
+        renderProfileError(
+          profileCard,
+          "No Aura username, wallet, or user id found. Connect with Aura first."
+        );
       }
     } catch {
       renderProfileError(profileCard, "Aura login/disconnect failed.");
