@@ -605,6 +605,7 @@ function setTheme(nextTheme) {
 
 async function showMenu() {
   const localVersion = ++viewVersion;
+  auraSession = loadAuraSession();
   clearCurrentScreen();
   setViewMode("menu");
   const { mountMenuScreen } = await loadMenuModule();
@@ -705,6 +706,7 @@ async function showCollection() {
 
 async function showProfile() {
   const localVersion = ++viewVersion;
+  auraSession = loadAuraSession();
   clearCurrentScreen();
   setViewMode("profile");
   const { mountProfileScreen } = await loadProfileModule();

@@ -125,11 +125,6 @@ function renderInitialProfile(app) {
         <div class="profile-lookup-row">
           <button id="profileAuraAuthBtn" class="theme-btn" type="button">log in with aura</button>
         </div>
-        <label for="profileLookupInput" class="profile-status">Username or wallet</label>
-        <div class="profile-lookup-row">
-          <input id="profileLookupInput" class="profile-lookup-input" type="text" placeholder="aura-user or 0x..." />
-          <button id="profileLookupBtn" class="theme-btn" type="button">Load Profile</button>
-        </div>
       </div>
       <div id="profileCard" class="profile-card">
         <p class="profile-status">Loading Aura profile...</p>
@@ -195,8 +190,6 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
   renderInitialProfile(app);
   const backBtn = app.querySelector("#profileBackBtn");
   const profileCard = app.querySelector("#profileCard");
-  const profileLookupInput = app.querySelector("#profileLookupInput");
-  const profileLookupBtn = app.querySelector("#profileLookupBtn");
   const profileAuraAuthBtn = app.querySelector("#profileAuraAuthBtn");
   backBtn?.addEventListener("click", onBack);
 
@@ -242,9 +235,6 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       const lookup =
         user?.username || user?.handle || walletAddress || "";
       if (lookup) {
-        if (profileLookupInput && !profileLookupInput.value) {
-          profileLookupInput.value = lookup;
-        }
         loadProfileByValue(lookup);
       }
     }
@@ -368,9 +358,6 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
           return "";
         }
       })();
-    if (profileLookupInput && !profileLookupInput.value) {
-      profileLookupInput.value = bootLookup || "";
-    }
 
     if (bootLookup) {
       const ok = await loadProfileByValue(bootLookup);
@@ -438,8 +425,6 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
   };
   run();
 
-  const onLookup = () => loadProfileByValue(profileLookupInput?.value || "");
-  profileLookupBtn?.addEventListener("click", onLookup);
   updateAuraAuthButton();
   const onAuraAuth = async () => {
     try {
@@ -453,8 +438,15 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         } else if (typeof auraApi?.signOut === "function") {
           await auraApi.signOut();
         }
-        applyAuraSession(null);
-        renderProfileError(profileCard, "Disconnected from Aura.");
+        const sessionAfterSignOut =
+          typeof auraApi?.getSession === "function" ? await auraApi.getSession() : null;
+        if (sessionAfterSignOut?.walletAddress || sessionAfterSignOut?.user) {
+          applyAuraSession(sessionAfterSignOut);
+          renderProfileError(profileCard, "Still connected in Aura popup session.");
+        } else {
+          applyAuraSession(null);
+          renderProfileError(profileCard, "Disconnected from Aura.");
+        }
         return;
       }
 
@@ -474,16 +466,10 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     }
   };
   profileAuraAuthBtn?.addEventListener("click", onAuraAuth);
-  profileLookupInput?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      onLookup();
-    }
-  });
 
   return () => {
     aborted = true;
     backBtn?.removeEventListener("click", onBack);
-    profileLookupBtn?.removeEventListener("click", onLookup);
     profileAuraAuthBtn?.removeEventListener("click", onAuraAuth);
   };
 }

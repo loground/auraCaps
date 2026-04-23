@@ -97,6 +97,7 @@ export function mountMenuScreen({
   };
   const hasConnectedSession = (sessionLike) =>
     Boolean(sessionLike?.connected || sessionLike?.walletAddress || sessionLike?.user);
+  let localAuraSession = auraSession;
 
   app.innerHTML = `
     <div class="menu-overlay">
@@ -736,7 +737,7 @@ export function mountMenuScreen({
             container: "#aura-login",
             clientId,
             mode: "light",
-            text: "aura",
+            text: "log in",
             onClose(error) {
               auraDebugLog("Aura.SigninButton onClose", error);
               setAuraHint(error?.message || "Aura login closed.");
@@ -776,7 +777,7 @@ export function mountMenuScreen({
         }
 
         auraLoginContainer.innerHTML =
-          '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">aura</button>';
+          '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in</button>';
         const fallbackBtn = auraLoginContainer.querySelector("#auraSigninBtn");
         fallbackBtn?.addEventListener(
           "click",
@@ -855,6 +856,7 @@ export function mountMenuScreen({
       return null;
     }
     auraDebugLog("applyConnectedSession success", normalized);
+    localAuraSession = normalized;
     setAuraConnectedStatus(normalized);
     setAuraHint("");
     onAuraSuccess?.(normalized);
@@ -870,7 +872,17 @@ export function mountMenuScreen({
     auraSyncInFlight = true;
     try {
       const normalized = await readAuraSessionFromSdk();
-      return normalized ? applyConnectedSession(normalized) : null;
+      if (normalized) {
+        return applyConnectedSession(normalized);
+      }
+      if (hasConnectedSession(localAuraSession)) {
+        localAuraSession = null;
+        onAuraDisconnect?.();
+        setAuraConnectedStatus(null);
+        setAuraHint("Not connected. Use Login with Aura.");
+        renderAuraSignin();
+      }
+      return null;
     } catch {
       return null;
     } finally {
@@ -950,7 +962,8 @@ export function mountMenuScreen({
     });
   } else {
     auraDebugLog("initial state: connected from app session", auraSession);
-    setAuraConnectedStatus(auraSession);
+    localAuraSession = auraSession;
+    setAuraConnectedStatus(localAuraSession);
     setAuraHint("");
     loadAuraSdk()
       .then((Aura) => {
