@@ -5,12 +5,35 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 
 const AURA_ORIGIN = "https://auramaxx.gg";
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
 const AURA_CLIENT_ID_STORAGE_KEY = "aura_client_id";
 const AURA_DEBUG_KEY = "aura_debug";
 const AURA_DEFAULT_CLIENT_ID = "your-app";
+const HELL_MENU_TUNING = {
+  backgroundDarkness: 1.0,
+  haloIntensity: 0.22,
+  smokeIntensity: 0.14,
+  fogDensity: 0.022,
+  crackEmissiveIntensity: 0.9,
+  emberCount: 34,
+  underlightIntensity: 1.9,
+  bloomStrength: 0.2,
+  bloomRadius: 0.34,
+  bloomThreshold: 0.88,
+};
+const HEAVEN_MENU_TUNING = {
+  hazeStrength: 0.08,
+  haloStrength: 0.16,
+  moteCount: 14,
+  bloomStrength: 0.07,
+  bloomRadius: 0.2,
+  bloomThreshold: 0.95,
+};
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -78,6 +101,443 @@ function auraDebugLog(...args) {
   } catch {
     // Ignore logging failures.
   }
+}
+
+// Heaven menu: soft skydome with subtle cloud depth and center halo.
+function createHeavenBackground() {
+  const uniforms = {
+    iTime: { value: 0 },
+    uHaze: { value: HEAVEN_MENU_TUNING.hazeStrength },
+    uHalo: { value: HEAVEN_MENU_TUNING.haloStrength },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      void main() {
+        vUv = uv;
+        vLocalPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      uniform float iTime;
+      uniform float uHaze;
+      uniform float uHalo;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        for (int i = 0; i < 4; i++) {
+          v += noise(p) * a;
+          p *= 2.0;
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        vec2 uv = vUv;
+        vec3 nrm = normalize(vLocalPos);
+        float h = nrm.y * 0.5 + 0.5;
+
+        vec3 top = vec3(0.61, 0.77, 0.95);
+        vec3 mid = vec3(0.77, 0.88, 0.98);
+        vec3 bot = vec3(0.9, 0.95, 0.99);
+        vec3 color = mix(mid, top, smoothstep(0.35, 1.0, h));
+        color = mix(bot, color, smoothstep(0.05, 0.62, h));
+
+        vec2 cloudUv = vec2(uv.x * 2.0, h * 1.65) + vec2(iTime * 0.008, -iTime * 0.005);
+        float cloud = fbm(cloudUv);
+        float haze = smoothstep(0.62, 0.92, cloud) * uHaze;
+        color += vec3(0.07, 0.1, 0.14) * haze;
+
+        float centerHalo = exp(-length((uv - vec2(0.5, 0.47)) * vec2(1.1, 0.95)) * 4.0);
+        color += vec3(0.1, 0.13, 0.18) * centerHalo * uHalo;
+
+        float vignette = smoothstep(0.97, 0.25, length((uv - 0.5) * vec2(1.2, 1.0)));
+        color *= mix(0.9, 1.0, vignette);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.BackSide,
+  });
+
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(240, 32, 24), material);
+  return { mesh, uniforms };
+}
+
+// Heaven menu: soft local cloud-haze around hero emergence point.
+function createHeavenCloudBase() {
+  const uniforms = { iTime: { value: 0 } };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float iTime;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      void main() {
+        vec2 uv = vUv - 0.5;
+        vec2 p = uv * vec2(1.15, 0.92);
+        float d = length(p);
+        float n = noise((uv + 0.5) * 11.0 + vec2(iTime * 0.03, -iTime * 0.02));
+        float soft = smoothstep(0.55, 0.12, d) * smoothstep(0.38, 0.9, n);
+        vec3 col = mix(vec3(0.88, 0.94, 0.99), vec3(0.74, 0.85, 0.96), d);
+        gl_FragColor = vec4(col, soft * 0.14);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(14.4, 10.2), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(0, -2.56, -0.72);
+  return { mesh, uniforms };
+}
+
+// Heaven menu: sparse drifting light motes for subtle atmospheric polish.
+function createHeavenMotes() {
+  const count = HEAVEN_MENU_TUNING.moteCount;
+  const positions = new Float32Array(count * 3);
+  const speeds = new Float32Array(count);
+  const phases = new Float32Array(count);
+  for (let i = 0; i < count; i += 1) {
+    const r = 2.0 + Math.random() * 9.0;
+    const a = Math.random() * Math.PI * 2;
+    positions[i * 3] = Math.cos(a) * r;
+    positions[i * 3 + 1] = -1.4 + Math.random() * 8.2;
+    positions[i * 3 + 2] = Math.sin(a) * r - 0.8;
+    speeds[i] = 0.1 + Math.random() * 0.18;
+    phases[i] = Math.random() * Math.PI * 2;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
+  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  const uniforms = { iTime: { value: 0 } };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      attribute float aSpeed;
+      attribute float aPhase;
+      uniform float iTime;
+      varying float vAlpha;
+      void main() {
+        vec3 p = position;
+        float t = iTime * aSpeed + aPhase;
+        p.y += mod(t * 1.05, 7.2);
+        p.x += sin(t * 1.2) * 0.05;
+        p.z += cos(t * 1.1) * 0.05;
+        if (p.y > 5.8) p.y -= 7.2;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = 1.0 + 1.8 * (1.0 / max(1.0, -mv.z * 0.11));
+        vAlpha = 0.38 + 0.62 * sin(t * 2.0);
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        float a = smoothstep(0.5, 0.0, d) * vAlpha;
+        vec3 col = mix(vec3(1.0, 1.0, 1.0), vec3(0.84, 0.92, 1.0), d);
+        gl_FragColor = vec4(col, a * 0.16);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.position.set(0, -0.2, -0.8);
+  return { points, uniforms };
+}
+
+// Hell menu: inside-facing skydome so no finite plane edges appear while orbiting.
+function createHellBackground() {
+  const uniforms = {
+    iTime: { value: 0 },
+    uDarkness: { value: HELL_MENU_TUNING.backgroundDarkness },
+    uHalo: { value: HELL_MENU_TUNING.haloIntensity },
+    uSmoke: { value: HELL_MENU_TUNING.smokeIntensity },
+  };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      void main() {
+        vUv = uv;
+        vLocalPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      uniform float iTime;
+      uniform float uDarkness;
+      uniform float uHalo;
+      uniform float uSmoke;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        for (int i = 0; i < 4; i++) {
+          v += noise(p) * a;
+          p *= 2.02;
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        vec2 uv = vUv;
+        vec3 nrm = normalize(vLocalPos);
+        vec3 top = vec3(0.025, 0.003, 0.004);
+        vec3 mid = vec3(0.05, 0.006, 0.007);
+        vec3 bot = vec3(0.006, 0.0, 0.001);
+        float h = nrm.y * 0.5 + 0.5;
+        vec3 color = mix(mid, top, smoothstep(0.2, 1.0, h));
+        color = mix(bot, color, smoothstep(0.0, 0.58, h));
+
+        vec2 smokeUv = vec2(uv.x * 2.5, h * 1.6) + vec2(0.0, iTime * 0.014);
+        float smoke = fbm(smokeUv);
+        float haze = smoothstep(0.42, 0.9, smoke) * uSmoke;
+        color += vec3(0.09, 0.015, 0.012) * haze;
+
+        float centerGlow = exp(-length((uv - vec2(0.5, 0.43)) * vec2(1.14, 0.95)) * 5.8);
+        color += vec3(0.22, 0.03, 0.02) * centerGlow * uHalo;
+
+        float vignette = smoothstep(0.95, 0.24, length((uv - 0.5) * vec2(1.25, 0.95)));
+        color *= mix(0.44, 1.0, vignette);
+        color *= 1.0 / max(0.001, uDarkness);
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.BackSide,
+  });
+
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(220, 32, 24), material);
+  mesh.position.set(0, 0, 0);
+  return { mesh, uniforms };
+}
+
+// Hell menu: cracked ground with emissive lava accents concentrated near center.
+function createHellCrackedGround() {
+  const uniforms = {
+    iTime: { value: 0 },
+    uCrackEmissive: { value: HELL_MENU_TUNING.crackEmissiveIntensity },
+  };
+  const basePlate = new THREE.Mesh(
+    new THREE.CylinderGeometry(7.6, 8.5, 0.95, 48),
+    new THREE.MeshStandardMaterial({
+      color: new THREE.Color("#130707"),
+      roughness: 0.93,
+      metalness: 0.05,
+    })
+  );
+  basePlate.position.y = -3.16;
+  basePlate.receiveShadow = true;
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float iTime;
+      uniform float uCrackEmissive;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+
+      float fbm(vec2 p) {
+        float v = 0.0;
+        float a = 0.5;
+        for (int i = 0; i < 4; i++) {
+          v += noise(p) * a;
+          p *= 2.04;
+          a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        vec2 uv = vUv - vec2(0.5);
+        float dist = length(uv);
+        float radialFalloff = smoothstep(0.62, 0.1, dist);
+
+        vec2 p = (uv + 0.5) * 18.0;
+        float n = fbm(p + vec2(iTime * 0.02, -iTime * 0.012));
+        float n2 = fbm(p * 1.9 + vec2(-iTime * 0.015, iTime * 0.01));
+        float crack = smoothstep(0.7, 0.92, abs(n - n2) * 1.9);
+
+        float pulse = 0.88 + 0.12 * sin(iTime * 2.2 + uv.x * 11.0);
+        float glow = crack * radialFalloff * pulse * uCrackEmissive;
+
+        vec3 rock = vec3(0.055, 0.02, 0.019);
+        rock *= mix(0.66, 1.0, radialFalloff);
+        vec3 lava = vec3(1.0, 0.28, 0.08) * glow;
+        vec3 color = rock + lava;
+        float alpha = smoothstep(0.64, 0.26, dist);
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(6.4, 96), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = -2.67;
+
+  const group = new THREE.Group();
+  group.add(basePlate);
+  group.add(mesh);
+
+  return { group, mesh, basePlate, uniforms };
+}
+
+// Hell menu: sparse embers for atmosphere, intentionally low count for performance.
+function createHellEmbers() {
+  const count = HELL_MENU_TUNING.emberCount;
+  const positions = new Float32Array(count * 3);
+  const speeds = new Float32Array(count);
+  const phases = new Float32Array(count);
+
+  for (let i = 0; i < count; i += 1) {
+    const r = 1.9 + Math.random() * 8.8;
+    const a = Math.random() * Math.PI * 2;
+    positions[i * 3] = Math.cos(a) * r;
+    positions[i * 3 + 1] = -2.0 + Math.random() * 5.1;
+    positions[i * 3 + 2] = Math.sin(a) * r - 0.3;
+    speeds[i] = 0.16 + Math.random() * 0.22;
+    phases[i] = Math.random() * Math.PI * 2;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
+  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+
+  const uniforms = { iTime: { value: 0 } };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      attribute float aSpeed;
+      attribute float aPhase;
+      uniform float iTime;
+      varying float vAlpha;
+      void main() {
+        vec3 p = position;
+        float t = iTime * aSpeed + aPhase;
+        p.y += mod(t * 1.3, 5.8);
+        p.x += sin(t * 1.55) * 0.05;
+        p.z += cos(t * 1.2) * 0.05;
+        if (p.y > 3.8) p.y -= 5.8;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = 1.2 + 1.6 * (1.0 / max(1.0, -mv.z * 0.12));
+        vAlpha = 0.42 + 0.58 * sin(t * 2.2);
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        float a = smoothstep(0.5, 0.0, d) * vAlpha;
+        vec3 col = mix(vec3(1.0, 0.8, 0.4), vec3(1.0, 0.35, 0.12), d);
+        gl_FragColor = vec4(col, a * 0.22);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  const points = new THREE.Points(geometry, material);
+  points.position.set(0, -0.7, -0.4);
+  return { points, uniforms };
 }
 
 export function mountMenuScreen({
@@ -149,6 +609,7 @@ export function mountMenuScreen({
   const isHeaven = theme === "heaven";
   const isJungle = theme === "jungle-bay";
   const isBrainrot = theme === "brainrot";
+  const isHell = !isHeaven && !isJungle && !isBrainrot;
   const bgColor = isHeaven
     ? "#8ccfff"
     : isJungle
@@ -157,7 +618,11 @@ export function mountMenuScreen({
         ? "#25003a"
         : "#170807";
   scene.background = new THREE.Color(bgColor);
-  scene.fog = new THREE.Fog(bgColor, 18, 58);
+  scene.fog = isHell
+    ? new THREE.FogExp2("#120404", HELL_MENU_TUNING.fogDensity)
+    : isHeaven
+      ? new THREE.Fog("#c8dff4", 20, 72)
+      : new THREE.Fog(bgColor, 18, 58);
 
   const camera = new THREE.PerspectiveCamera(
     50,
@@ -213,6 +678,73 @@ export function mountMenuScreen({
   demonTopLight.castShadow = true;
   scene.add(demonTopLight);
 
+  let hellUnderLight = null;
+  let hellRimLight = null;
+  let hellBackLight = null;
+  let heavenRimLight = null;
+  let heavenBounceLight = null;
+  let heavenAccentLight = null;
+  if (isHeaven) {
+    ambient.color.set("#e6f2ff");
+    ambient.intensity = 0.74;
+    keyLight.color.set("#cee5ff");
+    keyLight.intensity = 1.36;
+    keyLight.position.set(7.4, 10.1, 5.8);
+    fillLight.color.set("#f9fdff");
+    fillLight.intensity = 0.82;
+    fillLight.position.set(-7.8, 5.0, 1.8);
+    demonTopLight.color.set("#eef8ff");
+    demonTopLight.intensity = 2.06;
+    demonTopLight.position.set(0, 10.0, 3.2);
+    demonTopLight.angle = 0.48;
+    demonTopLight.penumbra = 0.44;
+
+    heavenRimLight = new THREE.DirectionalLight("#f4e8d8", 0.46);
+    heavenRimLight.position.set(-7.0, 6.7, -7.8);
+    scene.add(heavenRimLight);
+
+    heavenBounceLight = new THREE.PointLight("#d6ecff", 0.82, 18, 1.7);
+    heavenBounceLight.position.set(0, -2.15, -0.6);
+    scene.add(heavenBounceLight);
+
+    heavenAccentLight = new THREE.DirectionalLight("#ffe6c4", 0.2);
+    heavenAccentLight.position.set(5.5, 5.0, -6.5);
+    scene.add(heavenAccentLight);
+  }
+  if (isHell) {
+    // Cinematic hell lighting rig tuned for readability and silhouette separation.
+    ambient.color.set("#52201a");
+    ambient.intensity = 0.2;
+    keyLight.color.set("#ffd6b5");
+    keyLight.intensity = 0.8;
+    keyLight.position.set(5.6, 9.2, 5.3);
+    fillLight.color.set("#5a1712");
+    fillLight.intensity = 0.24;
+    fillLight.position.set(-6.4, 4.0, -1.6);
+    demonTopLight.color.set("#ffcc96");
+    demonTopLight.intensity = 2.2;
+    demonTopLight.position.set(0.4, 10.1, 3.0);
+    demonTopLight.angle = 0.5;
+    demonTopLight.penumbra = 0.42;
+
+    hellUnderLight = new THREE.PointLight(
+      "#ff4a1f",
+      HELL_MENU_TUNING.underlightIntensity,
+      18,
+      1.9
+    );
+    hellUnderLight.position.set(0, -2.25, -0.3);
+    scene.add(hellUnderLight);
+
+    hellRimLight = new THREE.DirectionalLight("#ff6b42", 0.56);
+    hellRimLight.position.set(-6.8, 6.9, -9.0);
+    scene.add(hellRimLight);
+
+    hellBackLight = new THREE.PointLight("#5d130d", 0.48, 24, 2.1);
+    hellBackLight.position.set(0, 6.0, -15.0);
+    scene.add(hellBackLight);
+  }
+
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
     new THREE.MeshStandardMaterial({
@@ -224,7 +756,32 @@ export function mountMenuScreen({
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.7;
   floor.receiveShadow = true;
-  scene.add(floor);
+  if (!isHell && !isHeaven) {
+    scene.add(floor);
+  }
+
+  let heavenBackground = null;
+  let heavenCloudBase = null;
+  let heavenMotes = null;
+  let hellBackground = null;
+  let hellGround = null;
+  let hellEmbers = null;
+  if (isHeaven) {
+    heavenBackground = createHeavenBackground();
+    scene.add(heavenBackground.mesh);
+    heavenCloudBase = createHeavenCloudBase();
+    scene.add(heavenCloudBase.mesh);
+    heavenMotes = createHeavenMotes();
+    scene.add(heavenMotes.points);
+  }
+  if (isHell) {
+    hellBackground = createHellBackground();
+    scene.add(hellBackground.mesh);
+    hellGround = createHellCrackedGround();
+    scene.add(hellGround.group);
+    hellEmbers = createHellEmbers();
+    scene.add(hellEmbers.points);
+  }
 
   const titleUniforms = {
     iTime: { value: 0 },
@@ -246,91 +803,92 @@ export function mountMenuScreen({
     uniform float iHover;
     varying vec2 vUv;
 
-    float rand(vec2 co){
-      return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
     }
 
-    float hermite(float t) {
-      return t * t * (3.0 - 2.0 * t);
-    }
-
-    float noise(vec2 co, float frequency) {
-      vec2 v = vec2(co.x * frequency, co.y * frequency);
-      float ix1 = floor(v.x);
-      float iy1 = floor(v.y);
-      float ix2 = floor(v.x + 1.0);
-      float iy2 = floor(v.y + 1.0);
-      float fx = hermite(fract(v.x));
-      float fy = hermite(fract(v.y));
-      float fade1 = mix(rand(vec2(ix1, iy1)), rand(vec2(ix2, iy1)), fx);
-      float fade2 = mix(rand(vec2(ix1, iy2)), rand(vec2(ix2, iy2)), fx);
-      return mix(fade1, fade2, fy);
-    }
-
-    float pnoise(vec2 co, float freq, int steps, float persistence) {
-      float value = 0.0;
-      float ampl = 1.0;
-      float sum = 0.0;
-      for(int i = 0; i < 8; i++) {
-        if(i >= steps) break;
-        sum += ampl;
-        value += noise(co, freq) * ampl;
-        freq *= 2.0;
-        ampl *= persistence;
-      }
-      return value / max(sum, 0.0001);
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      float a = hash(i);
+      float b = hash(i + vec2(1.0, 0.0));
+      float c = hash(i + vec2(0.0, 1.0));
+      float d = hash(i + vec2(1.0, 1.0));
+      return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
     }
 
     void main() {
-      vec2 fragCoord = vUv * iResolution;
-      vec2 uv = fragCoord.xy / iResolution.xy;
-      float gradient = 1.0 - uv.y;
-      float gradientStep = 0.2;
-      vec2 pos = fragCoord.xy / iResolution.x;
-      pos.y -= iTime * 0.3125;
+      vec2 uv = vUv;
+      float bottomHeat = smoothstep(0.0, 0.68, 1.0 - uv.y);
+      float topShade = smoothstep(0.2, 1.0, uv.y);
+      vec3 forged = vec3(0.12, 0.06, 0.055);
+      vec3 metal = vec3(0.22, 0.1, 0.085);
+      vec3 col = mix(forged, metal, bottomHeat * 0.52);
+      col *= mix(1.0, 0.56, topShade);
 
-      vec4 brighterColor = vec4(1.0, 0.65, 0.1, 0.25);
-      vec4 darkerColor = vec4(1.0, 0.0, 0.15, 0.0625);
-      vec4 middleColor = mix(brighterColor, darkerColor, 0.5);
+      vec2 p = uv * vec2(7.8, 4.4);
+      float nA = noise(p + vec2(0.0, -iTime * 0.08));
+      float nB = noise(p * 1.85 + vec2(iTime * 0.06, 0.0));
+      float crack = smoothstep(0.74, 0.92, abs(nA - nB) * 2.0);
+      float lava = crack * bottomHeat;
+
+      float flicker = 0.92 + 0.08 * sin(iTime * 6.0 + uv.x * 11.0);
+      vec3 lavaCol = vec3(1.0, 0.34, 0.11);
+      col += lavaCol * lava * flicker * 0.62;
+
+      float lowerEdge = smoothstep(0.0, 0.36, 1.0 - uv.y);
+      col += vec3(0.7, 0.2, 0.1) * lowerEdge * 0.12;
 
       float distToMouse = distance(uv, iMouse);
-      float mouseFlare = exp(-distToMouse * 10.0) * iHover * 2.2;
-      brighterColor.rgb += vec3(1.0, 0.35, 0.0) * mouseFlare * 0.8;
-      middleColor.rgb += vec3(1.0, 0.25, 0.05) * mouseFlare * 0.65;
+      float mouseFlare = exp(-distToMouse * 9.0) * iHover;
+      col += vec3(1.0, 0.46, 0.2) * mouseFlare * 0.34;
 
-      float noiseTexel = pnoise(pos, 10.0, 5, 0.5);
-      noiseTexel += mouseFlare * 0.6;
-
-      float firstStep = smoothstep(0.0, noiseTexel, gradient);
-      float darkerColorStep = smoothstep(0.0, noiseTexel, gradient - gradientStep);
-      float darkerColorPath = firstStep - darkerColorStep;
-      vec4 color = mix(brighterColor, darkerColor, darkerColorPath);
-      float middleColorStep = smoothstep(0.0, noiseTexel, gradient - 0.4);
-      color = mix(color, middleColor, darkerColorStep - middleColorStep);
-      color = mix(vec4(0.0), color, firstStep);
-      color.rgb += vec3(1.0, 0.58, 0.2) * mouseFlare * 0.6;
-
-      gl_FragColor = color;
+      gl_FragColor = vec4(col, 0.96);
     }
   `;
   const heavenFragmentShader = `
     uniform float iTime;
     uniform vec2 iResolution;
+    uniform vec2 iMouse;
+    uniform float iHover;
     varying vec2 vUv;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      float a = hash(i);
+      float b = hash(i + vec2(1.0, 0.0));
+      float c = hash(i + vec2(0.0, 1.0));
+      float d = hash(i + vec2(1.0, 1.0));
+      return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    }
 
     void main() {
       vec2 uv = vUv;
-      vec3 top = vec3(0.23, 0.56, 0.95);
-      vec3 bottom = vec3(0.86, 0.94, 1.0);
-      vec3 sky = mix(bottom, top, clamp(uv.y, 0.0, 1.0));
+      float t = iTime * 0.15;
+      vec3 baseA = vec3(0.74, 0.86, 0.98);
+      vec3 baseB = vec3(0.57, 0.73, 0.92);
+      vec3 col = mix(baseA, baseB, smoothstep(0.2, 1.0, uv.y));
 
-      float t = iTime * 0.08;
-      float c1 = sin((uv.x * 7.0 + t) + sin(uv.y * 6.0)) * 0.5 + 0.5;
-      float c2 = sin((uv.x * 12.0 - t * 1.4) + cos(uv.y * 9.0)) * 0.5 + 0.5;
-      float clouds = smoothstep(0.58, 0.9, c1 * 0.62 + c2 * 0.38);
+      float facet = noise(uv * vec2(11.0, 6.0) + vec2(0.0, t));
+      float edge = smoothstep(0.0, 0.14, uv.x) * smoothstep(0.0, 0.14, 1.0 - uv.x);
+      float fresnelLike = pow(1.0 - edge, 1.7);
+      col += vec3(0.14, 0.19, 0.27) * fresnelLike * 0.11;
 
-      vec3 color = mix(sky, vec3(0.98, 0.99, 1.0), clouds * 0.5);
-      gl_FragColor = vec4(color, 1.0);
+      float lowerGlow = smoothstep(0.0, 0.55, 1.0 - uv.y);
+      col += vec3(0.16, 0.23, 0.32) * lowerGlow * 0.08;
+      col += vec3(0.08, 0.11, 0.15) * facet * 0.045;
+
+      float distToMouse = distance(uv, iMouse);
+      float hover = exp(-distToMouse * 9.0) * iHover;
+      col += vec3(0.2, 0.26, 0.36) * hover * 0.14;
+      gl_FragColor = vec4(col, 0.98);
     }
   `;
   const kaleFragmentShader = `
@@ -508,6 +1066,40 @@ export function mountMenuScreen({
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
+          if (isHeaven && child.material && !Array.isArray(child.material)) {
+            const n = String(child.name || "").toLowerCase();
+            child.material.roughness = Math.min(child.material.roughness ?? 1, 0.66);
+            child.material.metalness = Math.max(child.material.metalness ?? 0, 0.06);
+            if (n.includes("cap") || n.includes("coin")) {
+              child.material.emissive = new THREE.Color("#80abeb");
+              child.material.emissiveIntensity = 0.12;
+            } else if (n.includes("wing")) {
+              child.material.emissive = new THREE.Color("#a9c6ef");
+              child.material.emissiveIntensity = 0.09;
+            } else if (n.includes("cloud")) {
+              child.material.emissive = new THREE.Color("#c9ddf8");
+              child.material.emissiveIntensity = 0.06;
+              child.material.roughness = Math.min(child.material.roughness ?? 1, 0.74);
+            } else {
+              child.material.emissive = new THREE.Color("#86afe8");
+              child.material.emissiveIntensity = 0.07;
+            }
+            child.material.needsUpdate = true;
+          }
+          if (isHell && child.material && !Array.isArray(child.material)) {
+            // Make the hand/cap integrate with the new lighting and boost cap readability.
+            child.material.roughness = Math.min(child.material.roughness ?? 1, 0.78);
+            child.material.metalness = Math.max(child.material.metalness ?? 0, 0.08);
+            const n = String(child.name || "").toLowerCase();
+            if (n.includes("cap") || n.includes("coin")) {
+              child.material.emissive = new THREE.Color("#5a180d");
+              child.material.emissiveIntensity = 0.28;
+            } else {
+              child.material.emissive = new THREE.Color("#0f0303");
+              child.material.emissiveIntensity = 0.11;
+            }
+            child.material.needsUpdate = true;
+          }
         }
       });
 
@@ -1028,6 +1620,21 @@ export function mountMenuScreen({
 
   let rafId = null;
   let running = true;
+  let composer = null;
+  let bloomPass = null;
+  const useMenuPost = (isHell || isHeaven) && window.innerWidth > 680;
+  if (useMenuPost) {
+    // Restrained bloom for theme-specific emissive accents.
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      isHeaven ? HEAVEN_MENU_TUNING.bloomStrength : HELL_MENU_TUNING.bloomStrength,
+      isHeaven ? HEAVEN_MENU_TUNING.bloomRadius : HELL_MENU_TUNING.bloomRadius,
+      isHeaven ? HEAVEN_MENU_TUNING.bloomThreshold : HELL_MENU_TUNING.bloomThreshold
+    );
+    composer.addPass(bloomPass);
+  }
 
   const animate = () => {
     if (!running) {
@@ -1045,14 +1652,42 @@ export function mountMenuScreen({
       titleMesh.position.y = 8.3 + Math.sin(t * 1.8) * 0.2;
       titleMesh.rotation.y = Math.sin(t * 0.55) * 0.08;
     }
+    if (hellBackground) {
+      hellBackground.uniforms.iTime.value = t;
+    }
+    if (heavenBackground) {
+      heavenBackground.uniforms.iTime.value = t;
+    }
+    if (heavenCloudBase) {
+      heavenCloudBase.uniforms.iTime.value = t;
+    }
+    if (heavenMotes) {
+      heavenMotes.uniforms.iTime.value = t;
+    }
+    if (hellGround) {
+      hellGround.uniforms.iTime.value = t;
+    }
+    if (hellEmbers) {
+      hellEmbers.uniforms.iTime.value = t;
+    }
     controls.update();
-    renderer.render(scene, camera);
+    if (composer) {
+      composer.render();
+    } else {
+      renderer.render(scene, camera);
+    }
   };
 
   const handleResize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    if (composer) {
+      composer.setSize(window.innerWidth, window.innerHeight);
+    }
+    if (bloomPass) {
+      bloomPass.setSize(window.innerWidth, window.innerHeight);
+    }
     titleUniforms.iResolution.value.set(window.innerWidth, window.innerHeight);
     updateResponsiveLayout();
   };
@@ -1111,6 +1746,32 @@ export function mountMenuScreen({
     controls.dispose();
     dracoLoader.dispose();
     ktx2Loader.dispose();
+    composer?.dispose();
+    hellBackground?.mesh.geometry.dispose();
+    hellBackground?.mesh.material.dispose();
+    heavenBackground?.mesh.geometry.dispose();
+    heavenBackground?.mesh.material.dispose();
+    heavenCloudBase?.mesh.geometry.dispose();
+    heavenCloudBase?.mesh.material.dispose();
+    heavenMotes?.points.geometry.dispose();
+    heavenMotes?.points.material.dispose();
+    hellGround?.mesh.geometry.dispose();
+    hellGround?.mesh.material.dispose();
+    hellGround?.basePlate?.geometry.dispose();
+    hellGround?.basePlate?.material.dispose();
+    hellGround?.baseCore?.geometry.dispose();
+    hellGround?.baseCore?.material.dispose();
+    for (const chunk of hellGround?.rockChunks ?? []) {
+      chunk.geometry.dispose();
+    }
+    hellEmbers?.points.geometry.dispose();
+    hellEmbers?.points.material.dispose();
+    if (heavenRimLight) scene.remove(heavenRimLight);
+    if (heavenBounceLight) scene.remove(heavenBounceLight);
+    if (heavenAccentLight) scene.remove(heavenAccentLight);
+    if (hellUnderLight) scene.remove(hellUnderLight);
+    if (hellRimLight) scene.remove(hellRimLight);
+    if (hellBackLight) scene.remove(hellBackLight);
     renderer.dispose();
   };
 }

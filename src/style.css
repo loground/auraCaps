@@ -1479,6 +1479,107 @@ button:disabled {
   box-shadow: 0 8px 22px rgba(47, 95, 60, 0.25), inset 0 0 18px rgba(145, 188, 98, 0.18);
 }
 
+/* Hell menu polish: stronger hierarchy and premium material feel without changing layout. */
+.theme-hell .menu-btn {
+  border: 1px solid rgba(255, 156, 108, 0.82);
+  border-radius: 12px;
+  font-family: "Hell", "Teko", sans-serif;
+  font-size: clamp(1.54rem, 2.3vw, 1.94rem);
+  letter-spacing: 0.085em;
+  padding: 0.68rem 1.05rem 0.62rem;
+  color: #ffe8d8;
+  background:
+    linear-gradient(180deg, rgba(124, 35, 24, 0.92) 0%, rgba(63, 17, 14, 0.95) 48%, rgba(27, 8, 8, 0.98) 100%),
+    radial-gradient(circle at 50% -22%, rgba(255, 176, 128, 0.15), transparent 64%);
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 214, 177, 0.16),
+    inset 0 -14px 18px rgba(10, 3, 3, 0.55),
+    inset 0 0 0 1px rgba(255, 110, 78, 0.18),
+    0 0 0 1px rgba(255, 90, 60, 0.14);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    background 180ms ease;
+}
+
+.theme-hell .menu-btn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 196, 136, 0.95);
+  color: #fff0e1;
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.54),
+    inset 0 1px 0 rgba(255, 224, 196, 0.22),
+    inset 0 -14px 20px rgba(9, 2, 2, 0.62),
+    0 0 0 1px rgba(255, 112, 66, 0.24),
+    0 0 18px rgba(255, 97, 49, 0.28);
+}
+
+.theme-hell .theme-btn,
+.theme-hell .menu-mute-btn,
+.theme-hell .global-mute-btn,
+.theme-hell .menu-theme-select {
+  border: 1px solid rgba(255, 146, 104, 0.72);
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #ffe0cd;
+  background:
+    linear-gradient(180deg, rgba(97, 27, 19, 0.9), rgba(49, 14, 12, 0.94) 46%, rgba(24, 8, 8, 0.97));
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 205, 168, 0.12),
+    inset 0 -8px 14px rgba(7, 2, 2, 0.5),
+    inset 0 0 0 1px rgba(255, 107, 71, 0.16);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.theme-hell .theme-btn:hover,
+.theme-hell .menu-mute-btn:hover,
+.theme-hell .global-mute-btn:hover,
+.theme-hell .menu-theme-select:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 193, 136, 0.92);
+  color: #fff0e0;
+  box-shadow:
+    0 10px 20px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 226, 194, 0.18),
+    inset 0 -8px 14px rgba(8, 2, 2, 0.58),
+    0 0 14px rgba(255, 92, 54, 0.22);
+}
+
+.theme-hell .theme-btn:focus-visible,
+.theme-hell .menu-mute-btn:focus-visible,
+.theme-hell .global-mute-btn:focus-visible,
+.theme-hell .menu-theme-select:focus-visible,
+.theme-hell .menu-btn:focus-visible {
+  outline: none;
+  border-color: rgba(255, 208, 151, 0.96);
+  box-shadow:
+    0 0 0 2px rgba(255, 180, 120, 0.28),
+    0 0 20px rgba(255, 102, 58, 0.3);
+}
+
+.theme-hell .theme-btn.active {
+  border-color: rgba(255, 209, 154, 0.94);
+  color: #fff2e3;
+  box-shadow:
+    0 0 0 1px rgba(255, 192, 128, 0.35),
+    0 0 16px rgba(255, 101, 56, 0.3),
+    inset 0 1px 0 rgba(255, 229, 203, 0.2),
+    inset 0 -10px 14px rgba(8, 2, 2, 0.56);
+}
+
+.theme-hell .menu-theme-picker::after {
+  color: rgba(255, 191, 137, 0.92);
+}
+
 .theme-heaven .back-btn {
   border: 1px solid rgba(95, 148, 205, 0.72);
   background: linear-gradient(180deg, rgba(224, 241, 255, 0.95), rgba(176, 212, 242, 0.95));
