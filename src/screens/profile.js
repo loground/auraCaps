@@ -110,8 +110,8 @@ function renderInitialProfile(app) {
       <h2>Profile</h2>
       <div class="profile-card">
         <label for="profileLookupInput" class="profile-status">Username or wallet</label>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input id="profileLookupInput" type="text" placeholder="aura-user or 0x..." style="flex:1;min-width:220px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.25);color:inherit;" />
+        <div class="profile-lookup-row">
+          <input id="profileLookupInput" class="profile-lookup-input" type="text" placeholder="aura-user or 0x..." />
           <button id="profileLookupBtn" class="theme-btn" type="button">Load Profile</button>
         </div>
       </div>

@@ -123,7 +123,6 @@ export function mountMenuScreen({
       <div class="menu-buttons">
         <button id="menuPlay" class="menu-btn" type="button">play</button>
         <button id="menuCollection" class="menu-btn" type="button">collection</button>
-        <button id="menuProfile" class="menu-btn" type="button">profile</button>
       </div>
       <div id="auraConnectedStatus" class="menu-aura-status ${auraSession?.connected ? "visible" : ""}">
         ${auraSession?.connected ? formatAuraStatus(auraSession) : ""}
@@ -534,7 +533,6 @@ export function mountMenuScreen({
 
   const playButton = app.querySelector("#menuPlay");
   const collectionButton = app.querySelector("#menuCollection");
-  const profileButton = app.querySelector("#menuProfile");
   const menuMuteToggleBtn = app.querySelector("#menuMuteToggle");
   const themeSelectEl = app.querySelector("#menuThemeSelect");
   const auraLoginContainer = app.querySelector("#aura-login");
@@ -738,6 +736,7 @@ export function mountMenuScreen({
             container: "#aura-login",
             clientId,
             mode: "light",
+            text: "aura",
             onClose(error) {
               auraDebugLog("Aura.SigninButton onClose", error);
               setAuraHint(error?.message || "Aura login closed.");
@@ -777,7 +776,7 @@ export function mountMenuScreen({
         }
 
         auraLoginContainer.innerHTML =
-          '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in with aura</button>';
+          '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">aura</button>';
         const fallbackBtn = auraLoginContainer.querySelector("#auraSigninBtn");
         fallbackBtn?.addEventListener(
           "click",
@@ -929,7 +928,6 @@ export function mountMenuScreen({
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
   collectionButton.addEventListener("click", onCollection);
-  profileButton?.addEventListener("click", onProfile);
   themeSelectEl?.addEventListener("change", onThemeSelect);
   menuButtons.classList.add("disabled");
 
@@ -1086,7 +1084,6 @@ export function mountMenuScreen({
     document.removeEventListener("visibilitychange", onWindowFocus);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);
-    profileButton?.removeEventListener("click", onProfile);
     menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeSelectEl?.removeEventListener("change", onThemeSelect);
     clearConnectedActionHandler();
