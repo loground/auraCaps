@@ -1224,6 +1224,27 @@ button:disabled {
     linear-gradient(180deg, #150403 0%, #080202 100%);
 }
 
+#app.theme-hell.mode-profile {
+  background:
+    radial-gradient(circle at 16% 12%, #5f1812 0%, transparent 34%),
+    radial-gradient(circle at 86% 18%, #320b08 0%, transparent 36%),
+    linear-gradient(180deg, #150403 0%, #080202 100%);
+}
+
+#app.theme-heaven.mode-profile {
+  background:
+    radial-gradient(circle at 18% 14%, #e5f4ff 0%, transparent 36%),
+    radial-gradient(circle at 82% 18%, #cbe8ff 0%, transparent 34%),
+    linear-gradient(180deg, #c4e3ff 0%, #9bccf4 100%);
+}
+
+#app.theme-jungle-bay.mode-profile {
+  background:
+    radial-gradient(circle at 18% 14%, #edf8c8 0%, transparent 36%),
+    radial-gradient(circle at 82% 18%, #bde3a8 0%, transparent 34%),
+    linear-gradient(180deg, #83d6ba 0%, #5ab08f 100%);
+}
+
 .theme-heaven {
   color: #203047;
   background:
