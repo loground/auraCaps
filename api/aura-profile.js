@@ -1,16 +1,17 @@
 export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
+  const wallet = String(req.query?.wallet || "").trim();
   const username = String(req.query?.username || "").trim();
   const userId = String(req.query?.userId || "").trim();
 
-  if (!username && !userId) {
-    res.status(400).json({ error: "Missing username or userId query param." });
+  if (!wallet && !username && !userId) {
+    res.status(400).json({ error: "Missing wallet, username, or userId query param." });
     return;
   }
 
   const upstreamUrl = userId
     ? `https://api.auramaxx.gg/api/users/${encodeURIComponent(userId)}`
-    : `https://api.auramaxx.gg/api/users/lookup?username=${encodeURIComponent(username)}`;
+    : `https://api.auramaxx.gg/api/users/lookup?username=${encodeURIComponent(wallet || username)}`;
 
   try {
     const upstream = await fetch(upstreamUrl, {
@@ -39,4 +40,3 @@ export default async function handler(req, res) {
     });
   }
 }
-

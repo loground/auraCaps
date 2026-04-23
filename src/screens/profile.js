@@ -347,11 +347,11 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     applyAuraSession(effectiveSession);
     auraDebugLog("effectiveSession", effectiveSession);
     const bootLookup =
-      effectiveSession?.user?.username ||
-      effectiveSession?.user?.handle ||
       effectiveSession?.walletAddress ||
       effectiveSession?.user?.walletAddress ||
       effectiveSession?.user?.address ||
+      effectiveSession?.user?.username ||
+      effectiveSession?.user?.handle ||
       (() => {
         try {
           return window.localStorage.getItem(AURA_LAST_LOOKUP_KEY) || "";
