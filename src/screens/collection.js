@@ -13,6 +13,28 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     "WILLY",
     "EAZY",
   ]);
+  const clampInt = (value, min, max, fallback) => {
+    const parsed = Number.parseInt(String(value ?? ""), 10);
+    if (!Number.isFinite(parsed)) {
+      return fallback;
+    }
+    return Math.min(max, Math.max(min, parsed));
+  };
+  const sanitizeSpriteConfig = (config, fallback = { columns: 2, rows: 1, frameCount: 2, fps: 8 }) => {
+    if (!config) {
+      return null;
+    }
+    const cols = clampInt(config.columns, 1, 8, fallback.columns);
+    const rows = clampInt(config.rows, 1, 8, fallback.rows);
+    const maxFrames = Math.max(1, cols * rows);
+    const frameCount = clampInt(config.frameCount, 1, maxFrames, Math.min(fallback.frameCount, maxFrames));
+    const fpsRaw = Number(config.fps);
+    const fps = Number.isFinite(fpsRaw) ? Math.min(24, Math.max(1, fpsRaw)) : fallback.fps;
+    if (frameCount <= 1) {
+      return null;
+    }
+    return { columns: cols, rows, frameCount, fps };
+  };
   const JUNGLE_BAY_CAP_PATHS = [
     "/caps/jb/jbcap1.webp",
     "/caps/jbcap2.webp",
@@ -421,18 +443,18 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       const img = card.querySelector("img");
       const loadingEl = card.querySelector(".cap-loading");
       if (img && item.spriteConfig) {
-        const cols = Math.max(1, Number.parseInt(String(item.spriteConfig.columns || 1), 10));
-        const rows = Math.max(1, Number.parseInt(String(item.spriteConfig.rows || 1), 10));
-        const frameCount = Math.max(
-          1,
-          Number.parseInt(String(item.spriteConfig.frameCount || cols * rows), 10)
-        );
-        const fps = Math.max(1, Number(item.spriteConfig.fps || 8));
-        img.classList.add("sprite-sheet");
-        img.style.width = `${cols * 100}%`;
-        img.style.height = `${rows * 100}%`;
-        img.style.transform = "translate(0%, 0%)";
-        previewSpriteNodes.push({ img, cols, rows, frameCount, fps });
+        const safeSprite = sanitizeSpriteConfig(item.spriteConfig);
+        if (safeSprite) {
+          const cols = safeSprite.columns;
+          const rows = safeSprite.rows;
+          const frameCount = safeSprite.frameCount;
+          const fps = safeSprite.fps;
+          img.classList.add("sprite-sheet");
+          img.style.width = `${cols * 100}%`;
+          img.style.height = `${rows * 100}%`;
+          img.style.transform = "translate(0%, 0%)";
+          previewSpriteNodes.push({ img, cols, rows, frameCount, fps });
+        }
       }
       const markLoaded = () => {
         loadingEl?.classList.add("loaded");
@@ -607,28 +629,19 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
         const fps = Number(explicitFps);
 
-        const isAuraVerticalSprite = AURA_SPRITE_NAMES.has(upperName);
-        const fallbackColumns = 4;
-        const fallbackRows = isAuraVerticalSprite ? 2 : 1;
-        const fallbackFrames = isAuraVerticalSprite ? 2 : 4;
-
-        spriteConfig = {
-          // Force known Aura sprite caps to vertical strips (top -> bottom).
-          columns: isAuraVerticalSprite
-            ? 1
-            : Number.isFinite(columns) && columns > 0
-              ? columns
-              : fallbackColumns,
-          rows: isAuraVerticalSprite
-            ? Number.isFinite(frameCount) && frameCount > 1
-              ? frameCount
-              : fallbackRows
-            : Number.isFinite(rows) && rows > 0
-              ? rows
-              : fallbackRows,
-          frameCount: Number.isFinite(frameCount) && frameCount > 1 ? frameCount : fallbackFrames,
-          fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
-        };
+        const isNamedAuraSprite = AURA_SPRITE_NAMES.has(upperName);
+        const fallback = isNamedAuraSprite
+          ? { columns: 2, rows: 1, frameCount: 2, fps: 8 }
+          : { columns: 4, rows: 1, frameCount: 4, fps: 8 };
+        spriteConfig = sanitizeSpriteConfig(
+          {
+            columns,
+            rows,
+            frameCount,
+            fps,
+          },
+          fallback
+        );
       }
       const detailsBits = [`Series ${series || "beta"}`];
       if (rarity) {
