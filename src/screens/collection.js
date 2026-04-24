@@ -44,7 +44,58 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       fps: Math.max(1, Math.min(24, Number(hints?.fps || 8))),
     };
   };
-  const drawSpriteFrameToCanvas = ({ canvas, ctx, image, config, frame }) => {
+  const getSpriteFrameBounds = ({ image, config, frame, cache }) => {
+    if (!cache.bounds) {
+      cache.bounds = new Map();
+    }
+    if (cache.bounds.has(frame)) {
+      return cache.bounds.get(frame);
+    }
+    const cols = Math.max(1, config.columns);
+    const rows = Math.max(1, config.rows);
+    const frameW = Math.max(1, Math.floor(image.naturalWidth / cols));
+    const frameH = Math.max(1, Math.floor(image.naturalHeight / rows));
+    const col = frame % cols;
+    const row = Math.floor(frame / cols);
+    const sx = col * frameW;
+    const sy = row * frameH;
+
+    if (!cache.canvas) {
+      cache.canvas = document.createElement("canvas");
+      cache.ctx = cache.canvas.getContext("2d", { willReadFrequently: true });
+    }
+    if (cache.canvas.width !== frameW || cache.canvas.height !== frameH) {
+      cache.canvas.width = frameW;
+      cache.canvas.height = frameH;
+    }
+    cache.ctx.clearRect(0, 0, frameW, frameH);
+    cache.ctx.drawImage(image, sx, sy, frameW, frameH, 0, 0, frameW, frameH);
+    const { data } = cache.ctx.getImageData(0, 0, frameW, frameH);
+
+    let minX = frameW;
+    let minY = frameH;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < frameH; y += 1) {
+      for (let x = 0; x < frameW; x += 1) {
+        const alpha = data[(y * frameW + x) * 4 + 3];
+        if (alpha > 8) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    const bounds =
+      maxX >= minX && maxY >= minY
+        ? { sx: sx + minX, sy: sy + minY, sw: maxX - minX + 1, sh: maxY - minY + 1 }
+        : { sx, sy, sw: frameW, sh: frameH };
+    cache.bounds.set(frame, bounds);
+    return bounds;
+  };
+
+  const drawSpriteFrameToCanvas = ({ canvas, ctx, image, config, frame, sourceRect = null }) => {
     const cols = Math.max(1, config.columns);
     const rows = Math.max(1, config.rows);
     const frameW = image.naturalWidth / cols;
@@ -54,26 +105,32 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     const row = Math.floor(frameIndex / cols);
     const sx = col * frameW;
     const sy = row * frameH;
+    const srcX = sourceRect?.sx ?? sx;
+    const srcY = sourceRect?.sy ?? sy;
+    const srcW = sourceRect?.sw ?? frameW;
+    const srcH = sourceRect?.sh ?? frameH;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const cssW = Math.max(1, canvas.clientWidth || 128);
-    const cssH = Math.max(1, canvas.clientHeight || 128);
-    const targetW = Math.floor(cssW * dpr);
-    const targetH = Math.floor(cssH * dpr);
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-      canvas.width = targetW;
-      canvas.height = targetH;
+    const cssW = canvas.clientWidth || 0;
+    const cssH = canvas.clientHeight || 0;
+    if (cssW > 0 && cssH > 0) {
+      const targetW = Math.floor(cssW * dpr);
+      const targetH = Math.floor(cssH * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const scale = Math.min(canvas.width / frameW, canvas.height / frameH);
-    const dw = frameW * scale;
-    const dh = frameH * scale;
+    const scale = Math.min(canvas.width / srcW, canvas.height / srcH);
+    const dw = srcW * scale;
+    const dh = srcH * scale;
     const dx = (canvas.width - dw) * 0.5;
     const dy = (canvas.height - dh) * 0.5;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(image, sx, sy, frameW, frameH, dx, dy, dw, dh);
+    ctx.drawImage(image, srcX, srcY, srcW, srcH, dx, dy, dw, dh);
   };
   const JUNGLE_BAY_CAP_PATHS = [
     "/caps/jb/jbcap1.webp",
@@ -310,19 +367,32 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       spriteCtx = spriteCanvas.getContext("2d");
       frontTexture = new THREE.CanvasTexture(spriteCanvas);
       frontTexture.colorSpace = THREE.SRGBColorSpace;
+      frontTexture.center.set(0.5, 0.5);
+      frontTexture.repeat.set(1, 1);
+      frontTexture.offset.set(0, 0);
       frontTexture.needsUpdate = true;
       const image = new Image();
       image.crossOrigin = "anonymous";
       image.decoding = "async";
       image.onload = () => {
         spriteImage = image;
-        spriteConfig = resolveSpritePlayback(image, item.spriteHints);
+        spriteConfig =
+          item._resolvedSpriteConfig ||
+          resolveSpritePlayback(image, item.spriteHints);
+        item._resolvedSpriteConfig = spriteConfig;
+        const initialBounds = getSpriteFrameBounds({
+          image: spriteImage,
+          config: spriteConfig,
+          frame: 0,
+          cache: { bounds: new Map() },
+        });
         drawSpriteFrameToCanvas({
           canvas: spriteCanvas,
           ctx: spriteCtx,
           image: spriteImage,
           config: spriteConfig,
           frame: 0,
+          sourceRect: initialBounds,
         });
         frontTexture.needsUpdate = true;
       };
@@ -339,6 +409,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           ctx: spriteCtx,
           image: () => spriteImage,
           config: () => spriteConfig,
+          boundsCache: {},
           lastFrame: -1,
         }
       : null;
@@ -379,12 +450,19 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
             Math.floor(performance.now() * 0.001 * config.fps) % config.frameCount;
           if (frame !== spriteAnimState.lastFrame) {
             spriteAnimState.lastFrame = frame;
+            const sourceRect = getSpriteFrameBounds({
+              image,
+              config,
+              frame,
+              cache: spriteAnimState.boundsCache,
+            });
             drawSpriteFrameToCanvas({
               canvas: spriteAnimState.canvas,
               ctx: spriteAnimState.ctx,
               image,
               config,
               frame,
+              sourceRect,
             });
             spriteAnimState.texture.needsUpdate = true;
           }
@@ -515,6 +593,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         spriteImage.decoding = "async";
         spriteImage.onload = () => {
           const config = resolveSpritePlayback(spriteImage, item.spriteHints);
+          item._resolvedSpriteConfig = config;
           previewSpriteNodes.push({
             canvas,
             ctx: canvas.getContext("2d"),
