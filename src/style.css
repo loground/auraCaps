@@ -847,6 +847,7 @@ button:disabled {
   grid-template-rows: auto auto auto;
   justify-items: center;
   gap: 0.2rem;
+  position: relative;
   width: 100%;
   border-radius: 10px;
   border: 1px solid rgba(255, 130, 92, 0.45);
@@ -859,6 +860,25 @@ button:disabled {
   width: 58px;
   height: 58px;
   object-fit: contain;
+}
+
+.cap-pick-card .sprite-preview-canvas {
+  width: 58px;
+  height: 58px;
+  display: block;
+  border-radius: 50%;
+}
+
+.cap-pick-loading {
+  grid-column: 1 / -1;
+  min-height: 92px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 156, 118, 0.46);
+  background: rgba(57, 12, 10, 0.5);
+  display: grid;
+  place-items: center;
+  gap: 0.4rem;
+  padding: 0.8rem;
 }
 
 .cap-pick-name {

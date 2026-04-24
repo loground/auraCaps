@@ -12,6 +12,7 @@ const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
 let soundEnabled = true;
 const AURA_SESSION_KEY = "aura_session_v1";
+const AURA_SPRITE_NAMES = new Set(["FILTHY", "GOLDIE", "ALI", "YODIE", "WILLY", "EAZY"]);
 let auraSession = loadAuraSession();
 
 function loadAuraSession() {
@@ -374,7 +375,209 @@ const CAP_OPTIONS = [
   })),
 ];
 
-function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
+function parseSpriteHints(configLike = {}) {
+  const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
+  const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
+  const frameCount = Number.parseInt(String(configLike.frameCount ?? configLike.frames ?? ""), 10);
+  const fps = Number(configLike.fps);
+  return {
+    columns: Number.isFinite(columns) && columns > 0 ? columns : undefined,
+    rows: Number.isFinite(rows) && rows > 0 ? rows : undefined,
+    frameCount: Number.isFinite(frameCount) && frameCount > 0 ? frameCount : undefined,
+    fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
+  };
+}
+
+function resolveSpritePlayback(image, hints) {
+  const maxFrames = 64;
+  const naturalW = Math.max(1, image.naturalWidth || image.width || 1);
+  const naturalH = Math.max(1, image.naturalHeight || image.height || 1);
+  const inferredCols = Math.max(1, Math.min(maxFrames, Math.round(naturalW / naturalH)));
+  const columns = Math.max(1, Math.min(maxFrames, hints?.columns || inferredCols || 1));
+  const rows = Math.max(1, Math.min(8, hints?.rows || 1));
+  const maxGridFrames = Math.max(1, columns * rows);
+  const frameCount = Math.max(1, Math.min(maxGridFrames, hints?.frameCount || inferredCols || columns));
+  return {
+    columns,
+    rows,
+    frameCount,
+    fps: Math.max(1, Math.min(24, Number(hints?.fps || 8))),
+  };
+}
+
+function drawSpriteFrameToCanvas({ canvas, ctx, image, config, frame }) {
+  const cols = Math.max(1, config.columns);
+  const rows = Math.max(1, config.rows);
+  const frameW = image.naturalWidth / cols;
+  const frameH = image.naturalHeight / rows;
+  const frameIndex = Math.max(0, frame % Math.max(1, config.frameCount));
+  const col = frameIndex % cols;
+  const row = Math.floor(frameIndex / cols);
+  const sx = col * frameW;
+  const sy = row * frameH;
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const cssW = Math.max(1, canvas.clientWidth || 96);
+  const cssH = Math.max(1, canvas.clientHeight || 96);
+  const targetW = Math.floor(cssW * dpr);
+  const targetH = Math.floor(cssH * dpr);
+  if (canvas.width !== targetW || canvas.height !== targetH) {
+    canvas.width = targetW;
+    canvas.height = targetH;
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const scale = Math.min(canvas.width / frameW, canvas.height / frameH);
+  const dw = frameW * scale;
+  const dh = frameH * scale;
+  const dx = (canvas.width - dw) * 0.5;
+  const dy = (canvas.height - dh) * 0.5;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, sx, sy, frameW, frameH, dx, dy, dw, dh);
+}
+
+function pickAuraLookupValue(sessionLike) {
+  const user = sessionLike?.user || {};
+  const candidates = [
+    sessionLike?.walletAddress,
+    user?.walletAddress,
+    user?.address,
+    user?.username,
+    user?.handle,
+    user?.displayName,
+  ];
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (value) {
+      return value;
+    }
+  }
+  return "";
+}
+
+function toAbsImage(imageLike) {
+  const value = String(imageLike || "").trim();
+  if (!value) return "";
+  if (value.startsWith("ipfs://")) {
+    return `https://ipfs.io/ipfs/${value.slice("ipfs://".length)}`;
+  }
+  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
+    return value;
+  }
+  return `https://ipfs.io/ipfs/${value}`;
+}
+
+function extractAuraCapOptions(payload) {
+  const candidates = [payload?.data, payload?.items, payload?.cards, payload?.results, payload?.packCards, payload];
+  let rows = [];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      rows = candidate;
+      break;
+    }
+  }
+  const seen = new Set();
+  const mapped = [];
+  for (const row of rows) {
+    const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
+    const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
+    const name = String(
+      row?.name || row?.title || metadata?.name || row?.card?.name || row?.packCard?.name || ""
+    ).trim();
+    const imagePath = toAbsImage(
+      row?.image ||
+        row?.imageUrl ||
+        row?.image_url ||
+        row?.imageURI ||
+        row?.image_uri ||
+        metadata?.image ||
+        metadata?.image_url ||
+        row?.card?.image ||
+        row?.card?.imageUrl ||
+        row?.packCard?.image
+    );
+    const uniqueKey = String(
+      row?.id || row?._id || row?.tokenId || row?.tokenID || row?.mint || row?.packCardId || `${name}-${imagePath}`
+    );
+    if (!name || !imagePath || seen.has(uniqueKey)) {
+      continue;
+    }
+    seen.add(uniqueKey);
+    const upperName = name.toUpperCase();
+    const isAuraSprite = AURA_SPRITE_NAMES.has(upperName);
+    const attrLookup = (keys) => {
+      const normalized = keys.map((k) => String(k).toLowerCase());
+      const found = attrs.find((attr) =>
+        normalized.includes(String(attr?.trait_type || attr?.traitType || attr?.key || "").toLowerCase())
+      );
+      return found?.value ?? found?.display_value ?? "";
+    };
+    const explicitFrameCount =
+      metadata?.frameCount ??
+      metadata?.frames ??
+      metadata?.spriteFrames ??
+      row?.frameCount ??
+      attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
+    const explicitCols =
+      metadata?.columns ??
+      metadata?.cols ??
+      metadata?.spriteColumns ??
+      row?.columns ??
+      attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
+    const explicitRows =
+      metadata?.rows ??
+      metadata?.spriteRows ??
+      row?.rows ??
+      attrLookup(["rows", "spriteRows", "sprite rows"]);
+    const explicitFps =
+      metadata?.fps ??
+      metadata?.spriteFps ??
+      row?.fps ??
+      attrLookup(["fps", "spriteFps", "sprite fps"]);
+    const spriteHints = isAuraSprite
+      ? parseSpriteHints({
+          columns: explicitCols,
+          rows: explicitRows,
+          frameCount: explicitFrameCount,
+          fps: explicitFps,
+        })
+      : null;
+    mapped.push({
+      id: `aura-${uniqueKey}`,
+      name,
+      imagePath,
+      collection: "aura collection",
+      series: "beta",
+      isAuraSprite,
+      spriteHints,
+    });
+  }
+  return mapped.slice(0, 48);
+}
+
+async function fetchAuraCapOptions(sessionLike) {
+  const lookupValue = pickAuraLookupValue(sessionLike);
+  if (!lookupValue) {
+    return [];
+  }
+  const profileResponse = await fetch(`/api/aura-profile?username=${encodeURIComponent(lookupValue)}`);
+  const profileJson = await profileResponse.json().catch(() => null);
+  const profilePayload = profileJson?.data || profileJson;
+  const profile = profilePayload?.user || profilePayload?.data || profilePayload || {};
+  const userId = String(profile?.id || profile?._id || profile?.userId || "").trim();
+  if (!profileResponse.ok || !userId) {
+    return [];
+  }
+  const inventoryResponse = await fetch(
+    `/api/aura-inventory?userId=${encodeURIComponent(userId)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`
+  );
+  const inventoryJson = await inventoryResponse.json().catch(() => null);
+  const inventoryPayload = inventoryJson?.data || inventoryJson;
+  return extractAuraCapOptions(inventoryPayload);
+}
+
+async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "play-setup-modal";
@@ -424,11 +627,16 @@ function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" 
     const backdrop = overlay.querySelector(".play-setup-backdrop");
 
     const isBrainrot = theme === "brainrot";
-    const selectableCaps = CAP_OPTIONS.filter((cap) =>
+    const baseCaps = CAP_OPTIONS.filter((cap) =>
       gameMode === "slammer"
         ? cap.id.startsWith("slammer-")
         : !cap.id.startsWith("slammer-")
     );
+    let selectableCaps = [...baseCaps];
+    let capsLoading = gameMode !== "slammer";
+    let isClosed = false;
+    let spritePreviewNodes = [];
+    let spritePreviewRafId = null;
     const byId = (id) => selectableCaps.find((cap) => cap.id === id) || selectableCaps[0];
     const playerDefaultCandidate = gameMode === "slammer" ? "slammer-1" : "classic-1";
     const cpuDefaultCandidate =
@@ -443,12 +651,59 @@ function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" 
     const renderHint = (label, cap) =>
       `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}`;
 
+    const stopSpritePreviewAnimation = () => {
+      if (spritePreviewRafId !== null) {
+        cancelAnimationFrame(spritePreviewRafId);
+        spritePreviewRafId = null;
+      }
+    };
+
+    const startSpritePreviewAnimation = () => {
+      if (spritePreviewRafId !== null || spritePreviewNodes.length === 0) {
+        return;
+      }
+      const tick = () => {
+        spritePreviewRafId = requestAnimationFrame(tick);
+        const nowSec = performance.now() * 0.001;
+        for (const node of spritePreviewNodes) {
+          const canvas = node?.canvas;
+          if (!canvas || !canvas.isConnected || !node.image || !node.config) {
+            continue;
+          }
+          const frame = Math.floor(nowSec * node.config.fps) % node.config.frameCount;
+          if (frame === node.lastFrame) {
+            continue;
+          }
+          node.lastFrame = frame;
+          drawSpriteFrameToCanvas({
+            canvas,
+            ctx: node.ctx,
+            image: node.image,
+            config: node.config,
+            frame,
+          });
+        }
+      };
+      spritePreviewRafId = requestAnimationFrame(tick);
+    };
+
     const renderGrid = () => {
       if (!capsGrid) {
         return;
       }
+      stopSpritePreviewAnimation();
+      spritePreviewNodes = [];
       const selectedId =
         selectedTarget === "cpu" && !isTraining ? selectedCpuCapId : selectedPlayerCapId;
+      if (capsLoading && selectableCaps.length === 0) {
+        capsGrid.innerHTML = `
+          <div class="cap-pick-loading">
+            <span class="cap-loading-spinner" aria-hidden="true"></span>
+            <span class="cap-loading-text">loading aura caps</span>
+          </div>
+        `;
+        return;
+      }
       capsGrid.innerHTML = selectableCaps
         .map((cap) => {
         const isSelected = cap.id === selectedId;
@@ -460,7 +715,7 @@ function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" 
             role="option"
             aria-selected="${isSelected ? "true" : "false"}"
           >
-            <img src="${cap.imagePath}" alt="${cap.name}" loading="lazy" />
+            <img src="${cap.imagePath}" alt="${cap.name}" loading="lazy" decoding="async" />
             <span class="cap-pick-name">${cap.name}</span>
             <span class="cap-pick-weight">Weight ${capWeightText(cap)}</span>
           </button>
@@ -483,6 +738,41 @@ function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" 
           renderGrid();
         });
       });
+
+      capsGrid.querySelectorAll(".cap-pick-card").forEach((button) => {
+        const capId = button.getAttribute("data-cap-id");
+        if (!capId) return;
+        const cap = byId(capId);
+        if (!cap?.isAuraSprite) {
+          return;
+        }
+        const img = button.querySelector("img");
+        if (!img) {
+          return;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.className = "sprite-preview-canvas";
+        button.insertBefore(canvas, img);
+        img.style.display = "none";
+        const spriteImage = new Image();
+        spriteImage.crossOrigin = "anonymous";
+        spriteImage.decoding = "async";
+        spriteImage.onload = () => {
+          const config = resolveSpritePlayback(spriteImage, cap.spriteHints);
+          spritePreviewNodes.push({
+            canvas,
+            ctx: canvas.getContext("2d"),
+            image: spriteImage,
+            config,
+            lastFrame: -1,
+          });
+          startSpritePreviewAnimation();
+        };
+        spriteImage.onerror = () => {
+          img.style.display = "";
+        };
+        spriteImage.src = cap.imagePath;
+      });
     };
 
     const updateTargetButtons = () => {
@@ -503,6 +793,8 @@ function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" 
     renderGrid();
 
     const cleanup = () => {
+      isClosed = true;
+      stopSpritePreviewAnimation();
       pickPlayerBtn?.removeEventListener("click", onPickPlayer);
       pickCpuBtn?.removeEventListener("click", onPickCpu);
       closeBtn?.removeEventListener("click", onCancel);
@@ -541,6 +833,27 @@ function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" 
     closeBtn?.addEventListener("click", onCancel);
     launchBtn?.addEventListener("click", onLaunch);
     backdrop?.addEventListener("click", onCancel);
+
+    if (gameMode !== "slammer") {
+      fetchAuraCapOptions(auraSession || loadAuraSession())
+        .then((auraCaps) => {
+          if (isClosed) {
+            return;
+          }
+          if (Array.isArray(auraCaps) && auraCaps.length > 0) {
+            selectableCaps = [...baseCaps, ...auraCaps];
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (isClosed) {
+            return;
+          }
+          capsLoading = false;
+          updateHints();
+          renderGrid();
+        });
+    }
   });
 }
 
