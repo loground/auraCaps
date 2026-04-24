@@ -368,12 +368,12 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   const pickAuraLookupValue = (sessionLike) => {
     const user = sessionLike?.user || {};
     const candidates = [
+      sessionLike?.walletAddress,
+      user?.walletAddress,
+      user?.address,
       user?.username,
       user?.handle,
       user?.displayName,
-      user?.walletAddress,
-      user?.address,
-      sessionLike?.walletAddress,
     ];
     for (const candidate of candidates) {
       const value = String(candidate || "").trim();
