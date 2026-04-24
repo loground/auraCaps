@@ -607,18 +607,26 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
         const fps = Number(explicitFps);
 
+        const isAuraVerticalSprite = AURA_SPRITE_NAMES.has(upperName);
         const fallbackColumns = 4;
-        const fallbackRows = AURA_SPRITE_NAMES.has(upperName) ? 2 : 1;
-        const fallbackFrames = AURA_SPRITE_NAMES.has(upperName) ? 2 : 4;
-        const fallbackCols = AURA_SPRITE_NAMES.has(upperName) ? 1 : fallbackColumns;
+        const fallbackRows = isAuraVerticalSprite ? 2 : 1;
+        const fallbackFrames = isAuraVerticalSprite ? 2 : 4;
 
         spriteConfig = {
-          columns: Number.isFinite(columns) && columns > 0 ? columns : fallbackCols,
-          rows: Number.isFinite(rows) && rows > 0 ? rows : fallbackRows,
-          frameCount:
-            Number.isFinite(frameCount) && frameCount > 1
+          // Force known Aura sprite caps to vertical strips (top -> bottom).
+          columns: isAuraVerticalSprite
+            ? 1
+            : Number.isFinite(columns) && columns > 0
+              ? columns
+              : fallbackColumns,
+          rows: isAuraVerticalSprite
+            ? Number.isFinite(frameCount) && frameCount > 1
               ? frameCount
-              : fallbackFrames,
+              : fallbackRows
+            : Number.isFinite(rows) && rows > 0
+              ? rows
+              : fallbackRows,
+          frameCount: Number.isFinite(frameCount) && frameCount > 1 ? frameCount : fallbackFrames,
           fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
         };
       }
