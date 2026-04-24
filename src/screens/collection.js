@@ -413,9 +413,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           lastFrame: -1,
         }
       : null;
-    if (!item.isAuraSprite) {
-      frontTexture.rotation = Math.PI * 0.5;
-    }
+    frontTexture.rotation = Math.PI * 0.5;
 
     inspectorDisc = createDiscMesh({
       radius: DISC_RADIUS * 1.06,
