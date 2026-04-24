@@ -35,6 +35,68 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     }
     return { columns: cols, rows, frameCount, fps };
   };
+  const parseSpriteHints = (configLike = {}) => {
+    const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
+    const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
+    const frameCount = Number.parseInt(String(configLike.frameCount ?? configLike.frames ?? ""), 10);
+    const fps = Number(configLike.fps);
+    return {
+      columns: Number.isFinite(columns) && columns > 0 ? columns : undefined,
+      rows: Number.isFinite(rows) && rows > 0 ? rows : undefined,
+      frameCount: Number.isFinite(frameCount) && frameCount > 0 ? frameCount : undefined,
+      fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
+    };
+  };
+  const resolveSpritePlayback = (image, hints) => {
+    const maxFrames = 64;
+    const naturalW = Math.max(1, image.naturalWidth || image.width || 1);
+    const naturalH = Math.max(1, image.naturalHeight || image.height || 1);
+    const inferredCols = Math.max(1, Math.min(maxFrames, Math.round(naturalW / naturalH)));
+    const columns = Math.max(1, Math.min(maxFrames, hints?.columns || inferredCols || 1));
+    const rows = Math.max(1, Math.min(8, hints?.rows || 1));
+    const maxGridFrames = Math.max(1, columns * rows);
+    const frameCount = Math.max(
+      1,
+      Math.min(maxGridFrames, hints?.frameCount || inferredCols || columns)
+    );
+    return {
+      columns,
+      rows,
+      frameCount,
+      fps: Math.max(1, Math.min(24, Number(hints?.fps || 8))),
+    };
+  };
+  const drawSpriteFrameToCanvas = ({ canvas, ctx, image, config, frame }) => {
+    const cols = Math.max(1, config.columns);
+    const rows = Math.max(1, config.rows);
+    const frameW = image.naturalWidth / cols;
+    const frameH = image.naturalHeight / rows;
+    const frameIndex = Math.max(0, frame % Math.max(1, config.frameCount));
+    const col = frameIndex % cols;
+    const row = Math.floor(frameIndex / cols);
+    const sx = col * frameW;
+    const sy = row * frameH;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cssW = Math.max(1, canvas.clientWidth || 128);
+    const cssH = Math.max(1, canvas.clientHeight || 128);
+    const targetW = Math.floor(cssW * dpr);
+    const targetH = Math.floor(cssH * dpr);
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scale = Math.min(canvas.width / frameW, canvas.height / frameH);
+    const dw = frameW * scale;
+    const dh = frameH * scale;
+    const dx = (canvas.width - dw) * 0.5;
+    const dy = (canvas.height - dh) * 0.5;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, sx, sy, frameW, frameH, dx, dy, dw, dh);
+  };
   const JUNGLE_BAY_CAP_PATHS = [
     "/caps/jb/jbcap1.webp",
     "/caps/jbcap2.webp",
@@ -196,18 +258,22 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       previewSpriteRafId = requestAnimationFrame(tick);
       const nowSec = performance.now() * 0.001;
       for (const node of previewSpriteNodes) {
-        const img = node?.img;
-        if (!img || !img.isConnected) {
+        const canvas = node?.canvas;
+        if (!canvas || !canvas.isConnected || !node.image || !node.config) {
           continue;
         }
-        const frame = Math.floor(nowSec * node.fps) % node.frameCount;
+        const frame = Math.floor(nowSec * node.config.fps) % node.config.frameCount;
         if (frame === node.lastFrame) {
           continue;
         }
         node.lastFrame = frame;
-        const col = frame % node.cols;
-        const tx = -(col * (100 / node.cols));
-        img.style.transform = `translate(${tx}%, 0%)`;
+        drawSpriteFrameToCanvas({
+          canvas,
+          ctx: node.ctx,
+          image: node.image,
+          config: node.config,
+          frame,
+        });
       }
     };
     previewSpriteRafId = requestAnimationFrame(tick);
@@ -255,51 +321,51 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     inspectorScene.add(fillLight);
     inspectorScene.add(new THREE.AmbientLight(0xf3f7ff, 1.05));
 
-    frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath);
+    let spriteCanvas = null;
+    let spriteCtx = null;
+    let spriteImage = null;
+    let spriteConfig = null;
+    if (item.isAuraSprite) {
+      spriteCanvas = document.createElement("canvas");
+      spriteCanvas.width = 1024;
+      spriteCanvas.height = 1024;
+      spriteCtx = spriteCanvas.getContext("2d");
+      frontTexture = new THREE.CanvasTexture(spriteCanvas);
+      frontTexture.colorSpace = THREE.SRGBColorSpace;
+      frontTexture.needsUpdate = true;
+      const image = new Image();
+      image.crossOrigin = "anonymous";
+      image.decoding = "async";
+      image.onload = () => {
+        spriteImage = image;
+        spriteConfig = resolveSpritePlayback(image, item.spriteHints);
+        drawSpriteFrameToCanvas({
+          canvas: spriteCanvas,
+          ctx: spriteCtx,
+          image: spriteImage,
+          config: spriteConfig,
+          frame: 0,
+        });
+        frontTexture.needsUpdate = true;
+      };
+      image.src = item.imagePath;
+    } else {
+      frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath);
+    }
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
     backTexture.rotation = Math.PI * 0.5;
-
-    const toInt = (value, fallback) => {
-      const parsed = Number.parseInt(String(value ?? ""), 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    };
-    const toNum = (value, fallback) => {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-    };
-    const configureSpriteAnimation = (texture, config) => {
-      if (!texture || !config) {
-        return null;
-      }
-      const cols = toInt(config.columns, 1);
-      const rows = toInt(config.rows, 1);
-      const frameCount = Math.max(1, toInt(config.frameCount, cols * rows));
-      const fps = toNum(config.fps, 8);
-      if (cols * rows <= 1 || frameCount <= 1) {
-        return null;
-      }
-      texture.wrapS = THREE.ClampToEdgeWrapping;
-      texture.wrapT = THREE.ClampToEdgeWrapping;
-      texture.rotation = 0;
-      texture.repeat.set(1 / cols, 1 / rows);
-      texture.offset.set(0, 0);
-      texture.needsUpdate = true;
-      return {
-        texture,
-        cols,
-        rows,
-        frameCount,
-        fps,
-      };
-    };
-
-    spriteAnimState = configureSpriteAnimation(frontTexture, item.spriteConfig || null);
-    if (!spriteAnimState) {
-      if (item.isAuraSprite) {
-        frontTexture.rotation = 0;
-      } else {
+    spriteAnimState = item.isAuraSprite
+      ? {
+          texture: frontTexture,
+          canvas: spriteCanvas,
+          ctx: spriteCtx,
+          image: () => spriteImage,
+          config: () => spriteConfig,
+          lastFrame: -1,
+        }
+      : null;
+    if (!item.isAuraSprite) {
       frontTexture.rotation = Math.PI * 0.5;
-      }
     }
 
     inspectorDisc = createDiscMesh({
@@ -328,10 +394,23 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       rafId = requestAnimationFrame(render);
       inspectorDisc.rotation.z += 0.0025;
       if (spriteAnimState) {
-        const frame = Math.floor(performance.now() * 0.001 * spriteAnimState.fps) % spriteAnimState.frameCount;
-        const col = frame % spriteAnimState.cols;
-        spriteAnimState.texture.offset.x = col / spriteAnimState.cols;
-        spriteAnimState.texture.offset.y = 0;
+        const image = spriteAnimState.image();
+        const config = spriteAnimState.config();
+        if (image && config) {
+          const frame =
+            Math.floor(performance.now() * 0.001 * config.fps) % config.frameCount;
+          if (frame !== spriteAnimState.lastFrame) {
+            spriteAnimState.lastFrame = frame;
+            drawSpriteFrameToCanvas({
+              canvas: spriteAnimState.canvas,
+              ctx: spriteAnimState.ctx,
+              image,
+              config,
+              frame,
+            });
+            spriteAnimState.texture.needsUpdate = true;
+          }
+        }
       }
       inspectorControls.update();
       inspectorRenderer.render(inspectorScene, inspectorCamera);
@@ -446,26 +525,40 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       });
 
       const img = card.querySelector("img");
+      const discBtn = card.querySelector(".disc-card");
       const loadingEl = card.querySelector(".cap-loading");
-      if (img && item.spriteConfig) {
-        const safeSprite = sanitizeSpriteConfig(item.spriteConfig);
-        if (safeSprite) {
-          const cols = safeSprite.columns;
-          const rows = safeSprite.rows;
-          const frameCount = safeSprite.frameCount;
-          const fps = safeSprite.fps;
-          img.classList.add("sprite-sheet");
-          img.style.width = `${cols * 100}%`;
-          img.style.height = `${rows * 100}%`;
-          img.style.transform = "translate(0%, 0%)";
-          previewSpriteNodes.push({ img, cols, rows, frameCount, fps, lastFrame: -1 });
-        }
+      if (item.isAuraSprite && img && discBtn) {
+        const canvas = document.createElement("canvas");
+        canvas.className = "sprite-preview-canvas";
+        discBtn.appendChild(canvas);
+        img.style.display = "none";
+        const spriteImage = new Image();
+        spriteImage.crossOrigin = "anonymous";
+        spriteImage.decoding = "async";
+        spriteImage.onload = () => {
+          const config = resolveSpritePlayback(spriteImage, item.spriteHints);
+          previewSpriteNodes.push({
+            canvas,
+            ctx: canvas.getContext("2d"),
+            image: spriteImage,
+            config,
+            lastFrame: -1,
+          });
+          loadingEl?.classList.add("loaded");
+          startPreviewSpriteAnimation();
+        };
+        spriteImage.onerror = () => {
+          loadingEl?.classList.add("loaded");
+          img.style.display = "";
+          img.classList.add("loaded");
+        };
+        spriteImage.src = item.imagePath;
       }
       const markLoaded = () => {
         loadingEl?.classList.add("loaded");
         img?.classList.add("loaded");
       };
-      if (img) {
+      if (img && !item.isAuraSprite) {
         if (img.complete) {
           markLoaded();
         } else {
@@ -602,7 +695,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         );
         return found?.value ?? found?.display_value ?? "";
       };
-      let spriteConfig = null;
+      let spriteHints = null;
       if (spriteFlag) {
         const explicitFrameCount =
           metadata?.frameCount ??
@@ -632,11 +725,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
         const fps = Number(explicitFps);
 
-        // Default to a single frame unless metadata says otherwise.
-        spriteConfig = sanitizeSpriteConfig(
-          { columns, rows, frameCount, fps },
-          { columns: 1, rows: 1, frameCount: 1, fps: 8 }
-        );
+        spriteHints = parseSpriteHints({ columns, rows, frameCount, fps });
       }
       const detailsBits = [`Series ${series || "beta"}`];
       if (rarity) {
@@ -649,7 +738,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         imagePath,
         subtitle: subtitle,
         details: detailsBits.join(" • "),
-        spriteConfig,
+        spriteHints,
         isAuraSprite: spriteFlag,
       });
     }
