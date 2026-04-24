@@ -100,6 +100,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   let inspectorDisc = null;
   let frontTexture = null;
   let backTexture = null;
+  let spriteSourceTexture = null;
   let spriteAnimState = null;
   let rafId = null;
   let resizeObserver = null;
@@ -138,6 +139,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     if (frontTexture) {
       frontTexture.dispose();
       frontTexture = null;
+    }
+    if (spriteSourceTexture) {
+      spriteSourceTexture.dispose();
+      spriteSourceTexture = null;
     }
     if (backTexture) {
       backTexture.dispose();
@@ -254,18 +259,32 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       if (cols * rows <= 1 || frameCount <= 1) {
         return null;
       }
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.rotation = 0;
-      texture.repeat.set(1 / cols, 1 / rows);
-      texture.offset.set(0, 1 - 1 / rows);
-      texture.needsUpdate = true;
+      const sourceImage = texture.image || null;
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return null;
+      }
+      const spriteTexture = new THREE.CanvasTexture(canvas);
+      spriteTexture.colorSpace = THREE.SRGBColorSpace;
+      spriteTexture.center.set(0.5, 0.5);
+      spriteTexture.rotation = Math.PI * 0.5;
+      spriteTexture.anisotropy = inspectorRenderer.capabilities.getMaxAnisotropy();
+      spriteTexture.needsUpdate = true;
+      spriteSourceTexture = texture;
+      frontTexture = spriteTexture;
       return {
-        texture,
+        texture: spriteTexture,
+        canvas,
+        ctx,
+        sourceImage,
         cols,
         rows,
         frameCount,
         fps,
+        initialized: false,
       };
     };
 
@@ -303,8 +322,42 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const frame = Math.floor(performance.now() * 0.001 * spriteAnimState.fps) % spriteAnimState.frameCount;
         const col = frame % spriteAnimState.cols;
         const row = Math.floor(frame / spriteAnimState.cols);
-        spriteAnimState.texture.offset.x = col / spriteAnimState.cols;
-        spriteAnimState.texture.offset.y = 1 - (row + 1) / spriteAnimState.rows;
+        const img = spriteAnimState.sourceImage;
+        if (img && img.width > 0 && img.height > 0) {
+          const frameWidth = Math.floor(img.width / spriteAnimState.cols);
+          const frameHeight = Math.floor(img.height / spriteAnimState.rows);
+          if (frameWidth > 0 && frameHeight > 0) {
+            if (
+              !spriteAnimState.initialized ||
+              spriteAnimState.canvas.width !== frameWidth ||
+              spriteAnimState.canvas.height !== frameHeight
+            ) {
+              spriteAnimState.canvas.width = frameWidth;
+              spriteAnimState.canvas.height = frameHeight;
+              spriteAnimState.initialized = true;
+            }
+            const sx = col * frameWidth;
+            const sy = row * frameHeight;
+            spriteAnimState.ctx.clearRect(
+              0,
+              0,
+              spriteAnimState.canvas.width,
+              spriteAnimState.canvas.height
+            );
+            spriteAnimState.ctx.drawImage(
+              img,
+              sx,
+              sy,
+              frameWidth,
+              frameHeight,
+              0,
+              0,
+              spriteAnimState.canvas.width,
+              spriteAnimState.canvas.height
+            );
+            spriteAnimState.texture.needsUpdate = true;
+          }
+        }
       }
       inspectorControls.update();
       inspectorRenderer.render(inspectorScene, inspectorCamera);
