@@ -194,18 +194,20 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     }
     const tick = () => {
       previewSpriteRafId = requestAnimationFrame(tick);
-      const t = performance.now() * 0.001;
+      const nowSec = performance.now() * 0.001;
       for (const node of previewSpriteNodes) {
         const img = node?.img;
         if (!img || !img.isConnected) {
           continue;
         }
-        const frame = Math.floor(t * node.fps) % node.frameCount;
+        const frame = Math.floor(nowSec * node.fps) % node.frameCount;
+        if (frame === node.lastFrame) {
+          continue;
+        }
+        node.lastFrame = frame;
         const col = frame % node.cols;
-        const row = Math.floor(frame / node.cols);
         const tx = -(col * (100 / node.cols));
-        const ty = -(row * (100 / node.rows));
-        img.style.transform = `translate(${tx}%, ${ty}%)`;
+        img.style.transform = `translate(${tx}%, 0%)`;
       }
     };
     previewSpriteRafId = requestAnimationFrame(tick);
@@ -276,11 +278,11 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       if (cols * rows <= 1 || frameCount <= 1) {
         return null;
       }
-      texture.wrapS = THREE.RepeatWrapping;
-      texture.wrapT = THREE.RepeatWrapping;
-      texture.rotation = Math.PI * 0.5;
+      texture.wrapS = THREE.ClampToEdgeWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
+      texture.rotation = 0;
       texture.repeat.set(1 / cols, 1 / rows);
-      texture.offset.set(0, 1 - 1 / rows);
+      texture.offset.set(0, 0);
       texture.needsUpdate = true;
       return {
         texture,
@@ -324,9 +326,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       if (spriteAnimState) {
         const frame = Math.floor(performance.now() * 0.001 * spriteAnimState.fps) % spriteAnimState.frameCount;
         const col = frame % spriteAnimState.cols;
-        const row = Math.floor(frame / spriteAnimState.cols);
         spriteAnimState.texture.offset.x = col / spriteAnimState.cols;
-        spriteAnimState.texture.offset.y = 1 - (row + 1) / spriteAnimState.rows;
+        spriteAnimState.texture.offset.y = 0;
       }
       inspectorControls.update();
       inspectorRenderer.render(inspectorScene, inspectorCamera);
@@ -453,7 +454,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           img.style.width = `${cols * 100}%`;
           img.style.height = `${rows * 100}%`;
           img.style.transform = "translate(0%, 0%)";
-          previewSpriteNodes.push({ img, cols, rows, frameCount, fps });
+          previewSpriteNodes.push({ img, cols, rows, frameCount, fps, lastFrame: -1 });
         }
       }
       const markLoaded = () => {
@@ -587,9 +588,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       const rarity = String(metadata?.rarity || row?.rarity || "").trim();
       const series = String(metadata?.series || row?.series || "beta").trim();
       const upperName = name.toUpperCase();
-      const spriteFlag =
-        AURA_SPRITE_NAMES.has(upperName) ||
-        Boolean(metadata?.sprite || metadata?.isSprite || row?.isSprite);
+      const spriteFlag = AURA_SPRITE_NAMES.has(upperName);
       const attrLookup = (keys) => {
         const normalized = keys.map((k) => String(k).toLowerCase());
         const found = attrs.find((attr) =>
@@ -601,46 +600,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       };
       let spriteConfig = null;
       if (spriteFlag) {
-        const explicitFrameCount =
-          metadata?.frameCount ??
-          metadata?.frames ??
-          metadata?.spriteFrames ??
-          row?.frameCount ??
-          attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
-        const explicitCols =
-          metadata?.columns ??
-          metadata?.cols ??
-          metadata?.spriteColumns ??
-          row?.columns ??
-          attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
-        const explicitRows =
-          metadata?.rows ??
-          metadata?.spriteRows ??
-          row?.rows ??
-          attrLookup(["rows", "spriteRows", "sprite rows"]);
-        const explicitFps =
-          metadata?.fps ??
-          metadata?.spriteFps ??
-          row?.fps ??
-          attrLookup(["fps", "spriteFps", "sprite fps"]);
-
-        const columns = Number.parseInt(String(explicitCols || ""), 10);
-        const rows = Number.parseInt(String(explicitRows || ""), 10);
-        const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
-        const fps = Number(explicitFps);
-
-        const isNamedAuraSprite = AURA_SPRITE_NAMES.has(upperName);
-        const fallback = isNamedAuraSprite
-          ? { columns: 2, rows: 1, frameCount: 2, fps: 8 }
-          : { columns: 4, rows: 1, frameCount: 4, fps: 8 };
+        // Aura sprite caps are fixed 2-frame horizontal sheets.
         spriteConfig = sanitizeSpriteConfig(
-          {
-            columns,
-            rows,
-            frameCount,
-            fps,
-          },
-          fallback
+          { columns: 2, rows: 1, frameCount: 2, fps: 8 },
+          { columns: 2, rows: 1, frameCount: 2, fps: 8 }
         );
       }
       const detailsBits = [`Series ${series || "beta"}`];
