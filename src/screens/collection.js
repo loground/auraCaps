@@ -100,7 +100,6 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   let inspectorDisc = null;
   let frontTexture = null;
   let backTexture = null;
-  let spriteSourceTexture = null;
   let spriteAnimState = null;
   let rafId = null;
   let resizeObserver = null;
@@ -139,10 +138,6 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     if (frontTexture) {
       frontTexture.dispose();
       frontTexture = null;
-    }
-    if (spriteSourceTexture) {
-      spriteSourceTexture.dispose();
-      spriteSourceTexture = null;
     }
     if (backTexture) {
       backTexture.dispose();
@@ -259,32 +254,18 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       if (cols * rows <= 1 || frameCount <= 1) {
         return null;
       }
-      const sourceImage = texture.image || null;
-      const canvas = document.createElement("canvas");
-      canvas.width = 512;
-      canvas.height = 512;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        return null;
-      }
-      const spriteTexture = new THREE.CanvasTexture(canvas);
-      spriteTexture.colorSpace = THREE.SRGBColorSpace;
-      spriteTexture.center.set(0.5, 0.5);
-      spriteTexture.rotation = Math.PI * 0.5;
-      spriteTexture.anisotropy = inspectorRenderer.capabilities.getMaxAnisotropy();
-      spriteTexture.needsUpdate = true;
-      spriteSourceTexture = texture;
-      frontTexture = spriteTexture;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.rotation = Math.PI * 0.5;
+      texture.repeat.set(1 / cols, 1 / rows);
+      texture.offset.set(0, 1 - 1 / rows);
+      texture.needsUpdate = true;
       return {
-        texture: spriteTexture,
-        canvas,
-        ctx,
-        sourceImage,
+        texture,
         cols,
         rows,
         frameCount,
         fps,
-        initialized: false,
       };
     };
 
@@ -322,42 +303,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const frame = Math.floor(performance.now() * 0.001 * spriteAnimState.fps) % spriteAnimState.frameCount;
         const col = frame % spriteAnimState.cols;
         const row = Math.floor(frame / spriteAnimState.cols);
-        const img = spriteAnimState.sourceImage;
-        if (img && img.width > 0 && img.height > 0) {
-          const frameWidth = Math.floor(img.width / spriteAnimState.cols);
-          const frameHeight = Math.floor(img.height / spriteAnimState.rows);
-          if (frameWidth > 0 && frameHeight > 0) {
-            if (
-              !spriteAnimState.initialized ||
-              spriteAnimState.canvas.width !== frameWidth ||
-              spriteAnimState.canvas.height !== frameHeight
-            ) {
-              spriteAnimState.canvas.width = frameWidth;
-              spriteAnimState.canvas.height = frameHeight;
-              spriteAnimState.initialized = true;
-            }
-            const sx = col * frameWidth;
-            const sy = row * frameHeight;
-            spriteAnimState.ctx.clearRect(
-              0,
-              0,
-              spriteAnimState.canvas.width,
-              spriteAnimState.canvas.height
-            );
-            spriteAnimState.ctx.drawImage(
-              img,
-              sx,
-              sy,
-              frameWidth,
-              frameHeight,
-              0,
-              0,
-              spriteAnimState.canvas.width,
-              spriteAnimState.canvas.height
-            );
-            spriteAnimState.texture.needsUpdate = true;
-          }
-        }
+        spriteAnimState.texture.offset.x = col / spriteAnimState.cols;
+        spriteAnimState.texture.offset.y = 1 - (row + 1) / spriteAnimState.rows;
       }
       inspectorControls.update();
       inspectorRenderer.render(inspectorScene, inspectorCamera);
@@ -661,11 +608,12 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const fps = Number(explicitFps);
 
         const fallbackColumns = 4;
-        const fallbackRows = 1;
-        const fallbackFrames = 4;
+        const fallbackRows = AURA_SPRITE_NAMES.has(upperName) ? 2 : 1;
+        const fallbackFrames = AURA_SPRITE_NAMES.has(upperName) ? 2 : 4;
+        const fallbackCols = AURA_SPRITE_NAMES.has(upperName) ? 1 : fallbackColumns;
 
         spriteConfig = {
-          columns: Number.isFinite(columns) && columns > 0 ? columns : fallbackColumns,
+          columns: Number.isFinite(columns) && columns > 0 ? columns : fallbackCols,
           rows: Number.isFinite(rows) && rows > 0 ? rows : fallbackRows,
           frameCount:
             Number.isFinite(frameCount) && frameCount > 1
