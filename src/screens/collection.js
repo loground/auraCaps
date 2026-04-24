@@ -13,28 +13,6 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     "WILLY",
     "EAZY",
   ]);
-  const clampInt = (value, min, max, fallback) => {
-    const parsed = Number.parseInt(String(value ?? ""), 10);
-    if (!Number.isFinite(parsed)) {
-      return fallback;
-    }
-    return Math.min(max, Math.max(min, parsed));
-  };
-  const sanitizeSpriteConfig = (config, fallback = { columns: 2, rows: 1, frameCount: 2, fps: 8 }) => {
-    if (!config) {
-      return null;
-    }
-    const cols = clampInt(config.columns, 1, 8, fallback.columns);
-    const rows = clampInt(config.rows, 1, 8, fallback.rows);
-    const maxFrames = Math.max(1, cols * rows);
-    const frameCount = clampInt(config.frameCount, 1, maxFrames, Math.min(fallback.frameCount, maxFrames));
-    const fpsRaw = Number(config.fps);
-    const fps = Number.isFinite(fpsRaw) ? Math.min(24, Math.max(1, fpsRaw)) : fallback.fps;
-    if (frameCount <= 1) {
-      return null;
-    }
-    return { columns: cols, rows, frameCount, fps };
-  };
   const parseSpriteHints = (configLike = {}) => {
     const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
     const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
