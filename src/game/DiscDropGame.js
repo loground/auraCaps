@@ -6,6 +6,7 @@ import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./arena-configs.js";
 import {
   DISC_HEIGHT,
+  DISC_HALF_HEIGHT,
   DISC_RADIUS,
   FIXED_STEP,
   FLOOR_RADIUS,
