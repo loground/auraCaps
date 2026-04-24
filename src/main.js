@@ -813,6 +813,22 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       resolve({
         playerCapPath: playerCap.imagePath,
         cpuCapPath: isTraining ? null : cpuCap.imagePath,
+        playerCapMeta: {
+          id: playerCap.id,
+          name: playerCap.name,
+          imagePath: playerCap.imagePath,
+          isAuraSprite: Boolean(playerCap.isAuraSprite),
+          spriteHints: playerCap.spriteHints || null,
+        },
+        cpuCapMeta: isTraining
+          ? null
+          : {
+              id: cpuCap.id,
+              name: cpuCap.name,
+              imagePath: cpuCap.imagePath,
+              isAuraSprite: Boolean(cpuCap.isAuraSprite),
+              spriteHints: cpuCap.spriteHints || null,
+            },
       });
     };
     const onPickPlayer = () => {
@@ -995,6 +1011,8 @@ async function showPlay() {
     gameMode: setup.gameMode,
     playerCapPath: capSelection.playerCapPath,
     cpuCapPath: capSelection.cpuCapPath,
+    playerCapMeta: capSelection.playerCapMeta || null,
+    cpuCapMeta: capSelection.cpuCapMeta || null,
   });
   await game.init();
   if (localVersion !== viewVersion) {

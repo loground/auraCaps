@@ -51,6 +51,8 @@ export class DiscDropGame {
       gameMode = "classic",
       playerCapPath = null,
       cpuCapPath = null,
+      playerCapMeta = null,
+      cpuCapMeta = null,
     } = {}
   ) {
     this.app = app;
@@ -61,6 +63,8 @@ export class DiscDropGame {
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.playerCapPath = playerCapPath;
     this.cpuCapPath = cpuCapPath;
+    this.playerCapMeta = playerCapMeta;
+    this.cpuCapMeta = cpuCapMeta;
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey = initialArenaKey || DEFAULT_ARENA_KEY;
     this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
@@ -149,6 +153,7 @@ export class DiscDropGame {
     ];
     this.lastHitSfxAt = 0;
     this.slammerMiniDots = [];
+    this.animatedSpriteTextures = [];
   }
 
   async init() {
@@ -624,6 +629,8 @@ export class DiscDropGame {
       this.resolveCapTextureFromPath(this.playerCapPath) || this.randomCapTexture();
     this.cpuCapTexture =
       this.resolveCapTextureFromPath(this.cpuCapPath) || this.randomCapTexture();
+    this.applySpriteMetaToTexture(this.playerCapTexture, this.playerCapMeta);
+    this.applySpriteMetaToTexture(this.cpuCapTexture, this.cpuCapMeta);
 
     this.lowerCapTexture = this.randomCapTexture();
     this.upperCapTexture = this.randomCapTexture();
@@ -700,6 +707,99 @@ export class DiscDropGame {
       this.capTextureByPath?.set(path, loaded);
     }
     return loaded;
+  }
+
+  resolveSpritePlaybackFromTexture(texture, hints = null) {
+    const image = texture?.image;
+    if (!image) {
+      return null;
+    }
+    const naturalW = Math.max(1, image.naturalWidth || image.width || 1);
+    const naturalH = Math.max(1, image.naturalHeight || image.height || 1);
+    if (!naturalW || !naturalH) {
+      return null;
+    }
+    const maxFrames = 64;
+    const inferredCols = Math.max(
+      1,
+      Math.min(maxFrames, Math.round(naturalW / naturalH))
+    );
+    const columns = Math.max(
+      1,
+      Math.min(maxFrames, Number.parseInt(String(hints?.columns ?? ""), 10) || inferredCols || 1)
+    );
+    const rows = Math.max(
+      1,
+      Math.min(8, Number.parseInt(String(hints?.rows ?? ""), 10) || 1)
+    );
+    const maxGridFrames = Math.max(1, columns * rows);
+    const hintedFrameCount = Number.parseInt(String(hints?.frameCount ?? ""), 10);
+    const frameCount = Math.max(
+      1,
+      Math.min(maxGridFrames, hintedFrameCount || inferredCols || columns)
+    );
+    const hintedFps = Number(hints?.fps);
+    const fps = Number.isFinite(hintedFps)
+      ? Math.max(1, Math.min(24, hintedFps))
+      : 8;
+    return { columns, rows, frameCount, fps };
+  }
+
+  applySpriteMetaToTexture(texture, capMeta) {
+    if (!texture || !capMeta?.isAuraSprite) {
+      return;
+    }
+    const existing = this.animatedSpriteTextures.find(
+      (entry) => entry.texture === texture
+    );
+    if (existing) {
+      existing.hints = capMeta.spriteHints || existing.hints || {};
+      return;
+    }
+    this.animatedSpriteTextures.push({
+      texture,
+      hints: capMeta.spriteHints || {},
+      config: null,
+      lastFrame: -1,
+    });
+  }
+
+  updateAnimatedSpriteTextures() {
+    if (!this.animatedSpriteTextures.length) {
+      return;
+    }
+    const nowSec = performance.now() * 0.001;
+    for (const entry of this.animatedSpriteTextures) {
+      if (!entry.texture) {
+        continue;
+      }
+      if (!entry.config) {
+        const config = this.resolveSpritePlaybackFromTexture(entry.texture, entry.hints);
+        if (!config) {
+          continue;
+        }
+        entry.config = config;
+        entry.texture.wrapS = THREE.ClampToEdgeWrapping;
+        entry.texture.wrapT = THREE.ClampToEdgeWrapping;
+        entry.texture.repeat.set(1 / config.columns, 1 / config.rows);
+        entry.texture.offset.set(0, 1 - 1 / config.rows);
+        entry.texture.needsUpdate = true;
+      }
+      if (entry.config.frameCount <= 1) {
+        continue;
+      }
+      const frame =
+        Math.floor(nowSec * entry.config.fps) % entry.config.frameCount;
+      if (frame === entry.lastFrame) {
+        continue;
+      }
+      entry.lastFrame = frame;
+      const col = frame % entry.config.columns;
+      const row = Math.floor(frame / entry.config.columns);
+      entry.texture.offset.x = col / entry.config.columns;
+      entry.texture.offset.y = 1 - (row + 1) / entry.config.rows;
+      entry.texture.needsUpdate = true;
+    }
   }
 
   applySelectedCapsForThrower(thrower, { refresh = true } = {}) {
@@ -2140,6 +2240,7 @@ export class DiscDropGame {
     for (const uniforms of this.lavaUniforms) {
       uniforms.iTime.value += delta;
     }
+    this.updateAnimatedSpriteTextures();
   }
 
   applyResponsiveCamera() {
@@ -2196,6 +2297,7 @@ export class DiscDropGame {
       this.arenaKtx2Loader = null;
     }
     this.lavaUniforms.length = 0;
+    this.animatedSpriteTextures.length = 0;
     this.clearArenaSurfacePhysics();
     this.clearArenaObstacles();
     this.renderer.dispose();
