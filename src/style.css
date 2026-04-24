@@ -2062,6 +2062,16 @@ button:disabled {
   opacity: 1;
 }
 
+.disc-card img.sprite-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  object-fit: unset;
+  border-radius: 0;
+  transform-origin: top left;
+  will-change: transform;
+}
+
 .cap-loading {
   position: absolute;
   inset: 0;

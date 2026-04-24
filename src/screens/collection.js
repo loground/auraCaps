@@ -103,6 +103,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   let spriteAnimState = null;
   let rafId = null;
   let resizeObserver = null;
+  let previewSpriteNodes = [];
+  let previewSpriteRafId = null;
   let unmounted = false;
 
   const disposeInspector = () => {
@@ -157,6 +159,36 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     spriteAnimState = null;
   };
 
+  const stopPreviewSpriteAnimation = () => {
+    if (previewSpriteRafId !== null) {
+      cancelAnimationFrame(previewSpriteRafId);
+      previewSpriteRafId = null;
+    }
+  };
+
+  const startPreviewSpriteAnimation = () => {
+    if (previewSpriteRafId !== null || previewSpriteNodes.length === 0) {
+      return;
+    }
+    const tick = () => {
+      previewSpriteRafId = requestAnimationFrame(tick);
+      const t = performance.now() * 0.001;
+      for (const node of previewSpriteNodes) {
+        const img = node?.img;
+        if (!img || !img.isConnected) {
+          continue;
+        }
+        const frame = Math.floor(t * node.fps) % node.frameCount;
+        const col = frame % node.cols;
+        const row = Math.floor(frame / node.cols);
+        const tx = -(col * (100 / node.cols));
+        const ty = -(row * (100 / node.rows));
+        img.style.transform = `translate(${tx}%, ${ty}%)`;
+      }
+    };
+    previewSpriteRafId = requestAnimationFrame(tick);
+  };
+
   const closeInspector = () => {
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
@@ -201,7 +233,6 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
 
     frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath);
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
-    frontTexture.rotation = Math.PI * 0.5;
     backTexture.rotation = Math.PI * 0.5;
 
     const toInt = (value, fallback) => {
@@ -225,6 +256,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       }
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
+      texture.rotation = 0;
       texture.repeat.set(1 / cols, 1 / rows);
       texture.offset.set(0, 1 - 1 / rows);
       texture.needsUpdate = true;
@@ -238,6 +270,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     };
 
     spriteAnimState = configureSpriteAnimation(frontTexture, item.spriteConfig || null);
+    if (!spriteAnimState) {
+      frontTexture.rotation = Math.PI * 0.5;
+    }
 
     inspectorDisc = createDiscMesh({
       radius: DISC_RADIUS * 1.06,
@@ -306,6 +341,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
 
   const renderCards = () => {
     const active = COLLECTIONS[activeCollectionKey];
+    stopPreviewSpriteAnimation();
+    previewSpriteNodes = [];
     grid.innerHTML = "";
     if (!active) {
       return;
@@ -383,6 +420,20 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
 
       const img = card.querySelector("img");
       const loadingEl = card.querySelector(".cap-loading");
+      if (img && item.spriteConfig) {
+        const cols = Math.max(1, Number.parseInt(String(item.spriteConfig.columns || 1), 10));
+        const rows = Math.max(1, Number.parseInt(String(item.spriteConfig.rows || 1), 10));
+        const frameCount = Math.max(
+          1,
+          Number.parseInt(String(item.spriteConfig.frameCount || cols * rows), 10)
+        );
+        const fps = Math.max(1, Number(item.spriteConfig.fps || 8));
+        img.classList.add("sprite-sheet");
+        img.style.width = `${cols * 100}%`;
+        img.style.height = `${rows * 100}%`;
+        img.style.transform = "translate(0%, 0%)";
+        previewSpriteNodes.push({ img, cols, rows, frameCount, fps });
+      }
       const markLoaded = () => {
         loadingEl?.classList.add("loaded");
         img?.classList.add("loaded");
@@ -397,6 +448,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       }
       grid.appendChild(card);
     });
+    startPreviewSpriteAnimation();
   };
 
   const readStoredAuraSession = () => {
@@ -676,6 +728,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   modalBackdrop.addEventListener("click", closeInspector);
 
   return () => {
+    stopPreviewSpriteAnimation();
+    previewSpriteNodes = [];
     unmounted = true;
     closeInspector();
     backBtn.removeEventListener("click", onBack);
