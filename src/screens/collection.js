@@ -491,6 +491,12 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         `/api/aura-profile?username=${encodeURIComponent(lookupValue)}`
       );
       const profileJson = await profileResponse.json().catch(() => null);
+      console.log("[AURA][COLLECTION] profile lookup response", {
+        lookupValue,
+        ok: profileResponse.ok,
+        status: profileResponse.status,
+        body: profileJson,
+      });
       const profilePayload = profileJson?.data || profileJson;
       const profile =
         profilePayload?.user || profilePayload?.data || profilePayload || {};
@@ -513,8 +519,25 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         )}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`
       );
       const inventoryJson = await inventoryResponse.json().catch(() => null);
+      console.log("[AURA][COLLECTION] GET USER INVENTORY raw", {
+        ok: inventoryResponse.ok,
+        status: inventoryResponse.status,
+        userId,
+        body: inventoryJson,
+      });
       const inventoryPayload = inventoryJson?.data || inventoryJson;
       const items = extractInventoryItems(inventoryPayload).slice(0, 24);
+      console.log(
+        "[AURA][COLLECTION] mapped inventory items",
+        items.map((item) => ({
+          name: item.name,
+          imagePath: item.imagePath,
+          details: item.details,
+          parsedWeight: Number(
+            String(item.details || "").match(/Weight\\s+([0-9.]+)x/i)?.[1] || 0
+          ),
+        }))
+      );
       COLLECTIONS.aura.loading = false;
       COLLECTIONS.aura.items = items;
       if (!unmounted) {
