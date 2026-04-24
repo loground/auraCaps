@@ -629,8 +629,12 @@ export class DiscDropGame {
       this.resolveCapTextureFromPath(this.playerCapPath) || this.randomCapTexture();
     this.cpuCapTexture =
       this.resolveCapTextureFromPath(this.cpuCapPath) || this.randomCapTexture();
-    this.applySpriteMetaToTexture(this.playerCapTexture, this.playerCapMeta);
-    this.applySpriteMetaToTexture(this.cpuCapTexture, this.cpuCapMeta);
+    this.playerCapTexture =
+      this.applySpriteMetaToTexture(this.playerCapTexture, this.playerCapMeta) ||
+      this.playerCapTexture;
+    this.cpuCapTexture =
+      this.applySpriteMetaToTexture(this.cpuCapTexture, this.cpuCapMeta) ||
+      this.cpuCapTexture;
 
     this.lowerCapTexture = this.randomCapTexture();
     this.upperCapTexture = this.randomCapTexture();
@@ -711,6 +715,10 @@ export class DiscDropGame {
 
   resolveSpritePlaybackFromTexture(texture, hints = null) {
     const image = texture?.image;
+    return this.resolveSpritePlaybackFromImage(image, hints);
+  }
+
+  resolveSpritePlaybackFromImage(image, hints = null) {
     if (!image) {
       return null;
     }
@@ -745,23 +753,149 @@ export class DiscDropGame {
     return { columns, rows, frameCount, fps };
   }
 
+  getSpriteFrameBounds({ image, config, frame, cache }) {
+    if (!cache.bounds) {
+      cache.bounds = new Map();
+    }
+    if (cache.bounds.has(frame)) {
+      return cache.bounds.get(frame);
+    }
+    const cols = Math.max(1, config.columns);
+    const rows = Math.max(1, config.rows);
+    const frameW = Math.max(1, Math.floor(image.naturalWidth / cols));
+    const frameH = Math.max(1, Math.floor(image.naturalHeight / rows));
+    const col = frame % cols;
+    const row = Math.floor(frame / cols);
+    const sx = col * frameW;
+    const sy = row * frameH;
+
+    if (!cache.canvas) {
+      cache.canvas = document.createElement("canvas");
+      cache.ctx = cache.canvas.getContext("2d", { willReadFrequently: true });
+    }
+    if (cache.canvas.width !== frameW || cache.canvas.height !== frameH) {
+      cache.canvas.width = frameW;
+      cache.canvas.height = frameH;
+    }
+    cache.ctx.clearRect(0, 0, frameW, frameH);
+    cache.ctx.drawImage(image, sx, sy, frameW, frameH, 0, 0, frameW, frameH);
+    const { data } = cache.ctx.getImageData(0, 0, frameW, frameH);
+
+    let minX = frameW;
+    let minY = frameH;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < frameH; y += 1) {
+      for (let x = 0; x < frameW; x += 1) {
+        const alpha = data[(y * frameW + x) * 4 + 3];
+        if (alpha > 8) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    const bounds =
+      maxX >= minX && maxY >= minY
+        ? { sx: sx + minX, sy: sy + minY, sw: maxX - minX + 1, sh: maxY - minY + 1 }
+        : { sx, sy, sw: frameW, sh: frameH };
+    cache.bounds.set(frame, bounds);
+    return bounds;
+  }
+
+  drawSpriteFrameToCanvas({ canvas, ctx, image, config, frame, sourceRect = null }) {
+    const cols = Math.max(1, config.columns);
+    const rows = Math.max(1, config.rows);
+    const frameW = image.naturalWidth / cols;
+    const frameH = image.naturalHeight / rows;
+    const frameIndex = Math.max(0, frame % Math.max(1, config.frameCount));
+    const col = frameIndex % cols;
+    const row = Math.floor(frameIndex / cols);
+    const sx = col * frameW;
+    const sy = row * frameH;
+    const srcX = sourceRect?.sx ?? sx;
+    const srcY = sourceRect?.sy ?? sy;
+    const srcW = sourceRect?.sw ?? frameW;
+    const srcH = sourceRect?.sh ?? frameH;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const scale = Math.min(canvas.width / srcW, canvas.height / srcH);
+    const dw = srcW * scale;
+    const dh = srcH * scale;
+    const dx = (canvas.width - dw) * 0.5;
+    const dy = (canvas.height - dh) * 0.5;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, srcX, srcY, srcW, srcH, dx, dy, dw, dh);
+  }
+
   applySpriteMetaToTexture(texture, capMeta) {
     if (!texture || !capMeta?.isAuraSprite) {
-      return;
+      return texture;
     }
     const existing = this.animatedSpriteTextures.find(
       (entry) => entry.texture === texture
     );
     if (existing) {
       existing.hints = capMeta.spriteHints || existing.hints || {};
-      return;
+      return texture;
     }
-    this.animatedSpriteTextures.push({
-      texture,
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const ctx = canvas.getContext("2d");
+
+    const animatedTexture = new THREE.CanvasTexture(canvas);
+    animatedTexture.colorSpace = THREE.SRGBColorSpace;
+    animatedTexture.center.set(0.5, 0.5);
+    animatedTexture.repeat.set(1, 1);
+    animatedTexture.offset.set(0, 0);
+    animatedTexture.userData = {
+      ...(animatedTexture.userData || {}),
+      sourcePath: texture?.userData?.sourcePath || "",
+    };
+
+    const entry = {
+      texture: animatedTexture,
+      canvas,
+      ctx,
+      image: null,
       hints: capMeta.spriteHints || {},
       config: null,
       lastFrame: -1,
-    });
+      boundsCache: {},
+    };
+    this.animatedSpriteTextures.push(entry);
+
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.onload = () => {
+      entry.image = image;
+      entry.config = this.resolveSpritePlaybackFromImage(image, entry.hints);
+      if (!entry.config) {
+        return;
+      }
+      const initialBounds = this.getSpriteFrameBounds({
+        image: entry.image,
+        config: entry.config,
+        frame: 0,
+        cache: { bounds: new Map() },
+      });
+      this.drawSpriteFrameToCanvas({
+        canvas: entry.canvas,
+        ctx: entry.ctx,
+        image: entry.image,
+        config: entry.config,
+        frame: 0,
+        sourceRect: initialBounds,
+      });
+      entry.texture.needsUpdate = true;
+    };
+    image.src = texture?.userData?.sourcePath || capMeta?.imagePath || "";
+    return animatedTexture;
   }
 
   updateAnimatedSpriteTextures() {
@@ -774,16 +908,7 @@ export class DiscDropGame {
         continue;
       }
       if (!entry.config) {
-        const config = this.resolveSpritePlaybackFromTexture(entry.texture, entry.hints);
-        if (!config) {
-          continue;
-        }
-        entry.config = config;
-        entry.texture.wrapS = THREE.ClampToEdgeWrapping;
-        entry.texture.wrapT = THREE.ClampToEdgeWrapping;
-        entry.texture.repeat.set(1 / config.columns, 1 / config.rows);
-        entry.texture.offset.set(0, 1 - 1 / config.rows);
-        entry.texture.needsUpdate = true;
+        continue;
       }
       if (entry.config.frameCount <= 1) {
         continue;
@@ -794,10 +919,20 @@ export class DiscDropGame {
         continue;
       }
       entry.lastFrame = frame;
-      const col = frame % entry.config.columns;
-      const row = Math.floor(frame / entry.config.columns);
-      entry.texture.offset.x = col / entry.config.columns;
-      entry.texture.offset.y = 1 - (row + 1) / entry.config.rows;
+      const sourceRect = this.getSpriteFrameBounds({
+        image: entry.image,
+        config: entry.config,
+        frame,
+        cache: entry.boundsCache,
+      });
+      this.drawSpriteFrameToCanvas({
+        canvas: entry.canvas,
+        ctx: entry.ctx,
+        image: entry.image,
+        config: entry.config,
+        frame,
+        sourceRect,
+      });
       entry.texture.needsUpdate = true;
     }
   }
