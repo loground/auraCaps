@@ -5,6 +5,14 @@ import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
 
 export function mountCollectionScreen({ app, onBack, auraSession = null }) {
+  const AURA_SPRITE_NAMES = new Set([
+    "FILTHY",
+    "GOLDIE",
+    "ALI",
+    "YODIE",
+    "WILLY",
+    "EAZY",
+  ]);
   const JUNGLE_BAY_CAP_PATHS = [
     "/caps/jb/jbcap1.webp",
     "/caps/jbcap2.webp",
@@ -92,6 +100,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   let inspectorDisc = null;
   let frontTexture = null;
   let backTexture = null;
+  let spriteAnimState = null;
   let rafId = null;
   let resizeObserver = null;
   let unmounted = false;
@@ -145,6 +154,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
 
     inspectorScene = null;
     inspectorCamera = null;
+    spriteAnimState = null;
   };
 
   const closeInspector = () => {
@@ -193,6 +203,42 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
     frontTexture.rotation = Math.PI * 0.5;
     backTexture.rotation = Math.PI * 0.5;
+
+    const toInt = (value, fallback) => {
+      const parsed = Number.parseInt(String(value ?? ""), 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+    const toNum = (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+    const configureSpriteAnimation = (texture, config) => {
+      if (!texture || !config) {
+        return null;
+      }
+      const cols = toInt(config.columns, 1);
+      const rows = toInt(config.rows, 1);
+      const frameCount = Math.max(1, toInt(config.frameCount, cols * rows));
+      const fps = toNum(config.fps, 8);
+      if (cols * rows <= 1 || frameCount <= 1) {
+        return null;
+      }
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(1 / cols, 1 / rows);
+      texture.offset.set(0, 1 - 1 / rows);
+      texture.needsUpdate = true;
+      return {
+        texture,
+        cols,
+        rows,
+        frameCount,
+        fps,
+      };
+    };
+
+    spriteAnimState = configureSpriteAnimation(frontTexture, item.spriteConfig || null);
+
     inspectorDisc = createDiscMesh({
       radius: DISC_RADIUS * 1.06,
       height: DISC_HEIGHT * 0.65,
@@ -218,6 +264,13 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     const render = () => {
       rafId = requestAnimationFrame(render);
       inspectorDisc.rotation.z += 0.0025;
+      if (spriteAnimState) {
+        const frame = Math.floor(performance.now() * 0.001 * spriteAnimState.fps) % spriteAnimState.frameCount;
+        const col = frame % spriteAnimState.cols;
+        const row = Math.floor(frame / spriteAnimState.cols);
+        spriteAnimState.texture.offset.x = col / spriteAnimState.cols;
+        spriteAnimState.texture.offset.y = 1 - (row + 1) / spriteAnimState.rows;
+      }
       inspectorControls.update();
       inspectorRenderer.render(inspectorScene, inspectorCamera);
     };
@@ -416,6 +469,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     const mapped = [];
     for (const row of rows) {
       const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
+      const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
       const name = String(
         row?.name ||
           row?.title ||
@@ -458,6 +512,63 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       ).trim();
       const rarity = String(metadata?.rarity || row?.rarity || "").trim();
       const series = String(metadata?.series || row?.series || "beta").trim();
+      const upperName = name.toUpperCase();
+      const spriteFlag =
+        AURA_SPRITE_NAMES.has(upperName) ||
+        Boolean(metadata?.sprite || metadata?.isSprite || row?.isSprite);
+      const attrLookup = (keys) => {
+        const normalized = keys.map((k) => String(k).toLowerCase());
+        const found = attrs.find((attr) =>
+          normalized.includes(
+            String(attr?.trait_type || attr?.traitType || attr?.key || "").toLowerCase()
+          )
+        );
+        return found?.value ?? found?.display_value ?? "";
+      };
+      let spriteConfig = null;
+      if (spriteFlag) {
+        const explicitFrameCount =
+          metadata?.frameCount ??
+          metadata?.frames ??
+          metadata?.spriteFrames ??
+          row?.frameCount ??
+          attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
+        const explicitCols =
+          metadata?.columns ??
+          metadata?.cols ??
+          metadata?.spriteColumns ??
+          row?.columns ??
+          attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
+        const explicitRows =
+          metadata?.rows ??
+          metadata?.spriteRows ??
+          row?.rows ??
+          attrLookup(["rows", "spriteRows", "sprite rows"]);
+        const explicitFps =
+          metadata?.fps ??
+          metadata?.spriteFps ??
+          row?.fps ??
+          attrLookup(["fps", "spriteFps", "sprite fps"]);
+
+        const columns = Number.parseInt(String(explicitCols || ""), 10);
+        const rows = Number.parseInt(String(explicitRows || ""), 10);
+        const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
+        const fps = Number(explicitFps);
+
+        const fallbackColumns = 4;
+        const fallbackRows = 1;
+        const fallbackFrames = 4;
+
+        spriteConfig = {
+          columns: Number.isFinite(columns) && columns > 0 ? columns : fallbackColumns,
+          rows: Number.isFinite(rows) && rows > 0 ? rows : fallbackRows,
+          frameCount:
+            Number.isFinite(frameCount) && frameCount > 1
+              ? frameCount
+              : fallbackFrames,
+          fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
+        };
+      }
       const detailsBits = [`Series ${series || "beta"}`];
       if (rarity) {
         detailsBits.push(`Rarity ${rarity}`);
@@ -469,6 +580,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         imagePath,
         subtitle: subtitle,
         details: detailsBits.join(" • "),
+        spriteConfig,
       });
     }
     return mapped;
