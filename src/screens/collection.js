@@ -295,7 +295,11 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
 
     spriteAnimState = configureSpriteAnimation(frontTexture, item.spriteConfig || null);
     if (!spriteAnimState) {
+      if (item.isAuraSprite) {
+        frontTexture.rotation = 0;
+      } else {
       frontTexture.rotation = Math.PI * 0.5;
+      }
     }
 
     inspectorDisc = createDiscMesh({
@@ -600,10 +604,38 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       };
       let spriteConfig = null;
       if (spriteFlag) {
-        // Aura sprite caps are fixed 2-frame horizontal sheets.
+        const explicitFrameCount =
+          metadata?.frameCount ??
+          metadata?.frames ??
+          metadata?.spriteFrames ??
+          row?.frameCount ??
+          attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
+        const explicitCols =
+          metadata?.columns ??
+          metadata?.cols ??
+          metadata?.spriteColumns ??
+          row?.columns ??
+          attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
+        const explicitRows =
+          metadata?.rows ??
+          metadata?.spriteRows ??
+          row?.rows ??
+          attrLookup(["rows", "spriteRows", "sprite rows"]);
+        const explicitFps =
+          metadata?.fps ??
+          metadata?.spriteFps ??
+          row?.fps ??
+          attrLookup(["fps", "spriteFps", "sprite fps"]);
+
+        const columns = Number.parseInt(String(explicitCols || ""), 10);
+        const rows = Number.parseInt(String(explicitRows || ""), 10);
+        const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
+        const fps = Number(explicitFps);
+
+        // Default to a single frame unless metadata says otherwise.
         spriteConfig = sanitizeSpriteConfig(
-          { columns: 2, rows: 1, frameCount: 2, fps: 8 },
-          { columns: 2, rows: 1, frameCount: 2, fps: 8 }
+          { columns, rows, frameCount, fps },
+          { columns: 1, rows: 1, frameCount: 1, fps: 8 }
         );
       }
       const detailsBits = [`Series ${series || "beta"}`];
@@ -618,6 +650,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         subtitle: subtitle,
         details: detailsBits.join(" • "),
         spriteConfig,
+        isAuraSprite: spriteFlag,
       });
     }
     return mapped;
