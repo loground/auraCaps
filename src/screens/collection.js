@@ -4,7 +4,7 @@ import { DISC_HEIGHT, DISC_RADIUS } from "../game/constants.js";
 import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
 
-export function mountCollectionScreen({ app, onBack }) {
+export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   const JUNGLE_BAY_CAP_PATHS = [
     "/caps/jb/jbcap1.webp",
     "/caps/jbcap2.webp",
@@ -52,6 +52,12 @@ export function mountCollectionScreen({ app, onBack }) {
         )}x`,
       })),
     },
+    aura: {
+      id: "aura",
+      label: "aura",
+      items: [],
+      loading: true,
+    },
   };
   let activeCollectionKey = app.classList.contains("theme-jungle-bay")
     ? "jungleBay"
@@ -88,6 +94,7 @@ export function mountCollectionScreen({ app, onBack }) {
   let backTexture = null;
   let rafId = null;
   let resizeObserver = null;
+  let unmounted = false;
 
   const disposeInspector = () => {
     if (rafId !== null) {
@@ -247,6 +254,53 @@ export function mountCollectionScreen({ app, onBack }) {
   const renderCards = () => {
     const active = COLLECTIONS[activeCollectionKey];
     grid.innerHTML = "";
+    if (!active) {
+      return;
+    }
+
+    if (active.loading) {
+      const card = document.createElement("div");
+      card.className = "collection-card";
+      card.innerHTML = `
+      <div class="cap-slot">
+        <div class="disc-card" aria-label="Loading Aura items">
+          <div class="cap-loading">
+            <span class="cap-loading-spinner" aria-hidden="true"></span>
+            <span class="cap-loading-text">loading aura items</span>
+          </div>
+        </div>
+      </div>
+      <div class="cap-info">
+        <h3>AURA</h3>
+        <p>owned inventory</p>
+        <p>syncing metadata...</p>
+      </div>
+    `;
+      grid.appendChild(card);
+      return;
+    }
+
+    if (!Array.isArray(active.items) || active.items.length === 0) {
+      const card = document.createElement("div");
+      card.className = "collection-card";
+      card.innerHTML = `
+      <div class="cap-slot">
+        <div class="disc-card" aria-label="No Aura items">
+          <div class="cap-loading loaded">
+            <span class="cap-loading-text">empty</span>
+          </div>
+        </div>
+      </div>
+      <div class="cap-info">
+        <h3>No AURA items</h3>
+        <p>owned inventory</p>
+        <p>connect Aura to load owned collectibles.</p>
+      </div>
+    `;
+      grid.appendChild(card);
+      return;
+    }
+
     active.items.forEach((item) => {
       const card = document.createElement("div");
       card.className = "collection-card";
@@ -292,8 +346,194 @@ export function mountCollectionScreen({ app, onBack }) {
     });
   };
 
+  const readStoredAuraSession = () => {
+    try {
+      const raw = window.localStorage.getItem("aura_session_v1");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const walletAddress =
+        parsed?.walletAddress ||
+        parsed?.user?.walletAddress ||
+        parsed?.user?.address ||
+        "";
+      if (!walletAddress && !parsed?.user) {
+        return null;
+      }
+      return { connected: true, walletAddress, user: parsed?.user || null };
+    } catch {
+      return null;
+    }
+  };
+
+  const pickAuraLookupValue = (sessionLike) => {
+    const user = sessionLike?.user || {};
+    const candidates = [
+      user?.username,
+      user?.handle,
+      user?.displayName,
+      user?.walletAddress,
+      user?.address,
+      sessionLike?.walletAddress,
+    ];
+    for (const candidate of candidates) {
+      const value = String(candidate || "").trim();
+      if (value) {
+        return value;
+      }
+    }
+    return "";
+  };
+
+  const toAbsImage = (imageLike) => {
+    const value = String(imageLike || "").trim();
+    if (!value) return "";
+    if (value.startsWith("ipfs://")) {
+      return `https://ipfs.io/ipfs/${value.slice("ipfs://".length)}`;
+    }
+    if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
+      return value;
+    }
+    return `https://ipfs.io/ipfs/${value}`;
+  };
+
+  const extractInventoryItems = (payload) => {
+    const candidates = [
+      payload?.data,
+      payload?.items,
+      payload?.cards,
+      payload?.results,
+      payload?.packCards,
+      payload,
+    ];
+    let rows = [];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        rows = candidate;
+        break;
+      }
+    }
+    const seen = new Set();
+    const mapped = [];
+    for (const row of rows) {
+      const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
+      const name = String(
+        row?.name ||
+          row?.title ||
+          metadata?.name ||
+          row?.card?.name ||
+          row?.packCard?.name ||
+          ""
+      ).trim();
+      const imagePath = toAbsImage(
+        row?.image ||
+          row?.imageUrl ||
+          row?.image_url ||
+          row?.imageURI ||
+          row?.image_uri ||
+          metadata?.image ||
+          metadata?.image_url ||
+          row?.card?.image ||
+          row?.card?.imageUrl ||
+          row?.packCard?.image
+      );
+      const uniqueKey = String(
+        row?.id ||
+          row?._id ||
+          row?.tokenId ||
+          row?.tokenID ||
+          row?.mint ||
+          row?.packCardId ||
+          `${name}-${imagePath}`
+      );
+      if (!imagePath || !name || seen.has(uniqueKey)) {
+        continue;
+      }
+      seen.add(uniqueKey);
+      const subtitle = String(
+        metadata?.collection ||
+          metadata?.collectionName ||
+          row?.collectionName ||
+          row?.collection ||
+          "aura collection"
+      ).trim();
+      const rarity = String(metadata?.rarity || row?.rarity || "").trim();
+      const series = String(metadata?.series || row?.series || "beta").trim();
+      const detailsBits = [`Series ${series || "beta"}`];
+      if (rarity) {
+        detailsBits.push(`Rarity ${rarity}`);
+      }
+      detailsBits.push(`Weight ${getCapWeightMultiplier(imagePath).toFixed(2)}x`);
+      mapped.push({
+        number: mapped.length + 1,
+        name: name,
+        imagePath,
+        subtitle: subtitle,
+        details: detailsBits.join(" • "),
+      });
+    }
+    return mapped;
+  };
+
+  const loadAuraCollection = async () => {
+    const session = auraSession || readStoredAuraSession();
+    const lookupValue = pickAuraLookupValue(session);
+    if (!lookupValue) {
+      COLLECTIONS.aura.loading = false;
+      COLLECTIONS.aura.items = [];
+      if (!unmounted) {
+        renderSwitcher();
+        renderCards();
+      }
+      return;
+    }
+    try {
+      const profileResponse = await fetch(
+        `/api/aura-profile?username=${encodeURIComponent(lookupValue)}`
+      );
+      const profileJson = await profileResponse.json().catch(() => null);
+      const profilePayload = profileJson?.data || profileJson;
+      const profile =
+        profilePayload?.user || profilePayload?.data || profilePayload || {};
+      const userId = String(
+        profile?.id || profile?._id || profile?.userId || ""
+      ).trim();
+      if (!profileResponse.ok || !userId) {
+        COLLECTIONS.aura.loading = false;
+        COLLECTIONS.aura.items = [];
+        if (!unmounted) {
+          renderSwitcher();
+          renderCards();
+        }
+        return;
+      }
+
+      const inventoryResponse = await fetch(
+        `/api/aura-inventory?userId=${encodeURIComponent(
+          userId
+        )}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`
+      );
+      const inventoryJson = await inventoryResponse.json().catch(() => null);
+      const inventoryPayload = inventoryJson?.data || inventoryJson;
+      const items = extractInventoryItems(inventoryPayload).slice(0, 24);
+      COLLECTIONS.aura.loading = false;
+      COLLECTIONS.aura.items = items;
+      if (!unmounted) {
+        renderSwitcher();
+        renderCards();
+      }
+    } catch {
+      COLLECTIONS.aura.loading = false;
+      COLLECTIONS.aura.items = [];
+      if (!unmounted) {
+        renderSwitcher();
+        renderCards();
+      }
+    }
+  };
+
   renderSwitcher();
   renderCards();
+  loadAuraCollection();
 
   const backBtn = app.querySelector("#backBtn");
   backBtn.addEventListener("click", onBack);
@@ -301,6 +541,7 @@ export function mountCollectionScreen({ app, onBack }) {
   modalBackdrop.addEventListener("click", closeInspector);
 
   return () => {
+    unmounted = true;
     closeInspector();
     backBtn.removeEventListener("click", onBack);
     modalClose.removeEventListener("click", closeInspector);

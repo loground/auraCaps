@@ -692,6 +692,7 @@ async function showPlay() {
 
 async function showCollection() {
   const localVersion = ++viewVersion;
+  auraSession = loadAuraSession();
   clearCurrentScreen();
   setViewMode("collection");
   const { mountCollectionScreen } = await loadCollectionModule();
@@ -699,7 +700,7 @@ async function showCollection() {
     return;
   }
   cleanupScreen = composeCleanups(
-    mountCollectionScreen({ app, onBack: showMenu }),
+    mountCollectionScreen({ app, onBack: showMenu, auraSession }),
     addGlobalMuteButton()
   );
 }
