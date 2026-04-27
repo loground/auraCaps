@@ -771,7 +771,13 @@ export class DiscDropGame {
     const fps = Number.isFinite(hintedFps)
       ? Math.max(1, Math.min(24, hintedFps))
       : 8;
-    return { columns, rows, frameCount, fps };
+    return {
+      columns,
+      rows,
+      frameCount,
+      fps,
+      zoom: Math.max(1, Number(hints?.zoom || 1)),
+    };
   }
 
   getSpriteFrameBounds({ image, config, frame, cache }) {
@@ -841,7 +847,9 @@ export class DiscDropGame {
     const srcH = sourceRect?.sh ?? frameH;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const scale = Math.min(canvas.width / srcW, canvas.height / srcH);
+    const scale =
+      Math.min(canvas.width / srcW, canvas.height / srcH) *
+      Math.max(1, Number(config.zoom || 1));
     const dw = srcW * scale;
     const dh = srcH * scale;
     const dx = (canvas.width - dw) * 0.5;

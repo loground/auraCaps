@@ -43,6 +43,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       rows,
       frameCount,
       fps: Math.max(1, Math.min(24, Number(hints?.fps || 8))),
+      zoom: Math.max(1, Number(hints?.zoom || 1)),
     };
   };
   const getSpriteFrameBounds = ({ image, config, frame, cache }) => {
@@ -124,7 +125,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     }
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const scale = Math.min(canvas.width / srcW, canvas.height / srcH);
+    const scale =
+      Math.min(canvas.width / srcW, canvas.height / srcH) *
+      Math.max(1, Number(config.zoom || 1));
     const dw = srcW * scale;
     const dh = srcH * scale;
     const dx = (canvas.width - dw) * 0.5;
@@ -1001,7 +1004,13 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
         const fps = Number(explicitFps);
 
-        spriteHints = parseSpriteHints({ columns, rows, frameCount, fps });
+        spriteHints = parseSpriteHints({
+          columns,
+          rows,
+          frameCount,
+          fps,
+          zoom: upperName === "ANGRYTALIK" ? 1.2 : 1,
+        });
       }
       const detailsBits = [`Series ${series || "beta"}`];
       if (rarityLabel) {

@@ -410,6 +410,7 @@ function resolveSpritePlayback(image, hints) {
     rows,
     frameCount,
     fps: Math.max(1, Math.min(24, Number(hints?.fps || 8))),
+    zoom: Math.max(1, Number(hints?.zoom || 1)),
   };
 }
 
@@ -435,7 +436,9 @@ function drawSpriteFrameToCanvas({ canvas, ctx, image, config, frame }) {
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const scale = Math.min(canvas.width / frameW, canvas.height / frameH);
+  const scale =
+    Math.min(canvas.width / frameW, canvas.height / frameH) *
+    Math.max(1, Number(config.zoom || 1));
   const dw = frameW * scale;
   const dh = frameH * scale;
   const dx = (canvas.width - dw) * 0.5;
@@ -648,6 +651,7 @@ function extractAuraCapOptions(payload) {
           rows: explicitRows,
           frameCount: explicitFrameCount,
           fps: explicitFps,
+          zoom: upperName === "ANGRYTALIK" ? 1.2 : 1,
         })
       : null;
     const mappedItem = {
