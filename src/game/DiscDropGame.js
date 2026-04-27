@@ -31,6 +31,7 @@ const HEIGHT_MAX = 8;
 const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
 const MATCH_TOTAL_ROUNDS = 4;
+const HELL_FLOOR_SPAWN_LIFT = 0.16;
 const JUNGLE_BAY_CAP_PATHS = [
   "/caps/jb/jbcap1.webp",
   "/caps/jbcap2.webp",
@@ -347,6 +348,21 @@ export class DiscDropGame {
     this.arenaSurfaceColliders.length = 0;
   }
 
+  isArenaSurfaceMesh(child) {
+    if (!child?.isMesh || !child.geometry?.attributes?.position) {
+      return false;
+    }
+
+    // Hell arena has walls/rocks/lava in the GLB. Object_4 is the visible
+    // central playable skin; using Object_10/Object_6 puts caps on cliffs or
+    // below the textured floor.
+    if (this.theme === "hell") {
+      return child.name === "Object_4";
+    }
+
+    return true;
+  }
+
   createArenaSurfacePhysics() {
     this.clearArenaSurfacePhysics();
     if (!this.arenaVisualRoot) {
@@ -359,7 +375,7 @@ export class DiscDropGame {
 
     const tempVec = new THREE.Vector3();
     this.arenaVisualRoot.traverse((child) => {
-      if (!child.isMesh || !child.geometry?.attributes?.position) {
+      if (!this.isArenaSurfaceMesh(child)) {
         return;
       }
 
@@ -428,7 +444,7 @@ export class DiscDropGame {
 
     const meshes = [];
     this.arenaVisualRoot.traverse((child) => {
-      if (child.isMesh && child.visible) {
+      if (child.visible && this.isArenaSurfaceMesh(child)) {
         meshes.push(child);
       }
     });
@@ -444,8 +460,9 @@ export class DiscDropGame {
       return fallbackY;
     }
 
-    const meshSurfaceY = hits[0].point.y + DISC_HALF_HEIGHT + 0.003;
-    return Math.max(meshSurfaceY, fallbackY);
+    const themeSpawnLift = this.theme === "hell" ? HELL_FLOOR_SPAWN_LIFT : 0;
+    const meshSurfaceY = hits[0].point.y + DISC_HALF_HEIGHT + 0.003 + themeSpawnLift;
+    return meshSurfaceY;
   }
 
   createLavaMaterial() {
