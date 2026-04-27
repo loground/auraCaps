@@ -141,60 +141,106 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     "/caps/jb/jbcap6.webp",
   ];
 
+  const F2P_CAP_ITEMS = [
+    ...Array.from({ length: 9 }, (_, i) => ({
+      number: i + 1,
+      name: `Cap number ${i + 1}`,
+      imagePath: `/caps/${i + 1}.webp`,
+      subtitle: "ink's collection",
+      details: `Series beta • Weight ${getCapWeightMultiplier(
+        `/caps/${i + 1}.webp`
+      ).toFixed(2)}x`,
+    })),
+    ...JUNGLE_BAY_CAP_PATHS.map((path, i) => ({
+      number: i + 10,
+      name: `Jungle cap ${i + 1}`,
+      imagePath: path,
+      subtitle: "loground's collection",
+      details: `Series beta • Weight ${getCapWeightMultiplier(path).toFixed(2)}x`,
+    })),
+  ];
+
+  const F2P_SLAMMER_ITEMS = [1, 2, 3].map((idx) => ({
+    number: idx,
+    name: `Cap number ${idx}`,
+    imagePath: `/caps/slammer${idx}.png`,
+    subtitle: "eazystyler's collection",
+    details: `Series beta • Weight ${getCapWeightMultiplier(
+      `/caps/slammer${idx}.png`
+    ).toFixed(2)}x`,
+  }));
+
   const COLLECTIONS = {
-    classic: {
-      id: "classic",
-      label: "classic",
-      items: Array.from({ length: 9 }, (_, i) => ({
-        number: i + 1,
-        name: `Cap number ${i + 1}`,
-        imagePath: `/caps/${i + 1}.webp`,
-        subtitle: "ink's collection",
-        details: `Series beta • Weight ${getCapWeightMultiplier(
-          `/caps/${i + 1}.webp`
-        ).toFixed(2)}x`,
-      })),
-    },
-    jungleBay: {
-      id: "jungleBay",
-      label: "jungle bay",
-      items: JUNGLE_BAY_CAP_PATHS.map((path, i) => ({
-        number: i + 1,
-        name: `Cap number ${i + 1}`,
-        imagePath: path,
-        subtitle: "loground's collection",
-        details: `Series beta • Weight ${getCapWeightMultiplier(path).toFixed(2)}x`,
-      })),
-    },
-    slammers: {
-      id: "slammers",
-      label: "slammers",
-      items: [1, 2, 3].map((idx) => ({
-        number: idx,
-        name: `Cap number ${idx}`,
-        imagePath: `/caps/slammer${idx}.png`,
-        subtitle: "eazystyler's collection",
-        details: `Series beta • Weight ${getCapWeightMultiplier(`/caps/slammer${idx}.png`).toFixed(
-          2
-        )}x`,
-      })),
+    f2p: {
+      id: "f2p",
+      label: "f2p",
+      loading: false,
+      subcollections: {
+        caps: {
+          id: "caps",
+          label: "caps",
+          items: F2P_CAP_ITEMS,
+        },
+        slammers: {
+          id: "slammers",
+          label: "slammers",
+          items: F2P_SLAMMER_ITEMS,
+        },
+      },
     },
     aura: {
       id: "aura",
       label: "aura",
-      items: [],
       loading: true,
+      subcollections: {},
     },
   };
-  let activeCollectionKey = app.classList.contains("theme-jungle-bay")
-    ? "jungleBay"
-    : "classic";
+  let activeCollectionKey = "f2p";
+  let activeSubKey = "caps";
+
+  const normalizeCollectionKey = (label, fallback) => {
+    const normalized = String(label || "")
+      .trim()
+      .toLowerCase()
+      .replace(/['’]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return normalized || fallback;
+  };
+
+  const groupAuraItemsByCollection = (items) => {
+    const grouped = {};
+    const labelByKey = new Map();
+    items.forEach((item, index) => {
+      const label = String(
+        item.collectionName || item.subtitle || "aura collection"
+      ).trim();
+      const baseKey = normalizeCollectionKey(label, `aura-${index + 1}`);
+      let key = baseKey;
+      let suffix = 2;
+      while (labelByKey.has(key) && labelByKey.get(key) !== label) {
+        key = `${baseKey}-${suffix}`;
+        suffix += 1;
+      }
+      labelByKey.set(key, label);
+      if (!grouped[key]) {
+        grouped[key] = {
+          id: key,
+          label,
+          items: [],
+        };
+      }
+      grouped[key].items.push(item);
+    });
+    return grouped;
+  };
 
   app.innerHTML = `
     <div class="collection-screen">
       <button id="backBtn" class="back-btn" type="button">back</button>
       <h2>Collection</h2>
       <div class="collection-switcher" id="collectionSwitcher" role="tablist" aria-label="Collection tabs"></div>
+      <div class="collection-switcher collection-sub-switcher" id="collectionSubSwitcher" role="tablist" aria-label="Collection sub tabs"></div>
       <div class="collection-grid" id="collectionGrid"></div>
       <div id="inspectorModal" class="inspector-modal hidden" aria-hidden="true">
         <div class="inspector-backdrop" id="inspectorBackdrop"></div>
@@ -473,6 +519,26 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   };
 
   const switcher = app.querySelector("#collectionSwitcher");
+  const subSwitcher = app.querySelector("#collectionSubSwitcher");
+
+  const getActiveTopCollection = () => COLLECTIONS[activeCollectionKey] || null;
+
+  const getSubcollections = () =>
+    getActiveTopCollection()?.subcollections || {};
+
+  const syncActiveSubKey = () => {
+    const subcollections = getSubcollections();
+    if (activeSubKey && subcollections[activeSubKey]) {
+      return;
+    }
+    activeSubKey = Object.keys(subcollections)[0] || "";
+  };
+
+  const getActiveSubcollection = () => {
+    syncActiveSubKey();
+    return getSubcollections()[activeSubKey] || null;
+  };
+
   const renderSwitcher = () => {
     switcher.innerHTML = "";
     Object.values(COLLECTIONS).forEach((collection) => {
@@ -492,23 +558,77 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           return;
         }
         activeCollectionKey = collection.id;
+        activeSubKey = Object.keys(collection.subcollections || {})[0] || "";
         renderSwitcher();
+        renderSubSwitcher();
         renderCards();
       });
       switcher.appendChild(btn);
     });
   };
 
-  const renderCards = () => {
-    const active = COLLECTIONS[activeCollectionKey];
-    stopPreviewSpriteAnimation();
-    previewSpriteNodes = [];
-    grid.innerHTML = "";
-    if (!active) {
+  const renderSubSwitcher = () => {
+    subSwitcher.innerHTML = "";
+    const topCollection = getActiveTopCollection();
+    const subcollections = getSubcollections();
+    const subcollectionEntries = Object.values(subcollections);
+
+    if (topCollection?.loading) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "collection-tab active";
+      btn.textContent = "loading";
+      btn.disabled = true;
+      subSwitcher.appendChild(btn);
       return;
     }
 
-    if (active.loading) {
+    if (subcollectionEntries.length === 0) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "collection-tab active";
+      btn.textContent = "empty";
+      btn.disabled = true;
+      subSwitcher.appendChild(btn);
+      return;
+    }
+
+    syncActiveSubKey();
+    subcollectionEntries.forEach((subcollection) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `collection-tab ${
+        subcollection.id === activeSubKey ? "active" : ""
+      }`;
+      btn.textContent = subcollection.label;
+      btn.setAttribute("role", "tab");
+      btn.setAttribute(
+        "aria-selected",
+        subcollection.id === activeSubKey ? "true" : "false"
+      );
+      btn.addEventListener("click", () => {
+        if (activeSubKey === subcollection.id) {
+          return;
+        }
+        activeSubKey = subcollection.id;
+        renderSubSwitcher();
+        renderCards();
+      });
+      subSwitcher.appendChild(btn);
+    });
+  };
+
+  const renderCards = () => {
+    const topCollection = getActiveTopCollection();
+    const active = getActiveSubcollection();
+    stopPreviewSpriteAnimation();
+    previewSpriteNodes = [];
+    grid.innerHTML = "";
+    if (!topCollection) {
+      return;
+    }
+
+    if (topCollection.loading) {
       const card = document.createElement("div");
       card.className = "collection-card";
       card.innerHTML = `
@@ -530,9 +650,14 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       return;
     }
 
-    if (!Array.isArray(active.items) || active.items.length === 0) {
+    if (!active || !Array.isArray(active.items) || active.items.length === 0) {
       const card = document.createElement("div");
       card.className = "collection-card";
+      const title = topCollection.id === "aura" ? "No AURA items" : "No items";
+      const description =
+        topCollection.id === "aura"
+          ? "connect Aura to load owned collectibles."
+          : "this section is empty for now.";
       card.innerHTML = `
       <div class="cap-slot">
         <div class="disc-card" aria-label="No Aura items">
@@ -542,9 +667,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         </div>
       </div>
       <div class="cap-info">
-        <h3>No AURA items</h3>
-        <p>owned inventory</p>
-        <p>connect Aura to load owned collectibles.</p>
+        <h3>${title}</h3>
+        <p>${topCollection.label}</p>
+        <p>${description}</p>
       </div>
     `;
       grid.appendChild(card);
@@ -816,6 +941,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         name: name,
         imagePath,
         subtitle: subtitle,
+        collectionName: subtitle,
         details: detailsBits.join(" • "),
         spriteHints,
         isAuraSprite: spriteFlag,
@@ -846,9 +972,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     const lookupValue = pickAuraLookupValue(session);
     if (!lookupValue) {
       COLLECTIONS.aura.loading = false;
-      COLLECTIONS.aura.items = [];
+      COLLECTIONS.aura.subcollections = {};
       if (!unmounted) {
         renderSwitcher();
+        renderSubSwitcher();
         renderCards();
       }
       return;
@@ -872,9 +999,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       ).trim();
       if (!profileResponse.ok || !userId) {
         COLLECTIONS.aura.loading = false;
-        COLLECTIONS.aura.items = [];
+        COLLECTIONS.aura.subcollections = {};
         if (!unmounted) {
           renderSwitcher();
+          renderSubSwitcher();
           renderCards();
         }
         return;
@@ -911,22 +1039,28 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         }))
       );
       COLLECTIONS.aura.loading = false;
-      COLLECTIONS.aura.items = items;
+      COLLECTIONS.aura.subcollections = groupAuraItemsByCollection(items);
+      if (activeCollectionKey === "aura") {
+        activeSubKey = Object.keys(COLLECTIONS.aura.subcollections)[0] || "";
+      }
       if (!unmounted) {
         renderSwitcher();
+        renderSubSwitcher();
         renderCards();
       }
     } catch {
       COLLECTIONS.aura.loading = false;
-      COLLECTIONS.aura.items = [];
+      COLLECTIONS.aura.subcollections = {};
       if (!unmounted) {
         renderSwitcher();
+        renderSubSwitcher();
         renderCards();
       }
     }
   };
 
   renderSwitcher();
+  renderSubSwitcher();
   renderCards();
   loadAuraCollection();
 
