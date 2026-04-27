@@ -12,7 +12,15 @@ const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
 let soundEnabled = true;
 const AURA_SESSION_KEY = "aura_session_v1";
-const AURA_SPRITE_NAMES = new Set(["FILTHY", "GOLDIE", "ALI", "YODIE", "WILLY", "EAZY"]);
+const AURA_SPRITE_NAMES = new Set([
+  "FILTHY",
+  "GOLDIE",
+  "ALI",
+  "YODIE",
+  "WILLY",
+  "EAZY",
+  "ANGRYTALIK",
+]);
 let auraSession = loadAuraSession();
 
 function loadAuraSession() {

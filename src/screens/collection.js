@@ -12,6 +12,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     "YODIE",
     "WILLY",
     "EAZY",
+    "ANGRYTALIK",
   ]);
   const parseSpriteHints = (configLike = {}) => {
     const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
