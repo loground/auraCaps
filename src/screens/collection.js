@@ -801,6 +801,59 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     return `https://ipfs.io/ipfs/${value}`;
   };
 
+  const RARITY_LABELS = {
+    1: "common",
+    2: "rare",
+    3: "epic",
+    4: "legendary",
+    5: "mythic",
+  };
+
+  const normalizeRarity = (value) => {
+    const rarityNumber = Number.parseInt(String(value ?? ""), 10);
+    if (Number.isFinite(rarityNumber) && RARITY_LABELS[rarityNumber]) {
+      return RARITY_LABELS[rarityNumber];
+    }
+    return String(value || "").trim();
+  };
+
+  const readTraitValue = (traitList, keys) => {
+    const normalizedKeys = keys.map((key) => String(key).toLowerCase());
+    if (!traitList) {
+      return "";
+    }
+    if (!Array.isArray(traitList) && typeof traitList === "object") {
+      for (const [traitKey, directValue] of Object.entries(traitList)) {
+        if (
+          normalizedKeys.includes(String(traitKey).toLowerCase()) &&
+          directValue !== undefined &&
+          directValue !== null &&
+          directValue !== ""
+        ) {
+          return directValue;
+        }
+      }
+    }
+    const rows = Array.isArray(traitList) ? traitList : Object.values(traitList);
+    const found = rows.find((trait) => {
+      const traitName = String(
+        trait?.trait_type ||
+          trait?.traitType ||
+          trait?.key ||
+          trait?.name ||
+          trait?.type ||
+          ""
+      ).toLowerCase();
+      return normalizedKeys.includes(traitName);
+    });
+    return found?.value ?? found?.display_value ?? found?.displayValue ?? "";
+  };
+
+  const parseWeightMultiplier = (value) => {
+    const parsed = Number.parseFloat(String(value ?? "").replace(/x$/i, ""));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
   const extractInventoryItems = (payload) => {
     console.groupCollapsed("[AURA][COLLECTION] extractInventoryItems()");
     console.log("raw normalized inventory payload", payload);
@@ -833,6 +886,14 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     for (const [index, row] of rows.entries()) {
       const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
       const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
+      const traitList =
+        row?.traitList ||
+        row?.traits ||
+        metadata?.traitList ||
+        metadata?.traits ||
+        row?.card?.traitList ||
+        row?.packCard?.traitList ||
+        [];
       const name = String(
         row?.name ||
           row?.title ||
@@ -883,6 +944,11 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           "aura collection"
       ).trim();
       const rarity = String(metadata?.rarity || row?.rarity || "").trim();
+      const rarityLabel = normalizeRarity(
+        metadata?.rarity ??
+          row?.rarity ??
+          readTraitValue(traitList, ["rarity"])
+      );
       const series = String(metadata?.series || row?.series || "beta").trim();
       const upperName = name.toUpperCase();
       const spriteFlag = AURA_SPRITE_NAMES.has(upperName);
@@ -895,6 +961,11 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         );
         return found?.value ?? found?.display_value ?? "";
       };
+      const traitWeight = parseWeightMultiplier(
+        readTraitValue(traitList, ["weight", "weightMultiplier", "weight multiplier"])
+      );
+      const weightMultiplier =
+        traitWeight ?? parseWeightMultiplier(metadata?.weight ?? row?.weight) ?? getCapWeightMultiplier(imagePath);
       let explicitFrameCount;
       let explicitCols;
       let explicitRows;
@@ -932,10 +1003,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         spriteHints = parseSpriteHints({ columns, rows, frameCount, fps });
       }
       const detailsBits = [`Series ${series || "beta"}`];
-      if (rarity) {
-        detailsBits.push(`Rarity ${rarity}`);
+      if (rarityLabel) {
+        detailsBits.push(`Rarity ${rarityLabel}`);
       }
-      detailsBits.push(`Weight ${getCapWeightMultiplier(imagePath).toFixed(2)}x`);
+      detailsBits.push(`Weight ${weightMultiplier.toFixed(2)}x`);
       const mappedItem = {
         number: mapped.length + 1,
         name: name,
@@ -943,9 +1014,18 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         subtitle: subtitle,
         collectionName: subtitle,
         details: detailsBits.join(" • "),
+        rarity: rarityLabel,
+        weightMultiplier,
         spriteHints,
         isAuraSprite: spriteFlag,
       };
+      console.log("trait parsing", {
+        traitList,
+        rawRarity: rarity,
+        rarityLabel,
+        traitWeight,
+        weightMultiplier,
+      });
       console.log("sprite parsing", {
         upperName,
         spriteFlag,

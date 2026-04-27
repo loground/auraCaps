@@ -468,6 +468,59 @@ function toAbsImage(imageLike) {
   return `https://ipfs.io/ipfs/${value}`;
 }
 
+const RARITY_LABELS = {
+  1: "common",
+  2: "rare",
+  3: "epic",
+  4: "legendary",
+  5: "mythic",
+};
+
+function normalizeRarity(value) {
+  const rarityNumber = Number.parseInt(String(value ?? ""), 10);
+  if (Number.isFinite(rarityNumber) && RARITY_LABELS[rarityNumber]) {
+    return RARITY_LABELS[rarityNumber];
+  }
+  return String(value || "").trim();
+}
+
+function readTraitValue(traitList, keys) {
+  const normalizedKeys = keys.map((key) => String(key).toLowerCase());
+  if (!traitList) {
+    return "";
+  }
+  if (!Array.isArray(traitList) && typeof traitList === "object") {
+    for (const [traitKey, directValue] of Object.entries(traitList)) {
+      if (
+        normalizedKeys.includes(String(traitKey).toLowerCase()) &&
+        directValue !== undefined &&
+        directValue !== null &&
+        directValue !== ""
+      ) {
+        return directValue;
+      }
+    }
+  }
+  const rows = Array.isArray(traitList) ? traitList : Object.values(traitList);
+  const found = rows.find((trait) => {
+    const traitName = String(
+      trait?.trait_type ||
+        trait?.traitType ||
+        trait?.key ||
+        trait?.name ||
+        trait?.type ||
+        ""
+    ).toLowerCase();
+    return normalizedKeys.includes(traitName);
+  });
+  return found?.value ?? found?.display_value ?? found?.displayValue ?? "";
+}
+
+function parseWeightMultiplier(value) {
+  const parsed = Number.parseFloat(String(value ?? "").replace(/x$/i, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 function extractAuraCapOptions(payload) {
   console.groupCollapsed("[AURA][CAP SELECT] extractAuraCapOptions()");
   console.log("raw normalized inventory payload", payload);
@@ -493,6 +546,14 @@ function extractAuraCapOptions(payload) {
   for (const [index, row] of rows.entries()) {
     const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
     const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
+    const traitList =
+      row?.traitList ||
+      row?.traits ||
+      metadata?.traitList ||
+      metadata?.traits ||
+      row?.card?.traitList ||
+      row?.packCard?.traitList ||
+      [];
     const name = String(
       row?.name || row?.title || metadata?.name || row?.card?.name || row?.packCard?.name || ""
     ).trim();
@@ -533,6 +594,24 @@ function extractAuraCapOptions(payload) {
       );
       return found?.value ?? found?.display_value ?? "";
     };
+    const collection = String(
+      metadata?.collection ||
+        metadata?.collectionName ||
+        row?.collectionName ||
+        row?.collection ||
+        "aura collection"
+    ).trim();
+    const series = String(metadata?.series || row?.series || "beta").trim();
+    const rarity = normalizeRarity(
+      metadata?.rarity ??
+        row?.rarity ??
+        readTraitValue(traitList, ["rarity"])
+    );
+    const traitWeight = parseWeightMultiplier(
+      readTraitValue(traitList, ["weight", "weightMultiplier", "weight multiplier"])
+    );
+    const weightMultiplier =
+      traitWeight ?? parseWeightMultiplier(metadata?.weight ?? row?.weight) ?? getCapWeightMultiplier(imagePath);
     const explicitFrameCount =
       metadata?.frameCount ??
       metadata?.frames ??
@@ -567,11 +646,21 @@ function extractAuraCapOptions(payload) {
       id: `aura-${uniqueKey}`,
       name,
       imagePath,
-      collection: "aura collection",
-      series: "beta",
+      collection,
+      series,
+      rarity,
+      weightMultiplier,
       isAuraSprite,
       spriteHints,
     };
+    console.log("trait parsing", {
+      traitList,
+      rarity,
+      traitWeight,
+      weightMultiplier,
+      collection,
+      series,
+    });
     console.log("sprite parsing", {
       upperName,
       isAuraSprite,
@@ -705,9 +794,12 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     let selectedPlayerCapId = playerDefault;
     let selectedCpuCapId = cpuDefault;
 
-    const capWeightText = (cap) => `${getCapWeightMultiplier(cap.imagePath).toFixed(2)}x`;
+    const capWeightText = (cap) =>
+      `${(cap.weightMultiplier ?? getCapWeightMultiplier(cap.imagePath)).toFixed(2)}x`;
     const renderHint = (label, cap) =>
-      `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}`;
+      `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}${
+        cap.rarity ? ` • Rarity ${cap.rarity}` : ""
+      }`;
 
     const stopSpritePreviewAnimation = () => {
       if (spritePreviewRafId !== null) {
@@ -776,6 +868,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
             <img src="${cap.imagePath}" alt="${cap.name}" loading="lazy" decoding="async" />
             <span class="cap-pick-name">${cap.name}</span>
             <span class="cap-pick-weight">Weight ${capWeightText(cap)}</span>
+            ${cap.rarity ? `<span class="cap-pick-weight">Rarity ${cap.rarity}</span>` : ""}
           </button>
         `;
       })
@@ -875,6 +968,8 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           id: playerCap.id,
           name: playerCap.name,
           imagePath: playerCap.imagePath,
+          weightMultiplier: playerCap.weightMultiplier ?? null,
+          rarity: playerCap.rarity || "",
           isAuraSprite: Boolean(playerCap.isAuraSprite),
           spriteHints: playerCap.spriteHints || null,
         },
@@ -884,6 +979,8 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
               id: cpuCap.id,
               name: cpuCap.name,
               imagePath: cpuCap.imagePath,
+              weightMultiplier: cpuCap.weightMultiplier ?? null,
+              rarity: cpuCap.rarity || "",
               isAuraSprite: Boolean(cpuCap.isAuraSprite),
               spriteHints: cpuCap.spriteHints || null,
             },

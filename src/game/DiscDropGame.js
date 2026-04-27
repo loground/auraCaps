@@ -631,6 +631,8 @@ export class DiscDropGame {
       this.resolveCapTextureFromPath(this.playerCapPath) || this.randomCapTexture();
     this.cpuCapTexture =
       this.resolveCapTextureFromPath(this.cpuCapPath) || this.randomCapTexture();
+    this.applyCapMetaToTexture(this.playerCapTexture, this.playerCapMeta);
+    this.applyCapMetaToTexture(this.cpuCapTexture, this.cpuCapMeta);
     this.playerCapTexture =
       this.applySpriteMetaToTexture(this.playerCapTexture, this.playerCapMeta) ||
       this.playerCapTexture;
@@ -713,6 +715,23 @@ export class DiscDropGame {
       this.capTextureByPath?.set(path, loaded);
     }
     return loaded;
+  }
+
+  applyCapMetaToTexture(texture, capMeta) {
+    if (!texture || !capMeta) {
+      return texture;
+    }
+    const weightMultiplier = Number(capMeta.weightMultiplier);
+    texture.userData = {
+      ...(texture.userData || {}),
+      weightMultiplier:
+        Number.isFinite(weightMultiplier) && weightMultiplier > 0
+          ? weightMultiplier
+          : texture.userData?.weightMultiplier,
+      rarity: capMeta.rarity || texture.userData?.rarity || "",
+      capId: capMeta.id || texture.userData?.capId || "",
+    };
+    return texture;
   }
 
   resolveSpritePlaybackFromTexture(texture, hints = null) {
@@ -857,6 +876,10 @@ export class DiscDropGame {
     animatedTexture.userData = {
       ...(animatedTexture.userData || {}),
       sourcePath: texture?.userData?.sourcePath || "",
+      weightMultiplier:
+        capMeta?.weightMultiplier ?? texture?.userData?.weightMultiplier,
+      rarity: capMeta?.rarity || texture?.userData?.rarity || "",
+      capId: capMeta?.id || texture?.userData?.capId || "",
     };
 
     const entry = {
@@ -1497,7 +1520,10 @@ export class DiscDropGame {
       lowerStartY
     );
     const textureWeight = (texture) =>
-      getCapWeightMultiplier(texture?.userData?.sourcePath);
+      Number.isFinite(Number(texture?.userData?.weightMultiplier)) &&
+      Number(texture?.userData?.weightMultiplier) > 0
+        ? Number(texture.userData.weightMultiplier)
+        : getCapWeightMultiplier(texture?.userData?.sourcePath);
     const activeThrower = resetTurnResults ? "player" : this.currentThrower || "player";
     this.applySelectedCapsForThrower(activeThrower, { refresh: false });
 
