@@ -16,10 +16,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   ]);
   const AURA_SPRITE_OVERRIDES_BY_NAME = {
     ANGRYTALIK: {
-      columns: 2,
+      columns: 4,
       rows: 1,
-      frameCount: 2,
-      zoom: 2.1,
+      frameCount: 4,
+      zoom: 1.25,
     },
   };
   const parseSpriteHints = (configLike = {}) => {
