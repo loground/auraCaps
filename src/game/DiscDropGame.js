@@ -25,6 +25,7 @@ import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
 const ROUND_TIMEOUT_SECONDS = 8;
 const ROUND_FORCE_TIMEOUT_SECONDS = 14;
 const OUT_OF_ARENA_RADIUS_OFFSET = 1.1;
+const FALLEN_OUT_Y = -2.0;
 const HEIGHT_MIN = 2;
 const HEIGHT_MAX = 8;
 const SLAMMER_HEIGHT_MULT = 2.64;
@@ -443,7 +444,8 @@ export class DiscDropGame {
       return fallbackY;
     }
 
-    return hits[0].point.y + DISC_HALF_HEIGHT + 0.003;
+    const meshSurfaceY = hits[0].point.y + DISC_HALF_HEIGHT + 0.003;
+    return Math.max(meshSurfaceY, fallbackY);
   }
 
   createLavaMaterial() {
@@ -2089,6 +2091,13 @@ export class DiscDropGame {
     return Math.hypot(pos.x, pos.z) > limit;
   }
 
+  hasFallenBelowArena(body) {
+    if (!body) {
+      return false;
+    }
+    return body.translation().y < FALLEN_OUT_Y;
+  }
+
   hasSettled(body) {
     const lin = body.linvel();
     const ang = body.angvel();
@@ -2303,9 +2312,17 @@ export class DiscDropGame {
         this.stableFrames = 0;
       }
 
-      if (
+      const anyOutOfArena =
         this.isOutOfArena(this.upperDiscBody) ||
-        this.floorDiscBodies.some((body) => this.isOutOfArena(body))
+        this.floorDiscBodies.some((body) => this.isOutOfArena(body));
+      const anyFallenBelow =
+        this.hasFallenBelowArena(this.upperDiscBody) ||
+        this.floorDiscBodies.some((body) => this.hasFallenBelowArena(body));
+
+      if (
+        anyFallenBelow ||
+        (anyOutOfArena &&
+          (allLanded || allSettled || this.roundElapsed >= ROUND_TIMEOUT_SECONDS))
       ) {
         this.resolveRound();
       }
