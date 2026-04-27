@@ -183,7 +183,7 @@ function createHeavenBackground() {
     side: THREE.BackSide,
   });
 
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(240, 32, 24), material);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(200, 32, 24), material);
   return { mesh, uniforms };
 }
 
@@ -384,6 +384,32 @@ function createHellBackground() {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(220, 32, 24), material);
   mesh.position.set(0, 0, 0);
   return { mesh, uniforms };
+}
+
+function createMenuTextureSphere(renderer, path) {
+  const texture = new THREE.TextureLoader().load(path);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+  const material = new THREE.MeshBasicMaterial({
+    map: texture,
+    side: THREE.BackSide,
+    toneMapped: false,
+    fog: false,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(18, 20, 20), material);
+  mesh.position.set(0, 12, 0);
+  mesh.rotation.y = Math.PI / 2;
+  mesh.renderOrder = -1000;
+  mesh.frustumCulled = false;
+  return { mesh, texture };
 }
 
 // Hell menu: cracked ground with emissive lava accents concentrated near center.
@@ -598,6 +624,7 @@ export function mountMenuScreen({
   `;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setClearAlpha(1);
   renderer.domElement.style.pointerEvents = "auto";
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -628,7 +655,7 @@ export function mountMenuScreen({
     50,
     window.innerWidth / window.innerHeight,
     0.1,
-    120
+    700
   );
   camera.position.set(0, 4.8, 18);
 
@@ -756,27 +783,34 @@ export function mountMenuScreen({
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.7;
   floor.receiveShadow = true;
-  if (!isHell && !isHeaven) {
-    scene.add(floor);
-  }
 
   let heavenBackground = null;
+  let menuTextureSphere = null;
   let heavenCloudBase = null;
   let heavenMotes = null;
   let hellBackground = null;
   let hellGround = null;
   let hellEmbers = null;
+  const menuTexturePath = isHeaven
+    ? "/themes/heaven.webp"
+    : isJungle
+      ? "/themes/junglebay.webp"
+      : isBrainrot
+        ? "/themes/brainrot.webp"
+        : isHell
+          ? "/themes/hell.webp"
+          : "";
+  if (menuTexturePath) {
+    menuTextureSphere = createMenuTextureSphere(renderer, menuTexturePath);
+    scene.add(menuTextureSphere.mesh);
+  }
   if (isHeaven) {
-    heavenBackground = createHeavenBackground();
-    scene.add(heavenBackground.mesh);
     heavenCloudBase = createHeavenCloudBase();
     scene.add(heavenCloudBase.mesh);
     heavenMotes = createHeavenMotes();
     scene.add(heavenMotes.points);
   }
   if (isHell) {
-    hellBackground = createHellBackground();
-    scene.add(hellBackground.mesh);
     hellGround = createHellCrackedGround();
     scene.add(hellGround.group);
     hellEmbers = createHellEmbers();
@@ -1655,6 +1689,9 @@ export function mountMenuScreen({
     if (hellBackground) {
       hellBackground.uniforms.iTime.value = t;
     }
+    if (menuTextureSphere) {
+      menuTextureSphere.mesh.rotation.y = Math.PI / 2 + t * 0.018;
+    }
     if (heavenBackground) {
       heavenBackground.uniforms.iTime.value = t;
     }
@@ -1747,6 +1784,9 @@ export function mountMenuScreen({
     dracoLoader.dispose();
     ktx2Loader.dispose();
     composer?.dispose();
+    menuTextureSphere?.mesh.geometry.dispose();
+    menuTextureSphere?.mesh.material.dispose();
+    menuTextureSphere?.texture.dispose();
     hellBackground?.mesh.geometry.dispose();
     hellBackground?.mesh.material.dispose();
     heavenBackground?.mesh.geometry.dispose();
