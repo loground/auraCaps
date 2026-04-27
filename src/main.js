@@ -21,8 +21,13 @@ const AURA_SPRITE_NAMES = new Set([
   "EAZY",
   "ANGRYTALIK",
 ]);
-const AURA_SPRITE_ZOOM_BY_NAME = {
-  ANGRYTALIK: 1.75,
+const AURA_SPRITE_OVERRIDES_BY_NAME = {
+  ANGRYTALIK: {
+    columns: 2,
+    rows: 1,
+    frameCount: 2,
+    zoom: 2.1,
+  },
 };
 let auraSession = loadAuraSession();
 
@@ -391,11 +396,13 @@ function parseSpriteHints(configLike = {}) {
   const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
   const frameCount = Number.parseInt(String(configLike.frameCount ?? configLike.frames ?? ""), 10);
   const fps = Number(configLike.fps);
+  const zoom = Number(configLike.zoom);
   return {
     columns: Number.isFinite(columns) && columns > 0 ? columns : undefined,
     rows: Number.isFinite(rows) && rows > 0 ? rows : undefined,
     frameCount: Number.isFinite(frameCount) && frameCount > 0 ? frameCount : undefined,
     fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
+    zoom: Number.isFinite(zoom) && zoom > 1 ? zoom : undefined,
   };
 }
 
@@ -648,13 +655,14 @@ function extractAuraCapOptions(payload) {
       metadata?.spriteFps ??
       row?.fps ??
       attrLookup(["fps", "spriteFps", "sprite fps"]);
+    const spriteOverride = AURA_SPRITE_OVERRIDES_BY_NAME[upperName] || {};
     const spriteHints = isAuraSprite
       ? parseSpriteHints({
-          columns: explicitCols,
-          rows: explicitRows,
-          frameCount: explicitFrameCount,
-          fps: explicitFps,
-          zoom: AURA_SPRITE_ZOOM_BY_NAME[upperName] || 1,
+          columns: spriteOverride.columns ?? explicitCols,
+          rows: spriteOverride.rows ?? explicitRows,
+          frameCount: spriteOverride.frameCount ?? explicitFrameCount,
+          fps: spriteOverride.fps ?? explicitFps,
+          zoom: spriteOverride.zoom ?? 1,
         })
       : null;
     const mappedItem = {
