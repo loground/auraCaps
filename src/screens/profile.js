@@ -253,19 +253,29 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     const id = String(userId || "").trim();
     if (!id) return null;
     const url = `/api/aura-inventory?userId=${encodeURIComponent(id)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`;
+    console.groupCollapsed("[AURA][PROFILE] callInventoryApi()");
+    console.log("inventory request", { url, userId: id });
     auraDebugLog("inventory fetch start", { url, userId: id });
     const response = await fetch(url);
     const json = await response.json().catch(() => null);
+    console.log("inventory response raw json", {
+      ok: response.ok,
+      status: response.status,
+      body: json,
+    });
     auraDebugLog("inventory fetch response", {
       ok: response.ok,
       status: response.status,
       body: json,
     });
     if (!response.ok) {
+      console.log("inventory request failed", { status: response.status, body: json });
+      console.groupEnd();
       return { error: `http ${response.status}` };
     }
 
     const payload = json?.data || json;
+    console.log("inventory normalized payload", payload);
     const items = Array.isArray(payload?.data)
       ? payload.data
       : Array.isArray(payload?.items)
@@ -273,6 +283,32 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         : Array.isArray(payload)
           ? payload
           : [];
+    console.log("inventory selected rows", { count: items.length, rows: items });
+    items.forEach((item, index) => {
+      console.groupCollapsed(`[AURA][PROFILE] inventory row ${index}`);
+      console.log("raw item", item);
+      console.log("metadata", item?.metadata || item?.card?.metadata || item?.packCard?.metadata || {});
+      console.log(
+        "attributes",
+        item?.metadata?.attributes ||
+          item?.card?.metadata?.attributes ||
+          item?.packCard?.metadata?.attributes ||
+          []
+      );
+      console.log("image candidates", {
+        image: item?.image,
+        imageUrl: item?.imageUrl,
+        image_url: item?.image_url,
+        imageURI: item?.imageURI,
+        image_uri: item?.image_uri,
+        metadataImage: item?.metadata?.image,
+        metadataImageUrl: item?.metadata?.image_url,
+        cardImage: item?.card?.image,
+        cardImageUrl: item?.card?.imageUrl,
+        packCardImage: item?.packCard?.image,
+      });
+      console.groupEnd();
+    });
     const total =
       payload?.meta?.total ??
       payload?.total ??
@@ -281,6 +317,8 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       0;
     const page = payload?.meta?.page ?? payload?.page ?? 1;
     const totalPages = payload?.meta?.totalPages ?? payload?.totalPages ?? 1;
+    console.log("inventory summary", { total, page, totalPages });
+    console.groupEnd();
     return {
       raw: payload,
       summary: `items: ${total} • page ${page}/${totalPages}`,

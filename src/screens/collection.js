@@ -677,6 +677,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   };
 
   const extractInventoryItems = (payload) => {
+    console.groupCollapsed("[AURA][COLLECTION] extractInventoryItems()");
+    console.log("raw normalized inventory payload", payload);
     const candidates = [
       payload?.data,
       payload?.items,
@@ -685,6 +687,14 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       payload?.packCards,
       payload,
     ];
+    console.log("candidate containers", {
+      data: payload?.data,
+      items: payload?.items,
+      cards: payload?.cards,
+      results: payload?.results,
+      packCards: payload?.packCards,
+      payload,
+    });
     let rows = [];
     for (const candidate of candidates) {
       if (Array.isArray(candidate)) {
@@ -692,9 +702,10 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         break;
       }
     }
+    console.log("selected inventory rows", { count: rows.length, rows });
     const seen = new Set();
     const mapped = [];
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
       const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
       const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
       const name = String(
@@ -726,7 +737,16 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           row?.packCardId ||
           `${name}-${imagePath}`
       );
+      console.groupCollapsed(`[AURA][COLLECTION] inventory row ${index}: ${name || "(no name)"}`);
+      console.log("raw row", row);
+      console.log("metadata", metadata);
+      console.log("attributes", attrs);
+      console.log("parsed basics", { uniqueKey, name, imagePath });
       if (!imagePath || !name || seen.has(uniqueKey)) {
+        console.log("skipped row", {
+          reason: !name ? "missing name" : !imagePath ? "missing imagePath" : "duplicate uniqueKey",
+        });
+        console.groupEnd();
         continue;
       }
       seen.add(uniqueKey);
@@ -750,26 +770,30 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         );
         return found?.value ?? found?.display_value ?? "";
       };
+      let explicitFrameCount;
+      let explicitCols;
+      let explicitRows;
+      let explicitFps;
       let spriteHints = null;
       if (spriteFlag) {
-        const explicitFrameCount =
+        explicitFrameCount =
           metadata?.frameCount ??
           metadata?.frames ??
           metadata?.spriteFrames ??
           row?.frameCount ??
           attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
-        const explicitCols =
+        explicitCols =
           metadata?.columns ??
           metadata?.cols ??
           metadata?.spriteColumns ??
           row?.columns ??
           attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
-        const explicitRows =
+        explicitRows =
           metadata?.rows ??
           metadata?.spriteRows ??
           row?.rows ??
           attrLookup(["rows", "spriteRows", "sprite rows"]);
-        const explicitFps =
+        explicitFps =
           metadata?.fps ??
           metadata?.spriteFps ??
           row?.fps ??
@@ -787,7 +811,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         detailsBits.push(`Rarity ${rarity}`);
       }
       detailsBits.push(`Weight ${getCapWeightMultiplier(imagePath).toFixed(2)}x`);
-      mapped.push({
+      const mappedItem = {
         number: mapped.length + 1,
         name: name,
         imagePath,
@@ -795,8 +819,25 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         details: detailsBits.join(" • "),
         spriteHints,
         isAuraSprite: spriteFlag,
+      };
+      console.log("sprite parsing", {
+        upperName,
+        spriteFlag,
+        explicitFrameCount: spriteFlag ? explicitFrameCount : undefined,
+        explicitCols: spriteFlag ? explicitCols : undefined,
+        explicitRows: spriteFlag ? explicitRows : undefined,
+        explicitFps: spriteFlag ? explicitFps : undefined,
+        spriteHints,
       });
+      console.log("mapped collection item", mappedItem);
+      console.groupEnd();
+      mapped.push(mappedItem);
     }
+    console.log("final mapped collection inventory items", {
+      count: mapped.length,
+      items: mapped,
+    });
+    console.groupEnd();
     return mapped;
   };
 
@@ -852,6 +893,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         body: inventoryJson,
       });
       const inventoryPayload = inventoryJson?.data || inventoryJson;
+      console.log("[AURA][COLLECTION] inventory normalized payload", {
+        payload: inventoryPayload,
+      });
       const items = extractInventoryItems(inventoryPayload).slice(0, 24);
       console.log(
         "[AURA][COLLECTION] mapped inventory items",
@@ -859,6 +903,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           name: item.name,
           imagePath: item.imagePath,
           details: item.details,
+          isAuraSprite: item.isAuraSprite,
+          spriteHints: item.spriteHints,
           parsedWeight: Number(
             String(item.details || "").match(/Weight\\s+([0-9.]+)x/i)?.[1] || 0
           ),

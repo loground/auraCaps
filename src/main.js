@@ -469,7 +469,17 @@ function toAbsImage(imageLike) {
 }
 
 function extractAuraCapOptions(payload) {
+  console.groupCollapsed("[AURA][CAP SELECT] extractAuraCapOptions()");
+  console.log("raw normalized inventory payload", payload);
   const candidates = [payload?.data, payload?.items, payload?.cards, payload?.results, payload?.packCards, payload];
+  console.log("candidate containers", {
+    data: payload?.data,
+    items: payload?.items,
+    cards: payload?.cards,
+    results: payload?.results,
+    packCards: payload?.packCards,
+    payload,
+  });
   let rows = [];
   for (const candidate of candidates) {
     if (Array.isArray(candidate)) {
@@ -477,9 +487,10 @@ function extractAuraCapOptions(payload) {
       break;
     }
   }
+  console.log("selected inventory rows", { count: rows.length, rows });
   const seen = new Set();
   const mapped = [];
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
     const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
     const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
     const name = String(
@@ -500,7 +511,16 @@ function extractAuraCapOptions(payload) {
     const uniqueKey = String(
       row?.id || row?._id || row?.tokenId || row?.tokenID || row?.mint || row?.packCardId || `${name}-${imagePath}`
     );
+    console.groupCollapsed(`[AURA][CAP SELECT] inventory row ${index}: ${name || "(no name)"}`);
+    console.log("raw row", row);
+    console.log("metadata", metadata);
+    console.log("attributes", attrs);
+    console.log("parsed basics", { uniqueKey, name, imagePath });
     if (!name || !imagePath || seen.has(uniqueKey)) {
+      console.log("skipped row", {
+        reason: !name ? "missing name" : !imagePath ? "missing imagePath" : "duplicate uniqueKey",
+      });
+      console.groupEnd();
       continue;
     }
     seen.add(uniqueKey);
@@ -543,7 +563,7 @@ function extractAuraCapOptions(payload) {
           fps: explicitFps,
         })
       : null;
-    mapped.push({
+    const mappedItem = {
       id: `aura-${uniqueKey}`,
       name,
       imagePath,
@@ -551,30 +571,68 @@ function extractAuraCapOptions(payload) {
       series: "beta",
       isAuraSprite,
       spriteHints,
+    };
+    console.log("sprite parsing", {
+      upperName,
+      isAuraSprite,
+      explicitFrameCount,
+      explicitCols,
+      explicitRows,
+      explicitFps,
+      spriteHints,
     });
+    console.log("mapped cap option", mappedItem);
+    console.groupEnd();
+    mapped.push(mappedItem);
   }
-  return mapped.slice(0, 48);
+  const sliced = mapped.slice(0, 48);
+  console.log("final mapped aura cap options", { count: sliced.length, items: sliced });
+  console.groupEnd();
+  return sliced;
 }
 
 async function fetchAuraCapOptions(sessionLike) {
   const lookupValue = pickAuraLookupValue(sessionLike);
+  console.groupCollapsed("[AURA][CAP SELECT] fetchAuraCapOptions()");
+  console.log("sessionLike", sessionLike);
+  console.log("lookupValue", lookupValue);
   if (!lookupValue) {
+    console.log("no lookup value, returning empty aura cap list");
+    console.groupEnd();
     return [];
   }
-  const profileResponse = await fetch(`/api/aura-profile?username=${encodeURIComponent(lookupValue)}`);
+  const profileUrl = `/api/aura-profile?username=${encodeURIComponent(lookupValue)}`;
+  console.log("profile request", { profileUrl });
+  const profileResponse = await fetch(profileUrl);
   const profileJson = await profileResponse.json().catch(() => null);
+  console.log("profile response", {
+    ok: profileResponse.ok,
+    status: profileResponse.status,
+    body: profileJson,
+  });
   const profilePayload = profileJson?.data || profileJson;
   const profile = profilePayload?.user || profilePayload?.data || profilePayload || {};
   const userId = String(profile?.id || profile?._id || profile?.userId || "").trim();
   if (!profileResponse.ok || !userId) {
+    console.log("profile lookup failed or missing userId", { profile, userId });
+    console.groupEnd();
     return [];
   }
-  const inventoryResponse = await fetch(
-    `/api/aura-inventory?userId=${encodeURIComponent(userId)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`
-  );
+  const inventoryUrl = `/api/aura-inventory?userId=${encodeURIComponent(userId)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`;
+  console.log("inventory request", { inventoryUrl, userId });
+  const inventoryResponse = await fetch(inventoryUrl);
   const inventoryJson = await inventoryResponse.json().catch(() => null);
+  console.log("inventory response raw json", {
+    ok: inventoryResponse.ok,
+    status: inventoryResponse.status,
+    body: inventoryJson,
+  });
   const inventoryPayload = inventoryJson?.data || inventoryJson;
-  return extractAuraCapOptions(inventoryPayload);
+  console.log("inventory normalized payload", inventoryPayload);
+  const options = extractAuraCapOptions(inventoryPayload);
+  console.log("returning aura cap options", options);
+  console.groupEnd();
+  return options;
 }
 
 async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
