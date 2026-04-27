@@ -1,5 +1,6 @@
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Keep Jungle Bay button palette from being overridden by generic rules. */
@@ -39,6 +40,61 @@ body,
     radial-gradient(circle at 18% 16%, #4a1510 0%, transparent 36%),
     radial-gradient(circle at 82% 14%, #2d0907 0%, transparent 34%),
     linear-gradient(180deg, #0f0404 0%, #060203 100%);
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+button,
+select,
+input,
+textarea,
+[role="button"],
+.menu-btn,
+.theme-btn,
+.menu-mute-btn,
+.global-mute-btn,
+.menu-theme-select,
+.collection-tab,
+.collection-card,
+.disc-card,
+.inspect-btn,
+.cap-pick-card,
+.mode-btn,
+.play-setup-close,
+.inspector-close,
+.aura-login-slot,
+.aura-login-slot * {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+select,
+[role="button"],
+.menu-btn,
+.theme-btn,
+.menu-mute-btn,
+.global-mute-btn,
+.menu-theme-select,
+.collection-tab,
+.collection-card,
+.disc-card,
+.inspect-btn,
+.cap-pick-card,
+.mode-btn,
+.play-setup-close,
+.inspector-close {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+img,
+canvas {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 canvas {
