@@ -14,6 +14,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     "EAZY",
     "ANGRYTALIK",
   ]);
+  const AURA_SPRITE_ZOOM_BY_NAME = {
+    ANGRYTALIK: 1.75,
+  };
   const parseSpriteHints = (configLike = {}) => {
     const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
     const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
@@ -1009,7 +1012,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
           rows,
           frameCount,
           fps,
-          zoom: upperName === "ANGRYTALIK" ? 1.2 : 1,
+          zoom: AURA_SPRITE_ZOOM_BY_NAME[upperName] || 1,
         });
       }
       const detailsBits = [`Series ${series || "beta"}`];

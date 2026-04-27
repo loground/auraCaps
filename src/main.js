@@ -21,6 +21,9 @@ const AURA_SPRITE_NAMES = new Set([
   "EAZY",
   "ANGRYTALIK",
 ]);
+const AURA_SPRITE_ZOOM_BY_NAME = {
+  ANGRYTALIK: 1.75,
+};
 let auraSession = loadAuraSession();
 
 function loadAuraSession() {
@@ -651,7 +654,7 @@ function extractAuraCapOptions(payload) {
           rows: explicitRows,
           frameCount: explicitFrameCount,
           fps: explicitFps,
-          zoom: upperName === "ANGRYTALIK" ? 1.2 : 1,
+          zoom: AURA_SPRITE_ZOOM_BY_NAME[upperName] || 1,
         })
       : null;
     const mappedItem = {
