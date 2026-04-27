@@ -126,7 +126,7 @@ function renderInitialProfile(app) {
       <h2>Profile</h2>
       <div class="profile-card">
         <div class="profile-lookup-row">
-          <button id="profileAuraAuthBtn" class="theme-btn" type="button">log in with aura</button>
+          <button id="profileAuraAuthBtn" class="theme-btn aura-connector-btn" type="button">AURA CONNECTOR</button>
         </div>
       </div>
       <div id="profileCard" class="profile-card">
@@ -220,7 +220,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
 
   const updateAuraAuthButton = () => {
     if (!profileAuraAuthBtn) return;
-    profileAuraAuthBtn.textContent = "aura";
+    profileAuraAuthBtn.textContent = "AURA CONNECTOR";
   };
 
   const applyAuraSession = (sessionLike) => {

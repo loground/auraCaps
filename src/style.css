@@ -1145,6 +1145,31 @@ button:disabled {
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
+  justify-content: center;
+}
+
+.aura-connector-btn {
+  min-width: 230px;
+  padding: 0.72rem 1rem;
+  border-color: rgba(255, 216, 126, 0.9);
+  color: #fff4d0;
+  background:
+    linear-gradient(180deg, rgba(143, 42, 21, 0.96), rgba(69, 14, 11, 0.98)),
+    radial-gradient(circle at 50% -15%, rgba(255, 224, 135, 0.24), transparent 58%);
+  box-shadow:
+    0 0 0 1px rgba(255, 218, 135, 0.24),
+    0 0 18px rgba(255, 102, 45, 0.28),
+    0 12px 24px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 234, 194, 0.18);
+}
+
+.aura-connector-btn:hover {
+  border-color: rgba(255, 238, 170, 0.98);
+  box-shadow:
+    0 0 0 1px rgba(255, 232, 160, 0.34),
+    0 0 24px rgba(255, 128, 53, 0.42),
+    0 14px 28px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 240, 210, 0.25);
 }
 
 .profile-lookup-input {
@@ -1375,6 +1400,19 @@ button:disabled {
   box-shadow: 0 0 0 2px rgba(95, 164, 227, 0.28);
 }
 
+.theme-heaven .aura-connector-btn {
+  border-color: rgba(74, 139, 205, 0.9);
+  color: #163756;
+  background:
+    linear-gradient(180deg, rgba(239, 248, 255, 0.98), rgba(169, 211, 247, 0.96)),
+    radial-gradient(circle at 50% -12%, rgba(255, 255, 255, 0.5), transparent 56%);
+  box-shadow:
+    0 0 0 1px rgba(126, 181, 232, 0.3),
+    0 0 18px rgba(99, 166, 232, 0.34),
+    0 12px 24px rgba(39, 89, 135, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
 .theme-jungle-bay .profile-screen h2,
 .theme-jungle-bay .profile-title-block h3 {
   color: #28553b;
@@ -1412,6 +1450,19 @@ button:disabled {
 .theme-jungle-bay .profile-lookup-input:focus {
   border-color: rgba(90, 138, 75, 0.82);
   box-shadow: 0 0 0 2px rgba(114, 174, 96, 0.28);
+}
+
+.theme-jungle-bay .aura-connector-btn {
+  border-color: rgba(77, 139, 78, 0.95);
+  color: #214c34;
+  background:
+    linear-gradient(180deg, rgba(245, 252, 204, 0.98), rgba(161, 216, 131, 0.96)),
+    radial-gradient(circle at 50% -12%, rgba(255, 242, 161, 0.5), transparent 58%);
+  box-shadow:
+    0 0 0 1px rgba(132, 181, 92, 0.32),
+    0 0 18px rgba(109, 170, 74, 0.34),
+    0 12px 24px rgba(42, 93, 55, 0.22),
+    inset 0 1px 0 rgba(255, 255, 221, 0.58);
 }
 
 .theme-heaven .menu-theme-select {
@@ -2502,8 +2553,26 @@ button:disabled {
     );
 }
 
+.theme-brainrot .aura-connector-btn {
+  border: 2px solid rgba(255, 252, 147, 0.98);
+  color: #21002f;
+  background:
+    linear-gradient(90deg, rgba(184, 255, 66, 0.98), rgba(255, 86, 196, 0.96), rgba(0, 234, 255, 0.9)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.24) 0 6px,
+      rgba(0, 0, 0, 0.08) 6px 12px
+    );
+  text-shadow: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 252, 147, 0.42),
+    0 0 22px rgba(255, 71, 204, 0.48),
+    0 10px 24px rgba(0, 0, 0, 0.36);
+}
+
 @media (min-width: 641px) {
-  .mode-collection .global-mute-btn {
+  .mode-collection .global-mute-btn,
+  .mode-profile .global-mute-btn {
     left: calc(env(safe-area-inset-left, 0px) + 0.8rem);
     bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
     right: auto;
@@ -2639,7 +2708,8 @@ button:disabled {
     bottom: auto;
   }
 
-  .mode-collection .global-mute-btn {
+  .mode-collection .global-mute-btn,
+  .mode-profile .global-mute-btn {
     left: calc(env(safe-area-inset-left, 0px) + 0.7rem);
     top: calc(env(safe-area-inset-top, 0px) + 0.7rem);
     right: auto;
