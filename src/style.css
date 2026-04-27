@@ -2821,9 +2821,15 @@ button:disabled {
   }
 
   .menu-aura-status {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.64rem);
+    top: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 7rem);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(86vw, 360px);
     font-size: 0.66rem;
     padding: 0;
+    text-align: center;
+    line-height: 1.15;
   }
 
   .collection-grid {
