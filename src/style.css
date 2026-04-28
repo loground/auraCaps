@@ -2677,6 +2677,13 @@ button:disabled {
     padding: 0.45rem 0.62rem;
   }
 
+  .theme-hell .menu-btn {
+    width: 100%;
+    min-width: 0;
+    font-size: 1.2rem;
+    padding: 0.45rem 0.62rem;
+  }
+
   .play-setup-panel {
     width: min(430px, calc(100vw - 1rem));
     padding: 0.78rem 0.74rem 0.72rem;
