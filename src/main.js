@@ -1,12 +1,24 @@
 import "./style.css";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
+import { playSound, preloadSounds, unlockSounds } from "./sound.js";
 
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
 const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "brainrot"];
-const hoverSfxTemplate = new Audio("/sounds/menuHover.mp3");
-hoverSfxTemplate.preload = "auto";
+const SOUND_PATHS = [
+  "/sounds/menuHover.mp3",
+  "/sounds/throw.mp3",
+  "/sounds/throw2.mp3",
+  "/sounds/throw3.mp3",
+  "/sounds/throw4.mp3",
+  "/sounds/throw5.mp3",
+  "/sounds/hit.mp3",
+  "/sounds/win1.mp3",
+  "/sounds/win2.mp3",
+  "/sounds/win3.mp3",
+];
+preloadSounds(SOUND_PATHS);
 const hoverTargetsSelector = "button";
 const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
@@ -30,6 +42,9 @@ const AURA_SPRITE_OVERRIDES_BY_NAME = {
   },
 };
 let auraSession = loadAuraSession();
+
+window.addEventListener("pointerdown", unlockSounds, { once: true, passive: true });
+window.addEventListener("touchstart", unlockSounds, { once: true, passive: true });
 
 function loadAuraSession() {
   try {
@@ -129,17 +144,7 @@ function playHoverSfx() {
     return;
   }
   lastHoverSfxAt = now;
-
-  try {
-    const hoverSfx = hoverSfxTemplate.cloneNode();
-    hoverSfx.volume = 0.7;
-    const playPromise = hoverSfx.play();
-    if (playPromise && typeof playPromise.catch === "function") {
-      playPromise.catch(() => {});
-    }
-  } catch {
-    // Ignore autoplay or playback errors.
-  }
+  playSound("/sounds/menuHover.mp3", 0.7);
 }
 
 app.addEventListener("mouseover", (event) => {

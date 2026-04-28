@@ -21,6 +21,7 @@ import {
 import { getCapWeightMultiplier } from "./cap-physics.js";
 import { createRenderer, createWorldScene } from "./scene.js";
 import { DEFAULT_SETTINGS, renderGameUI } from "./ui.js";
+import { playSound, preloadSounds } from "../sound.js";
 
 const ROUND_TIMEOUT_SECONDS = 8;
 const ROUND_FORCE_TIMEOUT_SECONDS = 14;
@@ -153,6 +154,7 @@ export class DiscDropGame {
       "/sounds/win2.mp3",
       "/sounds/win3.mp3",
     ];
+    preloadSounds([...this.throwSfxPaths, ...this.winSfxPaths, "/sounds/hit.mp3"]);
     this.lastHitSfxAt = 0;
     this.slammerMiniDots = [];
     this.animatedSpriteTextures = [];
@@ -1714,16 +1716,7 @@ export class DiscDropGame {
     if (!this.soundEnabled) {
       return;
     }
-    try {
-      const audio = new Audio(path);
-      audio.volume = volume;
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {});
-      }
-    } catch {
-      // Ignore playback errors.
-    }
+    playSound(path, volume);
   }
 
   playRandomThrowSfx() {
