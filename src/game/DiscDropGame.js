@@ -1234,6 +1234,15 @@ export class DiscDropGame {
     }, durationMs);
   }
 
+  getSlammerScoreNotice(outcome, playerScore, cpuScore = null) {
+    const resultText =
+      outcome === "win" ? "YOU WON" : outcome === "lose" ? "YOU LOST" : "TIE";
+    if (cpuScore === null) {
+      return `${resultText}\n${playerScore} FLIPS`;
+    }
+    return `${resultText}\nYOU ${playerScore} - CPU ${cpuScore}`;
+  }
+
   startNewMatch() {
     if (this.battleMode === "training") {
       this.buildRoundBodies();
@@ -1406,13 +1415,28 @@ export class DiscDropGame {
     if (isMatchOver) {
       if (this.playerWins > this.cpuWins) {
         this.setStatus("match won", cpuMoveSummary);
-        this.showCenterNotice("MATCH WON", 2300);
+        this.showCenterNotice(
+          isSlammerVsAi
+            ? `MATCH WON\nYOU ${playerScore} - CPU ${cpuScore}`
+            : "MATCH WON",
+          2300
+        );
       } else if (this.cpuWins > this.playerWins) {
         this.setStatus("match lost", cpuMoveSummary);
-        this.showCenterNotice("MATCH LOST", 2300);
+        this.showCenterNotice(
+          isSlammerVsAi
+            ? `MATCH LOST\nYOU ${playerScore} - CPU ${cpuScore}`
+            : "MATCH LOST",
+          2300
+        );
       } else {
         this.setStatus("match tie", cpuMoveSummary);
-        this.showCenterNotice("MATCH TIE", 2300);
+        this.showCenterNotice(
+          isSlammerVsAi
+            ? `MATCH TIE\nYOU ${playerScore} - CPU ${cpuScore}`
+            : "MATCH TIE",
+          2300
+        );
       }
       this.ui.resetBtn.textContent = "New Match";
       this.ui.actionButtonsEl.classList.add("show-reset");
@@ -1422,13 +1446,28 @@ export class DiscDropGame {
 
     if (roundOutcome === "win") {
       this.setStatus("you won round", cpuMoveSummary);
-      this.showCenterNotice("YOU WON", 1700);
+      this.showCenterNotice(
+        isSlammerVsAi
+          ? this.getSlammerScoreNotice("win", playerScore, cpuScore)
+          : "YOU WON",
+        isSlammerVsAi ? 2300 : 1700
+      );
     } else if (roundOutcome === "lose") {
       this.setStatus("you lost round", cpuMoveSummary);
-      this.showCenterNotice("YOU LOST", 1700);
+      this.showCenterNotice(
+        isSlammerVsAi
+          ? this.getSlammerScoreNotice("lose", playerScore, cpuScore)
+          : "YOU LOST",
+        isSlammerVsAi ? 2300 : 1700
+      );
     } else {
       this.setStatus("round tie", cpuMoveSummary);
-      this.showCenterNotice("TIE", 1700);
+      this.showCenterNotice(
+        isSlammerVsAi
+          ? this.getSlammerScoreNotice("tie", playerScore, cpuScore)
+          : "TIE",
+        isSlammerVsAi ? 2300 : 1700
+      );
     }
     this.ui.resetBtn.textContent = "Next Round";
     this.ui.actionButtonsEl.classList.add("show-reset");
@@ -1507,9 +1546,11 @@ export class DiscDropGame {
       this.battleMode === "vs-ai"
         ? "Match: 4 rounds vs CPU."
         : "Training: infinite throws.";
+    const slammerHint =
+      "Throw a heavy slammer-cap into 6 stacked caps on the floor. Turn more caps faces up than your opponent to win. Map has borders, unleash you full power of throw.";
     this.ui.arenaHintEl.textContent =
       this.gameMode === "slammer"
-        ? `${arena.hint} Slammer: flip 4+ floor caps face up to win. ${battleHint}`
+        ? slammerHint
         : `${arena.hint} ${battleHint}`;
     this.ui.arenaTagEl.textContent = arena.label;
 
@@ -1569,10 +1610,19 @@ export class DiscDropGame {
     if (this.gameMode === "slammer") {
       const slammerDiscHeight = DISC_HEIGHT * SLAMMER_HEIGHT_MULT;
       const stackCount = 6;
-      const stackStep = DISC_HEIGHT + 0.012;
+      const stackStep = DISC_HEIGHT + 0.018;
+      // Keep all six caps readable and avoid a perfectly vertical compression stack.
+      // They still start as one compact pile, but each cap has a small visible offset.
+      const stackOffsets = [
+        [0, 0],
+        [0.44, 0.08],
+        [-0.42, -0.06],
+        [0.12, 0.42],
+        [-0.14, -0.44],
+        [0.34, -0.34],
+      ];
       for (let i = 0; i < stackCount; i += 1) {
-        const offsetX = (i % 2 === 0 ? 1 : -1) * 0.018;
-        const offsetZ = (i % 3 - 1) * 0.014;
+        const [offsetX, offsetZ] = stackOffsets[i] || [0, 0];
         const y = LOWER_DISC_START_Y + i * stackStep;
         const body = this.world.createRigidBody(
           RAPIER.RigidBodyDesc.dynamic().setTranslation(offsetX, y, offsetZ)
@@ -2052,20 +2102,35 @@ export class DiscDropGame {
           "you won",
           this.gameMode === "slammer" ? `flips ${slammerFlips}` : "training"
         );
-        this.showCenterNotice("YOU WON", 1500);
+        this.showCenterNotice(
+          this.gameMode === "slammer"
+            ? this.getSlammerScoreNotice("win", slammerFlips ?? 0)
+            : "YOU WON",
+          this.gameMode === "slammer" ? 2300 : 1500
+        );
         this.playRandomWinSfx();
       } else if (result === "lose") {
         this.setStatus(
           "you lost",
           this.gameMode === "slammer" ? `flips ${slammerFlips}` : "training"
         );
-        this.showCenterNotice("YOU LOST", 1500);
+        this.showCenterNotice(
+          this.gameMode === "slammer"
+            ? this.getSlammerScoreNotice("lose", slammerFlips ?? 0)
+            : "YOU LOST",
+          this.gameMode === "slammer" ? 2300 : 1500
+        );
       } else {
         this.setStatus(
           "tie",
           this.gameMode === "slammer" ? `flips ${slammerFlips}` : "training"
         );
-        this.showCenterNotice("TIE", 1500);
+        this.showCenterNotice(
+          this.gameMode === "slammer"
+            ? this.getSlammerScoreNotice("tie", slammerFlips ?? 0)
+            : "TIE",
+          this.gameMode === "slammer" ? 2300 : 1500
+        );
       }
       this.ui.resetBtn.textContent = "Play Again";
       this.ui.resetBtn.disabled = false;

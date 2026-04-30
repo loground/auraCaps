@@ -1261,6 +1261,8 @@ button:disabled {
   letter-spacing: 0.08em;
   font-size: clamp(2rem, 6vw, 4.5rem);
   line-height: 1;
+  text-align: center;
+  white-space: pre-line;
   color: #ffd2bf;
   text-shadow:
     0 0 22px rgba(255, 121, 72, 0.45),
