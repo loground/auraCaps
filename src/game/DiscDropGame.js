@@ -1610,19 +1610,10 @@ export class DiscDropGame {
     if (this.gameMode === "slammer") {
       const slammerDiscHeight = DISC_HEIGHT * SLAMMER_HEIGHT_MULT;
       const stackCount = 6;
-      const stackStep = DISC_HEIGHT + 0.018;
-      // Keep all six caps readable and avoid a perfectly vertical compression stack.
-      // They still start as one compact pile, but each cap has a small visible offset.
-      const stackOffsets = [
-        [0, 0],
-        [0.44, 0.08],
-        [-0.42, -0.06],
-        [0.12, 0.42],
-        [-0.14, -0.44],
-        [0.34, -0.34],
-      ];
+      const stackStep = DISC_HEIGHT + 0.012;
       for (let i = 0; i < stackCount; i += 1) {
-        const [offsetX, offsetZ] = stackOffsets[i] || [0, 0];
+        const offsetX = (i % 2 === 0 ? 1 : -1) * 0.018;
+        const offsetZ = (i % 3 - 1) * 0.014;
         const y = LOWER_DISC_START_Y + i * stackStep;
         const body = this.world.createRigidBody(
           RAPIER.RigidBodyDesc.dynamic().setTranslation(offsetX, y, offsetZ)
@@ -2145,6 +2136,21 @@ export class DiscDropGame {
           `your throw ${this.playerSlammerFlips} flips`,
           "cpu preparing throw"
         );
+        this.showCenterNotice(
+          `YOUR THROW\n${this.playerSlammerFlips} FLIPS`,
+          1500
+        );
+        if (this.cpuLaunchTimeoutId !== null) {
+          clearTimeout(this.cpuLaunchTimeoutId);
+        }
+        this.cpuLaunchTimeoutId = setTimeout(() => {
+          this.cpuLaunchTimeoutId = null;
+          if (!this.running || this.currentThrower !== "player") {
+            return;
+          }
+          this.startComputerTurn();
+        }, 1450);
+        return;
       } else {
         this.setStatus(`your turn ${result}`, "cpu preparing throw");
       }
