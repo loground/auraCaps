@@ -433,15 +433,32 @@ export class DiscDropGame {
       this.arenaSurfaceColliders.push(coverCollider);
     }
 
+    // Jungle Bay's visual deck is a GLB trimesh. Hard direct hits can tunnel
+    // through sparse/angled triangles, so add a thin deck-only support collider.
+    if (this.theme === "jungle-bay" && this.gameMode !== "slammer") {
+      const surfaceY =
+        this.getArenaVisualSurfaceY(0, 0) ?? LOWER_DISC_START_Y - DISC_HALF_HEIGHT;
+      const halfHeight = 0.055;
+      const coverBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+      const coverCollider = this.world.createCollider(
+        RAPIER.ColliderDesc.cuboid(TABLE_RADIUS - 0.8, halfHeight, TABLE_RADIUS - 0.8)
+          .setTranslation(0, surfaceY - halfHeight - 0.006, 0)
+          .setContactSkin(0.002),
+        coverBody
+      );
+      this.arenaSurfaceBodies.push(coverBody);
+      this.arenaSurfaceColliders.push(coverCollider);
+    }
+
     this.useArenaMeshFloor = this.arenaSurfaceColliders.length > 0;
     // When arena mesh floor exists, disable the flat fallback floor collider so
     // holes/lava/edges behave naturally in themed arenas.
     this.floorCollider.setEnabled(!this.useArenaMeshFloor);
   }
 
-  getArenaSurfaceSpawnY(x, z, fallbackY) {
-    if (!this.useArenaMeshFloor || !this.arenaVisualRoot) {
-      return fallbackY;
+  getArenaVisualSurfaceY(x, z) {
+    if (!this.arenaVisualRoot) {
+      return null;
     }
 
     const meshes = [];
@@ -451,19 +468,27 @@ export class DiscDropGame {
       }
     });
     if (meshes.length === 0) {
-      return fallbackY;
+      return null;
     }
 
     const raycaster = this._raycaster ?? new THREE.Raycaster();
-    const rayOriginY = 80;
-    raycaster.set(new THREE.Vector3(x, rayOriginY, z), new THREE.Vector3(0, -1, 0));
+    raycaster.set(new THREE.Vector3(x, 80, z), new THREE.Vector3(0, -1, 0));
     const hits = raycaster.intersectObjects(meshes, false);
-    if (!hits.length) {
+    return hits[0]?.point?.y ?? null;
+  }
+
+  getArenaSurfaceSpawnY(x, z, fallbackY) {
+    if (!this.useArenaMeshFloor || !this.arenaVisualRoot) {
+      return fallbackY;
+    }
+
+    const surfaceY = this.getArenaVisualSurfaceY(x, z);
+    if (surfaceY === null) {
       return fallbackY;
     }
 
     const themeSpawnLift = this.theme === "hell" ? HELL_FLOOR_SPAWN_LIFT : 0;
-    const meshSurfaceY = hits[0].point.y + DISC_HALF_HEIGHT + 0.003 + themeSpawnLift;
+    const meshSurfaceY = surfaceY + DISC_HALF_HEIGHT + 0.003 + themeSpawnLift;
     return meshSurfaceY;
   }
 
