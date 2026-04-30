@@ -1576,6 +1576,20 @@ export function mountMenuScreen({
     signinHandler();
   };
 
+  const clickAuraSigninControl = () => {
+    const clickable = auraLoginContainer?.querySelector(
+      "button, [role='button'], a, iframe"
+    );
+    if (clickable instanceof HTMLElement) {
+      clickable.click();
+    }
+  };
+
+  const onExternalAuraLoginRequest = () => {
+    renderAuraSignin();
+    window.setTimeout(clickAuraSigninControl, 80);
+  };
+
   const readAuraSessionFromSdk = async () => {
     if (!auraApi) {
       return null;
@@ -1751,6 +1765,7 @@ export function mountMenuScreen({
   };
   window.addEventListener("focus", onWindowFocus);
   window.addEventListener("message", onAuraMessage);
+  window.addEventListener("aura-caps-open-login", onExternalAuraLoginRequest);
   document.addEventListener("visibilitychange", onWindowFocus);
 
   const revealMenu = () => {
@@ -1919,6 +1934,7 @@ export function mountMenuScreen({
     window.removeEventListener("resize", handleResize);
     window.removeEventListener("focus", onWindowFocus);
     window.removeEventListener("message", onAuraMessage);
+    window.removeEventListener("aura-caps-open-login", onExternalAuraLoginRequest);
     document.removeEventListener("visibilitychange", onWindowFocus);
     playButton.removeEventListener("click", onPlay);
     collectionButton.removeEventListener("click", onCollection);

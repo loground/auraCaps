@@ -24,6 +24,7 @@ const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
 let soundEnabled = true;
 const AURA_SESSION_KEY = "aura_session_v1";
+const LOGIN_GATE_KEY = "aura_login_gate_v1";
 const AURA_SPRITE_NAMES = new Set([
   "FILTHY",
   "GOLDIE",
@@ -86,6 +87,38 @@ function saveAuraSession(session) {
   }
 }
 
+function hasAuraSession(sessionLike) {
+  return Boolean(
+    sessionLike?.connected ||
+      sessionLike?.walletAddress ||
+      sessionLike?.user
+  );
+}
+
+function hasChosenGuestMode() {
+  try {
+    return window.localStorage.getItem(LOGIN_GATE_KEY) === "guest";
+  } catch {
+    return false;
+  }
+}
+
+function setGuestMode() {
+  try {
+    window.localStorage.setItem(LOGIN_GATE_KEY, "guest");
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function clearGuestMode() {
+  try {
+    window.localStorage.removeItem(LOGIN_GATE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 function composeCleanups(...cleanups) {
   return () => {
     for (const cleanup of cleanups) {
@@ -93,6 +126,68 @@ function composeCleanups(...cleanups) {
         cleanup();
       }
     }
+  };
+}
+
+function closeLoginGate() {
+  if (loginGateCleanup) {
+    loginGateCleanup();
+    loginGateCleanup = null;
+  }
+}
+
+function triggerAuraLoginFromGate() {
+  const auraSlot = app.querySelector("#aura-login");
+  const clickable = auraSlot?.querySelector(
+    "button, [role='button'], a, iframe"
+  );
+  if (clickable instanceof HTMLElement) {
+    clickable.click();
+    return;
+  }
+  window.dispatchEvent(new CustomEvent("aura-caps-open-login"));
+}
+
+function showLoginGateIfNeeded() {
+  closeLoginGate();
+  if (hasAuraSession(auraSession) || hasChosenGuestMode()) {
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "entry-login-gate";
+  overlay.innerHTML = `
+    <div class="entry-login-card">
+      <p class="entry-login-kicker">welcome to</p>
+      <h2>AURA CAPS</h2>
+      <p class="entry-login-copy">
+        Connect Aura to unlock your owned collection, or jump in as a guest with free caps.
+      </p>
+      <div class="entry-login-actions">
+        <button id="entryAuraLoginBtn" class="entry-login-primary" type="button">log in with aura</button>
+        <button id="entryGuestBtn" class="entry-login-secondary" type="button">play as guest</button>
+      </div>
+    </div>
+  `;
+  app.appendChild(overlay);
+
+  const loginBtn = overlay.querySelector("#entryAuraLoginBtn");
+  const guestBtn = overlay.querySelector("#entryGuestBtn");
+  const onLogin = () => {
+    triggerAuraLoginFromGate();
+    closeLoginGate();
+  };
+  const onGuest = () => {
+    setGuestMode();
+    closeLoginGate();
+  };
+  loginBtn?.addEventListener("click", onLogin);
+  guestBtn?.addEventListener("click", onGuest);
+
+  loginGateCleanup = () => {
+    loginBtn?.removeEventListener("click", onLogin);
+    guestBtn?.removeEventListener("click", onGuest);
+    overlay.remove();
   };
 }
 
@@ -181,6 +276,7 @@ app.addEventListener("mouseover", (event) => {
 });
 
 let cleanupScreen = null;
+let loginGateCleanup = null;
 let game = null;
 let viewVersion = 0;
 let currentTheme = pickRefreshTheme();
@@ -1077,6 +1173,7 @@ function loadGameModule() {
 }
 
 function clearCurrentScreen() {
+  closeLoginGate();
   if (cleanupScreen) {
     cleanupScreen();
     cleanupScreen = null;
@@ -1140,7 +1237,9 @@ async function showMenu() {
         walletAddress: result?.walletAddress || "",
         user: result?.user || null,
       };
+      clearGuestMode();
       saveAuraSession(auraSession);
+      closeLoginGate();
     },
     onAuraDisconnect: () => {
       auraSession = null;
@@ -1156,6 +1255,7 @@ async function showMenu() {
     onCollection: showCollection,
     onProfile: showProfile,
   });
+  showLoginGateIfNeeded();
 }
 
 async function showPlay() {

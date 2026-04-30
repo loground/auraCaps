@@ -5,6 +5,11 @@ import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
 
 export function mountCollectionScreen({ app, onBack, auraSession = null }) {
+  const hasAuraSession = Boolean(
+    auraSession?.connected ||
+      auraSession?.walletAddress ||
+      auraSession?.user
+  );
   const AURA_SPRITE_NAMES = new Set([
     "FILTHY",
     "GOLDIE",
@@ -202,13 +207,16 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         },
       },
     },
-    aura: {
+  };
+
+  if (hasAuraSession) {
+    COLLECTIONS.aura = {
       id: "aura",
       label: "aura",
       loading: true,
       subcollections: {},
-    },
-  };
+    };
+  }
   let activeCollectionKey = "f2p";
   let activeSubKey = "caps";
 
@@ -670,7 +678,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       const title = topCollection.id === "aura" ? "No AURA items" : "No items";
       const description =
         topCollection.id === "aura"
-          ? "connect Aura to load owned collectibles."
+          ? "go rip some packs on auramaxx to get to your collection and rip some asses in this epic battle!!"
           : "this section is empty for now.";
       card.innerHTML = `
       <div class="cap-slot">
@@ -1069,6 +1077,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   };
 
   const loadAuraCollection = async () => {
+    if (!COLLECTIONS.aura) {
+      return;
+    }
     const session = auraSession || readStoredAuraSession();
     const lookupValue = pickAuraLookupValue(session);
     if (!lookupValue) {
@@ -1163,7 +1174,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   renderSwitcher();
   renderSubSwitcher();
   renderCards();
-  loadAuraCollection();
+  if (COLLECTIONS.aura) {
+    loadAuraCollection();
+  }
 
   const backBtn = app.querySelector("#backBtn");
   backBtn.addEventListener("click", onBack);

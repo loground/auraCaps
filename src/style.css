@@ -116,6 +116,141 @@ canvas {
   pointer-events: none;
 }
 
+.entry-login-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1.4rem;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 92, 45, 0.16), transparent 34%),
+    rgba(4, 1, 3, 0.72);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.entry-login-card {
+  width: min(440px, calc(100vw - 2rem));
+  border: 1px solid rgba(255, 119, 74, 0.46);
+  border-radius: 22px;
+  padding: 1.45rem;
+  text-align: center;
+  color: #ffe2d2;
+  background:
+    linear-gradient(180deg, rgba(75, 13, 11, 0.9), rgba(15, 3, 5, 0.94)),
+    radial-gradient(circle at 50% 0%, rgba(255, 103, 49, 0.2), transparent 44%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 210, 180, 0.12),
+    0 24px 70px rgba(0, 0, 0, 0.62),
+    0 0 28px rgba(205, 66, 32, 0.16);
+}
+
+.entry-login-kicker {
+  margin: 0 0 0.25rem;
+  font: 800 0.78rem/1 "Sora", "Avenir Next", sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 199, 169, 0.72);
+}
+
+.entry-login-card h2 {
+  margin: 0;
+  font-family: "Hell", "Teko", sans-serif;
+  font-size: clamp(2.5rem, 8vw, 4.4rem);
+  letter-spacing: 0.06em;
+  color: #ffd2bc;
+  text-shadow: 0 0 18px rgba(226, 77, 35, 0.28);
+}
+
+.entry-login-copy {
+  margin: 0.8rem auto 1.2rem;
+  max-width: 32ch;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: rgba(255, 221, 204, 0.84);
+}
+
+.entry-login-actions {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.entry-login-actions button {
+  min-height: 3.1rem;
+  border-radius: 14px;
+  font: 900 0.95rem/1 "Sora", "Avenir Next", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.entry-login-primary {
+  border: 1px solid rgba(229, 255, 96, 0.78);
+  color: #1c2108;
+  background: linear-gradient(180deg, #f3ff65, #9dde22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 0 18px rgba(209, 255, 66, 0.24);
+}
+
+.entry-login-secondary {
+  border: 1px solid rgba(255, 122, 82, 0.46);
+  color: #ffe2d2;
+  background:
+    linear-gradient(180deg, rgba(81, 15, 13, 0.95), rgba(31, 6, 7, 0.96));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.theme-heaven .entry-login-gate {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(134, 190, 255, 0.22), transparent 34%),
+    rgba(218, 239, 255, 0.7);
+}
+
+.theme-heaven .entry-login-card {
+  border-color: rgba(92, 151, 213, 0.46);
+  color: #203852;
+  background: linear-gradient(180deg, rgba(235, 247, 255, 0.92), rgba(180, 218, 250, 0.92));
+}
+
+.theme-heaven .entry-login-card h2,
+.theme-heaven .entry-login-copy,
+.theme-heaven .entry-login-kicker {
+  color: #1f3c59;
+}
+
+.theme-jungle-bay .entry-login-gate {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(247, 221, 97, 0.18), transparent 34%),
+    rgba(50, 91, 63, 0.58);
+}
+
+.theme-jungle-bay .entry-login-card {
+  border-color: rgba(98, 150, 86, 0.58);
+  color: #29563c;
+  background: linear-gradient(180deg, rgba(236, 247, 203, 0.94), rgba(168, 214, 143, 0.92));
+}
+
+.theme-jungle-bay .entry-login-card h2,
+.theme-jungle-bay .entry-login-copy,
+.theme-jungle-bay .entry-login-kicker {
+  color: #29563c;
+}
+
+.theme-brainrot .entry-login-gate {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(235, 255, 39, 0.13), transparent 34%),
+    rgba(21, 0, 35, 0.74);
+}
+
+.theme-brainrot .entry-login-card {
+  border-color: rgba(255, 241, 69, 0.74);
+  background:
+    linear-gradient(135deg, rgba(79, 12, 126, 0.94), rgba(8, 67, 112, 0.94)),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.05) 0 8px, transparent 8px 18px);
+}
+
 .theme-switch {
   position: absolute;
   top: 1rem;
