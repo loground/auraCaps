@@ -503,6 +503,137 @@ function createHellCrackedGround() {
   return { group, mesh, basePlate, uniforms };
 }
 
+function createJungleMenuGround() {
+  const group = new THREE.Group();
+
+  const sand = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.4, 6.2, 0.46, 44),
+    new THREE.MeshStandardMaterial({
+      color: "#d8bd72",
+      roughness: 0.86,
+      metalness: 0.02,
+    })
+  );
+  sand.position.y = -2.92;
+  sand.receiveShadow = true;
+  group.add(sand);
+
+  const grass = new THREE.Mesh(
+    new THREE.CircleGeometry(5.15, 64),
+    new THREE.MeshStandardMaterial({
+      color: "#6faf52",
+      roughness: 0.74,
+      metalness: 0.03,
+    })
+  );
+  grass.rotation.x = -Math.PI / 2;
+  grass.position.y = -2.68;
+  grass.receiveShadow = true;
+  group.add(grass);
+
+  const woodMat = new THREE.MeshStandardMaterial({
+    color: "#9a612a",
+    roughness: 0.62,
+    metalness: 0.04,
+  });
+  for (let i = 0; i < 7; i += 1) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.14, 4.6), woodMat);
+    plank.position.set((i - 3) * 0.72, -2.55 + Math.sin(i) * 0.012, -0.05);
+    plank.rotation.y = (i - 3) * 0.015;
+    plank.receiveShadow = true;
+    group.add(plank);
+  }
+
+  const waterRing = new THREE.Mesh(
+    new THREE.TorusGeometry(5.9, 0.08, 10, 72),
+    new THREE.MeshBasicMaterial({
+      color: "#50c9d6",
+      transparent: true,
+      opacity: 0.42,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  waterRing.rotation.x = Math.PI / 2;
+  waterRing.position.y = -2.66;
+  group.add(waterRing);
+
+  group.position.set(0, 0, -1);
+  return { group, waterRing };
+}
+
+function createBrainrotMenuGround() {
+  const uniforms = { iTime: { value: 0 } };
+  const group = new THREE.Group();
+
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.2, 5.85, 0.52, 48),
+    new THREE.MeshStandardMaterial({
+      color: "#170025",
+      roughness: 0.72,
+      metalness: 0.18,
+      emissive: new THREE.Color("#32005a"),
+      emissiveIntensity: 0.2,
+    })
+  );
+  base.position.y = -2.95;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const padMaterial = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float iTime;
+
+      void main() {
+        vec2 uv = vUv - 0.5;
+        float d = length(uv);
+        float grid = mod(floor((vUv.x + iTime * 0.05) * 9.0) + floor(vUv.y * 9.0), 2.0);
+        vec3 purple = vec3(0.35, 0.0, 0.72);
+        vec3 cyan = vec3(0.0, 0.85, 1.0);
+        vec3 pink = vec3(1.0, 0.05, 0.72);
+        vec3 color = mix(purple, cyan, grid * 0.36);
+        color = mix(color, pink, smoothstep(0.44, 0.2, abs(uv.x + uv.y) * 0.55) * 0.2);
+        float rim = smoothstep(0.49, 0.37, d);
+        float alpha = smoothstep(0.52, 0.46, d);
+        color *= 0.42 + rim * 0.58;
+        gl_FragColor = vec4(color, alpha);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide,
+  });
+  const pad = new THREE.Mesh(new THREE.CircleGeometry(5.3, 72), padMaterial);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = -2.66;
+  group.add(pad);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(5.45, 0.075, 10, 72),
+    new THREE.MeshBasicMaterial({
+      color: "#eaff35",
+      transparent: true,
+      opacity: 0.82,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = -2.6;
+  group.add(ring);
+
+  group.position.set(0, -0.5, -1);
+  return { group, pad, ring, uniforms };
+}
+
 // Hell menu: sparse embers for atmosphere, intentionally low count for performance.
 function createHellEmbers() {
   const count = HELL_MENU_TUNING.emberCount;
@@ -791,6 +922,8 @@ export function mountMenuScreen({
   let hellBackground = null;
   let hellGround = null;
   let hellEmbers = null;
+  let jungleGround = null;
+  let brainrotGround = null;
   const menuTexturePath = isHeaven
     ? "/themes/heaven.webp"
     : isJungle
@@ -815,6 +948,14 @@ export function mountMenuScreen({
     scene.add(hellGround.group);
     hellEmbers = createHellEmbers();
     scene.add(hellEmbers.points);
+  }
+  if (isJungle) {
+    jungleGround = createJungleMenuGround();
+    scene.add(jungleGround.group);
+  }
+  if (isBrainrot) {
+    brainrotGround = createBrainrotMenuGround();
+    scene.add(brainrotGround.group);
   }
 
   const titleUniforms = {
@@ -1704,6 +1845,13 @@ export function mountMenuScreen({
     if (hellGround) {
       hellGround.uniforms.iTime.value = t;
     }
+    if (jungleGround) {
+      jungleGround.waterRing.rotation.z = t * 0.12;
+    }
+    if (brainrotGround) {
+      brainrotGround.uniforms.iTime.value = t;
+      brainrotGround.ring.rotation.z = t * 0.55;
+    }
     if (hellEmbers) {
       hellEmbers.uniforms.iTime.value = t;
     }
@@ -1803,6 +1951,14 @@ export function mountMenuScreen({
     hellGround?.baseCore?.material.dispose();
     for (const chunk of hellGround?.rockChunks ?? []) {
       chunk.geometry.dispose();
+    }
+    for (const child of jungleGround?.group.children ?? []) {
+      child.geometry?.dispose?.();
+      child.material?.dispose?.();
+    }
+    for (const child of brainrotGround?.group.children ?? []) {
+      child.geometry?.dispose?.();
+      child.material?.dispose?.();
     }
     hellEmbers?.points.geometry.dispose();
     hellEmbers?.points.material.dispose();
