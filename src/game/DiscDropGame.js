@@ -1541,11 +1541,9 @@ export class DiscDropGame {
     const arena = ARENA_CONFIGS[this.activeArenaKey];
     const lowerStart = arena?.lowerStart || { x: 0, z: 0 };
     const lowerStartY = arena?.lowerStartY ?? LOWER_DISC_START_Y;
-    const lowerSpawnY = this.getArenaSurfaceSpawnY(
-      lowerStart.x,
-      lowerStart.z,
-      lowerStartY
-    );
+    const lowerSpawnY = arena?.useFixedLowerStartY
+      ? lowerStartY
+      : this.getArenaSurfaceSpawnY(lowerStart.x, lowerStart.z, lowerStartY);
     const textureWeight = (texture) =>
       Number.isFinite(Number(texture?.userData?.weightMultiplier)) &&
       Number(texture?.userData?.weightMultiplier) > 0

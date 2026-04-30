@@ -217,8 +217,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       subcollections: {},
     };
   }
-  let activeCollectionKey = "f2p";
-  let activeSubKey = "caps";
+  let activeCollectionKey = hasAuraSession ? "aura" : "f2p";
+  let activeSubKey = hasAuraSession ? "" : "caps";
 
   const normalizeCollectionKey = (label, fallback) => {
     const normalized = String(label || "")

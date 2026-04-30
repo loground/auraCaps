@@ -91,6 +91,7 @@ export const ARENA_CONFIGS = {
     wind: { x: 0, z: 0, pulse: 0, freq: 0 },
     lowerStart: { x: 1.32, z: 0 },
     lowerStartY: 1.152,
+    useFixedLowerStartY: true,
     obstacles: [
       {
         type: "box",

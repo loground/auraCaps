@@ -1018,10 +1018,15 @@ button:disabled {
   width: min(720px, calc(100vw - 1.4rem));
 }
 
-.cap-pick-targets {
+.cap-pick-targets,
+.cap-pick-filters {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.45rem;
+}
+
+.cap-pick-filters:has(button:only-child) {
+  grid-template-columns: 1fr;
 }
 
 .cap-pick-grid {

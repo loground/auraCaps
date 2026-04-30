@@ -318,11 +318,16 @@ function showPlaySetupModal({ theme }) {
         <button id="setupCloseBtn" class="play-setup-close" type="button" aria-label="Close setup">×</button>
         <h2>Choose Battle Setup</h2>
         <p>Select map and mode before launching the round.</p>
-        <label>
-          Map
-          <select id="setupArenaSelect">${arenaOptions}</select>
-        </label>
-        <p id="setupMapHint" class="setup-hint"></p>
+        <div class="mode-picker">
+          <span class="mode-label">Mode</span>
+          <div class="mode-buttons">
+            <button id="setupModeClassicBtn" class="mode-btn active" type="button">Classic</button>
+            <button id="setupModeSlammerBtn" class="mode-btn" type="button">Slammer</button>
+          </div>
+        </div>
+        <p id="setupModeHint" class="setup-hint">
+          Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with biggest score wins. Don't let the caps fly away, the map has no borders, be smart, mfer.
+        </p>
         <div class="mode-picker">
           <span class="mode-label">Battle Mode</span>
           <div class="mode-buttons">
@@ -333,16 +338,11 @@ function showPlaySetupModal({ theme }) {
         <p id="setupBattleHint" class="setup-hint">
           Vs AI: 4 rounds against computer. Best score wins the match.
         </p>
-        <div class="mode-picker">
-          <span class="mode-label">Mode</span>
-          <div class="mode-buttons">
-            <button id="setupModeClassicBtn" class="mode-btn active" type="button">Classic</button>
-            <button id="setupModeSlammerBtn" class="mode-btn" type="button">Slammer</button>
-          </div>
-        </div>
-        <p id="setupModeHint" class="setup-hint">
-          Classic: 2 caps duel. Land and spin to end with more green faces up.
-        </p>
+        <label>
+          Map
+          <select id="setupArenaSelect">${arenaOptions}</select>
+        </label>
+        <p id="setupMapHint" class="setup-hint"></p>
         <div class="play-setup-actions">
           <button id="setupLaunchBtn" type="button">next</button>
         </div>
@@ -388,8 +388,8 @@ function showPlaySetupModal({ theme }) {
       modeSlammerBtn?.classList.toggle("active", selectedMode === "slammer");
       modeHint.textContent =
         selectedMode === "slammer"
-          ? "Slammer: 6 caps stack on floor. Throw heavier slammer and flip 4+ caps face up to win."
-          : "Classic: 2 caps duel. Land and spin to end with more green faces up.";
+          ? "Slammer: Throw a heavy slammer-cap into 6 stacked caps on the floor. Turn more caps faces up than your opponent to win. Map has borders, unleash your full power of throw."
+          : "Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with biggest score wins. Don't let the caps fly away, the map has no borders, be smart, mfer.";
     };
     updateModeUI();
 
@@ -858,14 +858,9 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       <div class="play-setup-panel caps-select-panel">
         <button id="capsCloseBtn" class="play-setup-close" type="button" aria-label="Close cap selection">×</button>
         <h2>Select Caps</h2>
-        <p>${isTraining ? "Pick your cap from the grid." : "Pick caps from the grid for you and CPU."}</p>
-        <div class="cap-pick-targets">
-          <button id="pickPlayerBtn" class="mode-btn active" type="button">Selecting: You</button>
-          ${
-            isTraining
-              ? ""
-              : `<button id="pickCpuBtn" class="mode-btn" type="button">Selecting: CPU</button>`
-          }
+        <p>${isTraining ? "Pick your cap from the grid." : "Pick your cap from the grid. CPU gets its own battle cap."}</p>
+        <div id="capFilterButtons" class="cap-pick-filters">
+          <button class="mode-btn active" type="button" data-cap-filter="all">All</button>
         </div>
         <div id="capsGrid" class="cap-pick-grid" role="listbox" aria-label="Cap choices"></div>
         <div class="cap-pick-summary">
@@ -889,8 +884,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     app.appendChild(overlay);
 
     const capsGrid = overlay.querySelector("#capsGrid");
-    const pickPlayerBtn = overlay.querySelector("#pickPlayerBtn");
-    const pickCpuBtn = overlay.querySelector("#pickCpuBtn");
+    const capFilterButtons = overlay.querySelector("#capFilterButtons");
     const playerHint = overlay.querySelector("#playerCapHint");
     const cpuHint = overlay.querySelector("#cpuCapHint");
     const closeBtn = overlay.querySelector("#capsCloseBtn");
@@ -903,20 +897,36 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         ? cap.id.startsWith("slammer-")
         : !cap.id.startsWith("slammer-")
     );
+    const capSelectSession = auraSession || loadAuraSession();
+    const canUseAuraFilter = gameMode !== "slammer" && hasAuraSession(capSelectSession);
+    let auraCaps = [];
+    let activeCapFilter = "all";
     let selectableCaps = [...baseCaps];
-    let capsLoading = gameMode !== "slammer";
+    let capsLoading = canUseAuraFilter;
     let isClosed = false;
     let spritePreviewNodes = [];
     let spritePreviewRafId = null;
-    const byId = (id) => selectableCaps.find((cap) => cap.id === id) || selectableCaps[0];
+    const getVisibleCaps = () =>
+      activeCapFilter === "aura" ? auraCaps : selectableCaps;
+    const byId = (id) =>
+      selectableCaps.find((cap) => cap.id === id) ||
+      auraCaps.find((cap) => cap.id === id) ||
+      selectableCaps[0] ||
+      auraCaps[0];
     const playerDefaultCandidate = gameMode === "slammer" ? "slammer-1" : "classic-1";
     const cpuDefaultCandidate =
       gameMode === "slammer" ? "slammer-3" : isBrainrot ? "classic-9" : "classic-8";
     const playerDefault = byId(playerDefaultCandidate)?.id;
     const cpuDefault = byId(cpuDefaultCandidate)?.id;
-    let selectedTarget = "player";
     let selectedPlayerCapId = playerDefault;
     let selectedCpuCapId = cpuDefault;
+
+    if (canUseAuraFilter && capFilterButtons) {
+      capFilterButtons.insertAdjacentHTML(
+        "beforeend",
+        '<button class="mode-btn" type="button" data-cap-filter="aura">Aura</button>'
+      );
+    }
 
     const capWeightText = (cap) =>
       `${(cap.weightMultiplier ?? getCapWeightMultiplier(cap.imagePath)).toFixed(2)}x`;
@@ -967,8 +977,8 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       }
       stopSpritePreviewAnimation();
       spritePreviewNodes = [];
-      const selectedId =
-        selectedTarget === "cpu" && !isTraining ? selectedCpuCapId : selectedPlayerCapId;
+      const selectedId = selectedPlayerCapId;
+      const visibleCaps = getVisibleCaps();
       if (capsLoading && selectableCaps.length === 0) {
         capsGrid.innerHTML = `
           <div class="cap-pick-loading">
@@ -978,7 +988,15 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         `;
         return;
       }
-      capsGrid.innerHTML = selectableCaps
+      if (visibleCaps.length === 0) {
+        capsGrid.innerHTML = `
+          <div class="cap-pick-loading loaded">
+            <span class="cap-loading-text">No caps in this filter yet</span>
+          </div>
+        `;
+        return;
+      }
+      capsGrid.innerHTML = visibleCaps
         .map((cap) => {
         const isSelected = cap.id === selectedId;
         return `
@@ -1004,11 +1022,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           if (!capId) {
             return;
           }
-          if (selectedTarget === "cpu" && !isTraining) {
-            selectedCpuCapId = capId;
-          } else {
-            selectedPlayerCapId = capId;
-          }
+          selectedPlayerCapId = capId;
           updateHints();
           renderGrid();
         });
@@ -1050,9 +1064,13 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       });
     };
 
-    const updateTargetButtons = () => {
-      pickPlayerBtn?.classList.toggle("active", selectedTarget === "player");
-      pickCpuBtn?.classList.toggle("active", selectedTarget === "cpu");
+    const updateFilterButtons = () => {
+      capFilterButtons?.querySelectorAll("[data-cap-filter]").forEach((button) => {
+        button.classList.toggle(
+          "active",
+          button.getAttribute("data-cap-filter") === activeCapFilter
+        );
+      });
     };
 
     const updateHints = () => {
@@ -1064,14 +1082,13 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       }
     };
     updateHints();
-    updateTargetButtons();
+    updateFilterButtons();
     renderGrid();
 
     const cleanup = () => {
       isClosed = true;
       stopSpritePreviewAnimation();
-      pickPlayerBtn?.removeEventListener("click", onPickPlayer);
-      pickCpuBtn?.removeEventListener("click", onPickCpu);
+      capFilterButtons?.removeEventListener("click", onFilterClick);
       closeBtn?.removeEventListener("click", onCancel);
       launchBtn?.removeEventListener("click", onLaunch);
       backdrop?.removeEventListener("click", onCancel);
@@ -1110,32 +1127,32 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
             },
       });
     };
-    const onPickPlayer = () => {
-      selectedTarget = "player";
-      updateTargetButtons();
-      renderGrid();
-    };
-    const onPickCpu = () => {
-      if (isTraining) {
+    const onFilterClick = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
         return;
       }
-      selectedTarget = "cpu";
-      updateTargetButtons();
+      const button = target.closest("[data-cap-filter]");
+      if (!button) {
+        return;
+      }
+      activeCapFilter = button.getAttribute("data-cap-filter") || "all";
+      updateFilterButtons();
       renderGrid();
     };
-    pickPlayerBtn?.addEventListener("click", onPickPlayer);
-    pickCpuBtn?.addEventListener("click", onPickCpu);
+    capFilterButtons?.addEventListener("click", onFilterClick);
     closeBtn?.addEventListener("click", onCancel);
     launchBtn?.addEventListener("click", onLaunch);
     backdrop?.addEventListener("click", onCancel);
 
-    if (gameMode !== "slammer") {
-      fetchAuraCapOptions(auraSession || loadAuraSession())
-        .then((auraCaps) => {
+    if (canUseAuraFilter) {
+      fetchAuraCapOptions(capSelectSession)
+        .then((loadedAuraCaps) => {
           if (isClosed) {
             return;
           }
-          if (Array.isArray(auraCaps) && auraCaps.length > 0) {
+          if (Array.isArray(loadedAuraCaps) && loadedAuraCaps.length > 0) {
+            auraCaps = loadedAuraCaps;
             selectableCaps = [...baseCaps, ...auraCaps];
           }
         })
