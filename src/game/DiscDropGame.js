@@ -411,8 +411,9 @@ export class DiscDropGame {
       }
 
       const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
+      const contactSkin = this.theme === "hell" ? 0.0005 : 0.0015;
       const collider = this.world.createCollider(
-        RAPIER.ColliderDesc.trimesh(vertices, indices).setContactSkin(0.0015),
+        RAPIER.ColliderDesc.trimesh(vertices, indices).setContactSkin(contactSkin),
         body
       );
       this.arenaSurfaceBodies.push(body);
@@ -454,6 +455,9 @@ export class DiscDropGame {
     // When arena mesh floor exists, disable the flat fallback floor collider so
     // holes/lava/edges behave naturally in themed arenas.
     this.floorCollider.setEnabled(!this.useArenaMeshFloor);
+    // Hell needs true holes/lava drops. The global catch floor would otherwise
+    // catch caps below the rock mesh and make them float over empty lava space.
+    this.catchFloorCollider.setEnabled(!(this.theme === "hell" && this.useArenaMeshFloor));
   }
 
   getArenaVisualSurfaceY(x, z) {
@@ -1562,7 +1566,9 @@ export class DiscDropGame {
 
     if (this.useArenaMeshFloor && this.arenaSurfaceColliders.length > 0) {
       for (const collider of this.arenaSurfaceColliders) {
-        collider.setFriction(arena.floorFriction);
+        const surfaceFriction =
+          this.theme === "hell" ? Math.min(arena.floorFriction, 0.22) : arena.floorFriction;
+        collider.setFriction(surfaceFriction);
         collider.setRestitution(arena.floorRestitution);
       }
     }
