@@ -104,6 +104,10 @@ export class DiscDropGame {
     this.cpuLaunchTimeoutId = null;
     this.cpuPlannedMove = null;
     this.centerNoticeTimeoutId = null;
+    this.pvpPlayerName = "you";
+    this.pvpOpponentName = "opponent";
+    this.isReplayingPvpTurn = false;
+    this.pvpReplayScore = null;
 
     this.lowerDiscBody = null;
     this.floorDiscBodies = [];
@@ -1132,7 +1136,7 @@ export class DiscDropGame {
 
   setupUIBindings() {
     const isTrainingMode = this.battleMode === "training";
-    const isOpponentHidden = this.battleMode !== "vs-ai";
+    const isOpponentHidden = this.battleMode === "training";
     this.ui.statusCpuMoveEl?.classList.toggle("hidden", isOpponentHidden);
     if (isOpponentHidden) {
       this.ui.statusCpuMoveEl.textContent = "";
@@ -1238,11 +1242,15 @@ export class DiscDropGame {
     if (this.battleMode === "training") {
       return "training • infinite throws";
     }
+    if (this.battleMode === "pvp") {
+      return `r${this.currentRound}/${this.totalRounds} • you ${this.playerWins} - ${this.pvpOpponentName} ${this.cpuWins}`;
+    }
     return `r${this.currentRound}/${this.totalRounds} • you ${this.playerWins} - cpu ${this.cpuWins}`;
   }
 
   setComputerMove(message) {
-    this.ui.statusCpuMoveEl.textContent = `computer move: ${message}`;
+    const label = this.battleMode === "pvp" ? `${this.pvpOpponentName}` : "computer move";
+    this.ui.statusCpuMoveEl.textContent = `${label}: ${message}`;
   }
 
   setStatus(message, computerMove = null) {
@@ -1276,6 +1284,59 @@ export class DiscDropGame {
       return `${resultText}\n${playerScore} FLIPS`;
     }
     return `${resultText}\nYOU ${playerScore} - CPU ${cpuScore}`;
+  }
+
+  setPvpPlayers({ playerName = "you", opponentName = "opponent" } = {}) {
+    this.pvpPlayerName = playerName || "you";
+    this.pvpOpponentName = opponentName || "opponent";
+    this.setStatus(this.lockPlayerInput ? `${this.pvpOpponentName}'s turn` : "your turn");
+  }
+
+  setPvpTurnState({ isMyTurn, round, playerScore = 0, opponentScore = 0 } = {}) {
+    if (this.battleMode !== "pvp") {
+      return;
+    }
+    const nextRound = Number(round || 1);
+    if (nextRound !== this.currentRound && !this.isReplayingPvpTurn) {
+      this.currentRound = nextRound;
+      this.buildRoundBodies();
+    } else {
+      this.currentRound = nextRound;
+    }
+    this.playerWins = Number(playerScore || 0);
+    this.cpuWins = Number(opponentScore || 0);
+    this.lockPlayerInput = !isMyTurn;
+    this.ui.launchBtn.disabled = !isMyTurn || this.hasLaunched;
+    this.ui.resetBtn.disabled = true;
+    this.ui.actionButtonsEl.classList.remove("show-reset");
+    if (isMyTurn) {
+      this.applySelectedCapsForThrower("player", { refresh: true });
+      this.setStatus("your turn, make a turn", "waiting");
+    } else {
+      this.applySelectedCapsForThrower("cpu", { refresh: true });
+      this.setStatus(`${this.pvpOpponentName}'s turn, wait for yours`, "aiming");
+    }
+  }
+
+  playPvpOpponentTurn(turn, opponentName = this.pvpOpponentName) {
+    if (this.battleMode !== "pvp" || !turn?.throw_input) {
+      return;
+    }
+    this.pvpOpponentName = opponentName || this.pvpOpponentName;
+    this.isReplayingPvpTurn = true;
+    this.pvpReplayScore = Number(turn?.result?.score || 0);
+    this.lockPlayerInput = true;
+    this.applySelectedCapsForThrower("cpu", { refresh: true });
+    this.buildRoundBodies({ resetTurnResults: false });
+    this.settings.posX = Number(turn.throw_input.x || 0);
+    this.settings.posZ = Number(turn.throw_input.z || 0);
+    this.settings.height = Number(turn.throw_input.height || 4);
+    this.settings.power = Number(turn.throw_input.power || 35);
+    this.updateHeightMeterUI();
+    this.updateLaunchArrow();
+    this.updatePositionGizmo();
+    this.setStatus(`${this.pvpOpponentName}'s throw`, "watching replay");
+    this.launchRound("pvp-opponent");
   }
 
   startNewMatch() {
@@ -2103,8 +2164,10 @@ export class DiscDropGame {
     this.playRandomThrowSfx();
     if (thrower === "cpu") {
       this.setStatus("computer in motion", this.formatCpuMove(this.cpuPlannedMove));
+    } else if (thrower === "pvp-opponent") {
+      this.setStatus(`${this.pvpOpponentName}'s throw`, "watching replay");
     } else {
-      this.setStatus("in motion", "reading your throw");
+      this.setStatus(this.battleMode === "pvp" ? "your throw in motion" : "in motion", "reading your throw");
     }
   }
 
@@ -2126,6 +2189,19 @@ export class DiscDropGame {
     const result = this.getRoundResult();
     const slammerFlips =
       this.gameMode === "slammer" ? this.getSlammerFaceUpCount() : null;
+    if (this.battleMode === "pvp" && this.isReplayingPvpTurn) {
+      const replayScore =
+        this.pvpReplayScore ??
+        (this.gameMode === "slammer" ? slammerFlips ?? 0 : this.turnScore(result));
+      this.isReplayingPvpTurn = false;
+      this.pvpReplayScore = null;
+      this.setStatus(`${this.pvpOpponentName}'s turn ended`, `score ${replayScore}`);
+      this.showCenterNotice(
+        `${this.pvpOpponentName.toUpperCase()}\nSCORE ${replayScore}`,
+        1800
+      );
+      return;
+    }
     if (this.battleMode === "training") {
       if (result === "win") {
         this.setStatus(
@@ -2177,7 +2253,7 @@ export class DiscDropGame {
       this.showCenterNotice(
         this.gameMode === "slammer"
           ? `YOUR THROW\n${pvpScore} FLIPS`
-          : `YOUR TURN\n${result.toUpperCase()}`,
+          : `YOUR TURN\nSCORE ${pvpScore}`,
         this.gameMode === "slammer" ? 2300 : 1600
       );
       this.onPvpTurnResult?.({
@@ -2202,9 +2278,10 @@ export class DiscDropGame {
           resolvedAt: Date.now(),
         },
       });
-      this.ui.resetBtn.textContent = "Play Again";
-      this.ui.resetBtn.disabled = false;
-      this.ui.actionButtonsEl.classList.add("show-reset");
+      this.lockPlayerInput = true;
+      this.ui.resetBtn.textContent = "Waiting";
+      this.ui.resetBtn.disabled = true;
+      this.ui.actionButtonsEl.classList.remove("show-reset");
       return;
     }
     if (this.currentThrower === "player") {

@@ -278,6 +278,7 @@ app.addEventListener("mouseover", (event) => {
 });
 
 let cleanupScreen = null;
+let cleanupPvpController = null;
 let loginGateCleanup = null;
 let game = null;
 let viewVersion = 0;
@@ -1217,7 +1218,10 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
         </div>
         <label id="pvpPrivateLabel" class="pvp-private-label">
           <input id="pvpPrivateInput" type="checkbox" />
-          Private invite room
+          <span>
+            Private invite room
+            <small>Hidden from public room list. Players join by code/link.</small>
+          </span>
         </label>
         <label id="pvpJoinLabel" class="pvp-join-label hidden">
           Room code
@@ -1483,8 +1487,151 @@ function loadPvpModule() {
   return pvpModulePromise;
 }
 
+function startPvpMatchController({
+  gameInstance,
+  auraSession,
+  roomState,
+  localPlayer,
+  opponentPlayer,
+  getPvpRoom,
+}) {
+  let stopped = false;
+  let pollTimeoutId = null;
+  const replayedTurnIds = new Set();
+  const announcedRounds = new Set();
+  const localId = localPlayer.auraUserId || localPlayer.walletAddress;
+  const opponentId = opponentPlayer?.player_id || "";
+  const opponentName = opponentPlayer?.player_name || "opponent";
+  const localName = localPlayer.username || "you";
+  const roomId = roomState?.room?.id;
+
+  const scoreFor = (turn) => Number(turn?.result?.score || 0);
+  const turnsForRound = (turns, round) =>
+    turns.filter((turn) => Number(turn.round) === Number(round));
+
+  const matchScore = (turns) => {
+    let player = 0;
+    let opponent = 0;
+    for (let round = 1; round <= 4; round += 1) {
+      const roundTurns = turnsForRound(turns, round);
+      const own = roundTurns.find((turn) => turn.player_id === localId);
+      const other = roundTurns.find((turn) => turn.player_id === opponentId);
+      if (!own || !other) continue;
+      if (scoreFor(own) > scoreFor(other)) player += 1;
+      else if (scoreFor(other) > scoreFor(own)) opponent += 1;
+    }
+    return { player, opponent };
+  };
+
+  const applyState = (state) => {
+    if (stopped || !state?.room) return;
+    const turns = Array.isArray(state.turns) ? state.turns : [];
+    const round = Number(state.room.current_round || 1);
+    const scores = matchScore(turns);
+    const currentRoundTurns = turnsForRound(turns, round);
+    const ownTurn = currentRoundTurns.find((turn) => turn.player_id === localId);
+    const opponentTurn = currentRoundTurns.find((turn) => turn.player_id === opponentId);
+    const isMyTurn =
+      state.room.status === "playing" &&
+      state.room.current_turn === localId &&
+      !ownTurn;
+
+    gameInstance.setPvpPlayers({
+      playerName: localName,
+      opponentName,
+    });
+
+    for (let completedRound = 1; completedRound <= 4; completedRound += 1) {
+      if (announcedRounds.has(completedRound)) continue;
+      const roundTurns = turnsForRound(turns, completedRound);
+      const own = roundTurns.find((turn) => turn.player_id === localId);
+      const other = roundTurns.find((turn) => turn.player_id === opponentId);
+      if (!own || !other) continue;
+      announcedRounds.add(completedRound);
+      const ownScore = scoreFor(own);
+      const otherScore = scoreFor(other);
+      const result =
+        ownScore > otherScore ? "ROUND WON" : otherScore > ownScore ? "ROUND LOST" : "ROUND TIE";
+      gameInstance.showCenterNotice(
+        `${result}\nYOU ${ownScore} - ${opponentName.toUpperCase()} ${otherScore}`,
+        2300
+      );
+    }
+
+    if (state.room.status === "finished") {
+      const final =
+        scores.player > scores.opponent
+          ? "MATCH WON"
+          : scores.opponent > scores.player
+            ? "MATCH LOST"
+            : "MATCH TIE";
+      gameInstance.playerWins = scores.player;
+      gameInstance.cpuWins = scores.opponent;
+      gameInstance.setStatus(final.toLowerCase(), "finished");
+      gameInstance.showCenterNotice(
+        `${final}\nYOU ${scores.player} - ${opponentName.toUpperCase()} ${scores.opponent}`,
+        5000
+      );
+      gameInstance.lockPlayerInput = true;
+      gameInstance.ui.launchBtn.disabled = true;
+      return;
+    }
+
+    const shouldReplayOpponent =
+      opponentTurn &&
+      !replayedTurnIds.has(opponentTurn.id) &&
+      (!ownTurn || state.room.current_turn === localId);
+    if (shouldReplayOpponent) {
+      replayedTurnIds.add(opponentTurn.id);
+      gameInstance.playPvpOpponentTurn(opponentTurn, opponentName);
+      return;
+    }
+
+    gameInstance.setPvpTurnState({
+      isMyTurn,
+      round,
+      playerScore: scores.player,
+      opponentScore: scores.opponent,
+    });
+
+    if (ownTurn && !opponentTurn) {
+      gameInstance.setStatus("turn submitted", `${opponentName}'s turn`);
+      gameInstance.showCenterNotice(`YOUR SCORE\n${scoreFor(ownTurn)}`, 1600);
+    } else if (!isMyTurn) {
+      gameInstance.setStatus(`${opponentName}'s turn, wait for yours`, "aiming");
+    }
+  };
+
+  const poll = async () => {
+    if (stopped || !roomId) return;
+    try {
+      const state = await getPvpRoom({ auraSession, roomId });
+      applyState(state);
+    } catch (error) {
+      console.warn("[AURA PvP] room poll failed", error);
+    }
+    if (!stopped) {
+      pollTimeoutId = setTimeout(poll, 1400);
+    }
+  };
+
+  applyState(roomState);
+  pollTimeoutId = setTimeout(poll, 800);
+
+  return () => {
+    stopped = true;
+    if (pollTimeoutId !== null) {
+      clearTimeout(pollTimeoutId);
+    }
+  };
+}
+
 function clearCurrentScreen() {
   closeLoginGate();
+  if (cleanupPvpController) {
+    cleanupPvpController();
+    cleanupPvpController = null;
+  }
   if (cleanupScreen) {
     cleanupScreen();
     cleanupScreen = null;
@@ -1637,7 +1784,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
     if (localVersion !== viewVersion || !roomState?.room) {
       return;
     }
-    const { getAuraPlayerIdentity, submitPvpTurnResult } = await loadPvpModule();
+    const { getAuraPlayerIdentity, getPvpRoom, submitPvpTurnResult } = await loadPvpModule();
     const localPlayer = getAuraPlayerIdentity(auraSession);
     const players = Array.isArray(roomState.players) ? roomState.players : [];
     const ownPlayer =
@@ -1677,9 +1824,18 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
           turn,
         }).catch((error) => {
           console.warn("[AURA PvP] submit turn failed", error);
+          game?.showCenterNotice?.(`PVP ERROR\n${error?.message || "TURN NOT SUBMITTED"}`, 3200);
         }),
     });
     await game.init();
+    cleanupPvpController = startPvpMatchController({
+      gameInstance: game,
+      auraSession,
+      roomState,
+      localPlayer,
+      opponentPlayer,
+      getPvpRoom,
+    });
     return;
   }
 

@@ -1136,10 +1136,31 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  justify-content: flex-start;
+  text-align: left;
   color: var(--theme-panel-text);
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.pvp-private-label input {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+}
+
+.pvp-private-label span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.pvp-private-label small {
+  font: 600 0.78rem/1.25 "Sora", "Avenir Next", sans-serif;
+  letter-spacing: 0;
+  opacity: 0.76;
+  text-transform: none;
 }
 
 .pvp-join-label input {
