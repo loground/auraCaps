@@ -35,6 +35,17 @@ Deno.serve(async (req) => {
     const players = await rest(`pvp_room_players?room_id=eq.${room.id}&order=slot.asc`);
     const isMember = players.some((entry) => entry.player_id === player.playerId);
     if (!isMember) {
+      if (roomCode && room.status === "waiting") {
+        return jsonResponse({
+          room,
+          players: players.map((entry) => ({
+            slot: entry.slot,
+            player_name: entry.player_name,
+          })),
+          turns: [],
+          canJoin: true,
+        });
+      }
       throw new Error("Player is not in this room.");
     }
 

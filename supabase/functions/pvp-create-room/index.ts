@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
     const setup = payload.setup || {};
     const mode = normalizeMode(setup.gameMode);
     const roomCode = makeRoomCode();
+    const isPrivate = Boolean(payload.isPrivate);
 
     const [room] = await rest("pvp_rooms", {
       method: "POST",
@@ -37,6 +38,7 @@ Deno.serve(async (req) => {
         mode,
         map_id: setup.arenaKey || "classic",
         status: "waiting",
+        is_private: isPrivate,
         created_by: player.playerId,
         current_turn: player.playerId,
         setup,

@@ -1127,6 +1127,21 @@ button:disabled {
   display: none;
 }
 
+.pvp-private-label.hidden,
+.pvp-public-rooms.hidden {
+  display: none;
+}
+
+.pvp-private-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--theme-panel-text);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .pvp-join-label input {
   width: 100%;
   border-radius: 10px;
@@ -1137,6 +1152,37 @@ button:disabled {
   font: 800 1rem/1 "Sora", "Avenir Next", sans-serif;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.pvp-public-rooms {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 11rem;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.pvp-public-rooms p {
+  margin: 0;
+  color: var(--theme-panel-text);
+  opacity: 0.82;
+}
+
+.pvp-public-room {
+  display: grid;
+  grid-template-columns: 5.8rem 1fr;
+  gap: 0.55rem;
+  align-items: center;
+  text-align: left;
+  padding: 0.58rem 0.7rem;
+}
+
+.pvp-public-room strong {
+  letter-spacing: 0.08em;
+}
+
+.pvp-public-room span {
+  opacity: 0.84;
 }
 
 .pvp-room-result {

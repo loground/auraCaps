@@ -43,6 +43,8 @@ const AURA_SPRITE_OVERRIDES_BY_NAME = {
   },
 };
 let auraSession = loadAuraSession();
+let pendingPvpInviteCode = new URLSearchParams(window.location.search).get("pvp") || "";
+let pendingPvpInviteStarted = false;
 
 window.addEventListener("pointerdown", unlockSounds, { once: true, passive: true });
 window.addEventListener("touchstart", unlockSounds, { once: true, passive: true });
@@ -1194,6 +1196,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
     createPvpRoom,
     getPvpRoom,
     joinPvpRoom,
+    listPvpRooms,
     getPvpConfigStatus,
     isPvpConfigured,
   } = await loadPvpModule();
@@ -1212,10 +1215,15 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
           <button id="pvpCreateBtn" class="mode-btn active" type="button">Create Room</button>
           <button id="pvpJoinBtn" class="mode-btn" type="button">Join Room</button>
         </div>
+        <label id="pvpPrivateLabel" class="pvp-private-label">
+          <input id="pvpPrivateInput" type="checkbox" />
+          Private invite room
+        </label>
         <label id="pvpJoinLabel" class="pvp-join-label hidden">
           Room code
           <input id="pvpRoomCodeInput" type="text" maxlength="24" autocomplete="off" placeholder="ABC123" />
         </label>
+        <div id="pvpPublicRooms" class="pvp-public-rooms"></div>
         <div id="pvpRoomResult" class="pvp-room-result">
           ${isPvpConfigured() ? "Create a room or enter a code from another player." : getPvpConfigStatus()}
         </div>
@@ -1233,6 +1241,9 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
     const submitBtn = overlay.querySelector("#pvpSubmitBtn");
     const resultEl = overlay.querySelector("#pvpRoomResult");
     const joinLabel = overlay.querySelector("#pvpJoinLabel");
+    const privateLabel = overlay.querySelector("#pvpPrivateLabel");
+    const privateInput = overlay.querySelector("#pvpPrivateInput");
+    const publicRoomsEl = overlay.querySelector("#pvpPublicRooms");
     const codeInput = overlay.querySelector("#pvpRoomCodeInput");
     let mode = "create";
     let closed = false;
@@ -1244,8 +1255,41 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       createBtn?.classList.toggle("active", mode === "create");
       joinBtn?.classList.toggle("active", mode === "join");
       joinLabel?.classList.toggle("hidden", mode !== "join");
+      privateLabel?.classList.toggle("hidden", mode !== "create");
+      publicRoomsEl?.classList.toggle("hidden", mode !== "join");
       if (submitBtn) {
         submitBtn.textContent = mode === "join" ? "join" : "create";
+      }
+      if (mode === "join") {
+        renderPublicRooms();
+      }
+    };
+
+    const renderPublicRooms = async () => {
+      if (!publicRoomsEl || !isPvpConfigured()) {
+        return;
+      }
+      publicRoomsEl.innerHTML = `<p>loading public rooms...</p>`;
+      try {
+        const payload = await listPvpRooms({ auraSession });
+        const rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
+        if (rooms.length === 0) {
+          publicRoomsEl.innerHTML = `<p>No public rooms yet. Create one and let another mfer join.</p>`;
+          return;
+        }
+        publicRoomsEl.innerHTML = rooms
+          .map((room) => {
+            const players = Array.isArray(room.players) ? room.players.length : 0;
+            return `
+              <button class="pvp-public-room" type="button" data-room-code="${room.code}">
+                <strong>${room.code}</strong>
+                <span>${room.mode} • ${ARENA_CONFIGS[room.map_id]?.label || room.map_id || "map"} • ${players}/2</span>
+              </button>
+            `;
+          })
+          .join("");
+      } catch (error) {
+        publicRoomsEl.innerHTML = `<p>${error?.message || "Could not load public rooms."}</p>`;
       }
     };
 
@@ -1339,6 +1383,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       createBtn?.removeEventListener("click", onCreateMode);
       joinBtn?.removeEventListener("click", onJoinMode);
       submitBtn?.removeEventListener("click", onSubmit);
+      publicRoomsEl?.removeEventListener("click", onPublicRoomClick);
       overlay.remove();
     };
     const onCancel = () => {
@@ -1347,6 +1392,16 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
     };
     const onCreateMode = () => setMode("create");
     const onJoinMode = () => setMode("join");
+    const onPublicRoomClick = (event) => {
+      const button = event.target instanceof Element
+        ? event.target.closest("[data-room-code]")
+        : null;
+      const roomCode = button?.getAttribute("data-room-code") || "";
+      if (roomCode && codeInput) {
+        codeInput.value = roomCode;
+        setMode("join");
+      }
+    };
     const onSubmit = async () => {
       if (!isPvpConfigured()) {
         resultEl.textContent = getPvpConfigStatus();
@@ -1362,7 +1417,14 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
                 roomCode: codeInput?.value || "",
                 capSelection,
               })
-            : await createPvpRoom({ auraSession, setup, capSelection });
+            : await createPvpRoom({
+                auraSession,
+                setup: {
+                  ...setup,
+                  isPrivate: Boolean(privateInput?.checked),
+                },
+                capSelection,
+              });
         if (closed) {
           return;
         }
@@ -1382,8 +1444,9 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
     createBtn?.addEventListener("click", onCreateMode);
     joinBtn?.addEventListener("click", onJoinMode);
     submitBtn?.addEventListener("click", onSubmit);
+    publicRoomsEl?.addEventListener("click", onPublicRoomClick);
 
-    const urlRoomCode = new URLSearchParams(window.location.search).get("pvp");
+    const urlRoomCode = setup.pvpRoomCode || new URLSearchParams(window.location.search).get("pvp");
     if (urlRoomCode) {
       setMode("join");
       if (codeInput) {
@@ -1460,6 +1523,16 @@ function setTheme(nextTheme) {
   }
 }
 
+function maybeStartPendingPvpInvite() {
+  if (!pendingPvpInviteCode || pendingPvpInviteStarted || !hasAuraSession(auraSession)) {
+    return;
+  }
+  pendingPvpInviteStarted = true;
+  setTimeout(() => {
+    showPlay({ pvpRoomCode: pendingPvpInviteCode });
+  }, 100);
+}
+
 async function showMenu() {
   const localVersion = ++viewVersion;
   auraSession = loadAuraSession();
@@ -1488,6 +1561,7 @@ async function showMenu() {
       clearGuestMode();
       saveAuraSession(auraSession);
       closeLoginGate();
+      maybeStartPendingPvpInvite();
     },
     onAuraDisconnect: () => {
       auraSession = null;
@@ -1504,11 +1578,37 @@ async function showMenu() {
     onProfile: showProfile,
   });
   showLoginGateIfNeeded();
+  maybeStartPendingPvpInvite();
 }
 
-async function showPlay() {
+async function showPlay({ pvpRoomCode = "" } = {}) {
   const localVersion = ++viewVersion;
-  const setup = await showPlaySetupModal({ theme: currentTheme });
+  let setup = null;
+  if (pvpRoomCode) {
+    if (!hasAuraSession(auraSession)) {
+      showLoginGateIfNeeded();
+      return;
+    }
+    const { getPvpRoom } = await loadPvpModule();
+    try {
+      const preview = await getPvpRoom({ auraSession, roomCode: pvpRoomCode });
+      setup = {
+        arenaKey: preview?.room?.map_id || DEFAULT_ARENA_KEY,
+        battleMode: "pvp",
+        gameMode: preview?.room?.mode || "classic",
+        pvpRoomCode,
+      };
+    } catch {
+      setup = {
+        arenaKey: DEFAULT_ARENA_KEY,
+        battleMode: "pvp",
+        gameMode: "classic",
+        pvpRoomCode,
+      };
+    }
+  } else {
+    setup = await showPlaySetupModal({ theme: currentTheme });
+  }
   if (localVersion !== viewVersion) {
     return;
   }

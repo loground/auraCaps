@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
     const [updatedRoom] = await rest(`pvp_rooms?id=eq.${room.id}`, {
       method: "PATCH",
       body: {
-        status: "ready",
+        status: "playing",
       },
     });
 

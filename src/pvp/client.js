@@ -67,6 +67,7 @@ export async function createPvpRoom({ auraSession, setup, capSelection }) {
     player: getAuraPlayerIdentity(auraSession),
     setup,
     cap: capSelection?.playerCapMeta || null,
+    isPrivate: Boolean(setup?.isPrivate),
   });
 }
 
@@ -82,6 +83,12 @@ export async function getPvpRoom({ auraSession, roomId, roomCode }) {
   return callPvpFunction("pvp-get-room", {
     roomId,
     roomCode: normalizeRoomCode(roomCode),
+    player: getAuraPlayerIdentity(auraSession),
+  });
+}
+
+export async function listPvpRooms({ auraSession }) {
+  return callPvpFunction("pvp-list-rooms", {
     player: getAuraPlayerIdentity(auraSession),
   });
 }
