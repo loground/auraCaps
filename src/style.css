@@ -1162,6 +1162,12 @@ button:disabled {
   opacity: 0.78;
 }
 
+.pvp-copy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .pvp-room-result button {
   justify-self: start;
   padding: 0.42rem 0.62rem;

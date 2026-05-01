@@ -1192,6 +1192,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
 async function showPvpRoomModal({ setup, capSelection, auraSession }) {
   const {
     createPvpRoom,
+    getPvpRoom,
     joinPvpRoom,
     getPvpConfigStatus,
     isPvpConfigured,
@@ -1235,6 +1236,8 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
     const codeInput = overlay.querySelector("#pvpRoomCodeInput");
     let mode = "create";
     let closed = false;
+    let pollTimeoutId = null;
+    let hasResolvedRoom = false;
 
     const setMode = (nextMode) => {
       mode = nextMode;
@@ -1256,17 +1259,81 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       resultEl.innerHTML = `
         <strong>${mode === "join" ? "Joined room" : "Room created"}</strong>
         <span>code: ${roomCode || "unknown"}</span>
-        ${inviteUrl ? `<button id="pvpCopyInviteBtn" type="button">copy invite</button>` : ""}
+        ${
+          roomCode
+            ? `<div class="pvp-copy-actions">
+                <button id="pvpCopyCodeBtn" type="button">copy code</button>
+                ${inviteUrl ? `<button id="pvpCopyLinkBtn" type="button">copy link</button>` : ""}
+              </div>`
+            : ""
+        }
         <small>Next step: realtime waiting room + remote turn sync. Room id: ${roomId || "pending"}</small>
       `;
-      const copyBtn = resultEl.querySelector("#pvpCopyInviteBtn");
-      copyBtn?.addEventListener("click", () => {
+      const copyCodeBtn = resultEl.querySelector("#pvpCopyCodeBtn");
+      const copyLinkBtn = resultEl.querySelector("#pvpCopyLinkBtn");
+      copyCodeBtn?.addEventListener("click", () => {
+        navigator.clipboard?.writeText(roomCode).catch(() => {});
+      });
+      copyLinkBtn?.addEventListener("click", () => {
         navigator.clipboard?.writeText(inviteUrl).catch(() => {});
       });
     };
 
+    const waitForReadyRoom = async (roomPayload) => {
+      const room = roomPayload?.room || roomPayload;
+      const roomId = room?.id || "";
+      const roomCode = room?.code || room?.room_code || "";
+      if (!roomId && !roomCode) {
+        return;
+      }
+
+      const poll = async () => {
+        if (closed || hasResolvedRoom) {
+          return;
+        }
+        try {
+          const state = await getPvpRoom({ auraSession, roomId, roomCode });
+          const players = Array.isArray(state?.players) ? state.players : [];
+          if (players.length >= 2) {
+            hasResolvedRoom = true;
+            resultEl.innerHTML = `
+              <strong>Opponent connected</strong>
+              <span>Launching PvP match...</span>
+            `;
+            setTimeout(() => {
+              if (closed) {
+                return;
+              }
+              cleanup();
+              resolve(state);
+            }, 650);
+            return;
+          }
+          resultEl.querySelector("small")?.replaceChildren(
+            document.createTextNode("Waiting for opponent to join...")
+          );
+        } catch (error) {
+          if (!closed) {
+            resultEl.innerHTML = `
+              <strong>Room ready</strong>
+              <span>${error?.message || "Could not refresh PvP room."}</span>
+            `;
+          }
+        }
+        if (!closed && !hasResolvedRoom) {
+          pollTimeoutId = setTimeout(poll, 1500);
+        }
+      };
+
+      pollTimeoutId = setTimeout(poll, 900);
+    };
+
     const cleanup = () => {
       closed = true;
+      if (pollTimeoutId !== null) {
+        clearTimeout(pollTimeoutId);
+        pollTimeoutId = null;
+      }
       closeBtn?.removeEventListener("click", onCancel);
       backdrop?.removeEventListener("click", onCancel);
       createBtn?.removeEventListener("click", onCreateMode);
@@ -1300,7 +1367,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
           return;
         }
         showRoomResult(payload);
-        resolve(payload);
+        await waitForReadyRoom(payload);
       } catch (error) {
         resultEl.textContent = error?.message || "PvP room request failed.";
       } finally {
@@ -1466,7 +1533,53 @@ async function showPlay() {
   }
 
   if (setup.battleMode === "pvp") {
-    await showPvpRoomModal({ setup, capSelection, auraSession });
+    const roomState = await showPvpRoomModal({ setup, capSelection, auraSession });
+    if (localVersion !== viewVersion || !roomState?.room) {
+      return;
+    }
+    const { getAuraPlayerIdentity, submitPvpTurnResult } = await loadPvpModule();
+    const localPlayer = getAuraPlayerIdentity(auraSession);
+    const players = Array.isArray(roomState.players) ? roomState.players : [];
+    const ownPlayer =
+      players.find((player) => player.player_id === localPlayer.auraUserId) ||
+      players.find((player) => player.player_id === localPlayer.walletAddress) ||
+      players[0];
+    const opponentPlayer =
+      players.find((player) => player.player_id !== ownPlayer?.player_id) || null;
+    const pvpSetup = {
+      ...setup,
+      ...(roomState.room.setup || {}),
+      battleMode: "pvp",
+    };
+
+    clearCurrentScreen();
+    setViewMode("play");
+    const { DiscDropGame } = await loadGameModule();
+    if (localVersion !== viewVersion) {
+      return;
+    }
+    game = new DiscDropGame(app, {
+      theme: currentTheme,
+      soundEnabled,
+      isSoundEnabled: () => soundEnabled,
+      initialArenaKey: pvpSetup.arenaKey || roomState.room.map_id || setup.arenaKey,
+      battleMode: "pvp",
+      gameMode: pvpSetup.gameMode || roomState.room.mode || setup.gameMode,
+      playerCapPath:
+        ownPlayer?.selected_cap?.imagePath || capSelection.playerCapPath,
+      cpuCapPath: opponentPlayer?.selected_cap?.imagePath || null,
+      playerCapMeta: ownPlayer?.selected_cap || capSelection.playerCapMeta || null,
+      cpuCapMeta: opponentPlayer?.selected_cap || null,
+      onPvpTurnResult: (turn) =>
+        submitPvpTurnResult({
+          auraSession,
+          roomId: roomState.room.id,
+          turn,
+        }).catch((error) => {
+          console.warn("[AURA PvP] submit turn failed", error);
+        }),
+    });
+    await game.init();
     return;
   }
 

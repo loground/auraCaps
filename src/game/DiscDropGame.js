@@ -56,18 +56,23 @@ export class DiscDropGame {
       cpuCapPath = null,
       playerCapMeta = null,
       cpuCapMeta = null,
+      onPvpTurnResult = null,
     } = {}
   ) {
     this.app = app;
     this.theme = theme;
     this.soundEnabled = soundEnabled;
     this.isSoundEnabled = typeof isSoundEnabled === "function" ? isSoundEnabled : null;
-    this.battleMode = battleMode === "training" ? "training" : "vs-ai";
+    this.battleMode = ["training", "pvp"].includes(battleMode)
+      ? battleMode
+      : "vs-ai";
     this.gameMode = gameMode === "slammer" ? "slammer" : "classic";
     this.playerCapPath = playerCapPath;
     this.cpuCapPath = cpuCapPath;
     this.playerCapMeta = playerCapMeta;
     this.cpuCapMeta = cpuCapMeta;
+    this.onPvpTurnResult =
+      typeof onPvpTurnResult === "function" ? onPvpTurnResult : null;
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey = initialArenaKey || DEFAULT_ARENA_KEY;
     this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
@@ -1127,8 +1132,9 @@ export class DiscDropGame {
 
   setupUIBindings() {
     const isTrainingMode = this.battleMode === "training";
-    this.ui.statusCpuMoveEl?.classList.toggle("hidden", isTrainingMode);
-    if (isTrainingMode) {
+    const isOpponentHidden = this.battleMode !== "vs-ai";
+    this.ui.statusCpuMoveEl?.classList.toggle("hidden", isOpponentHidden);
+    if (isOpponentHidden) {
       this.ui.statusCpuMoveEl.textContent = "";
     }
     const arenaKeys = Object.keys(ARENA_CONFIGS);
@@ -1576,7 +1582,9 @@ export class DiscDropGame {
     const battleHint =
       this.battleMode === "vs-ai"
         ? "Match: 4 rounds vs CPU."
-        : "Training: infinite throws.";
+        : this.battleMode === "pvp"
+          ? "PvP room: throw your turn and submit the result."
+          : "Training: infinite throws.";
     const slammerHint =
       "Throw a heavy slammer-cap into 6 stacked caps on the floor. Turn more caps faces up than your opponent to win. Map has borders, unleash you full power of throw.";
     this.ui.arenaHintEl.textContent =
@@ -1756,7 +1764,7 @@ export class DiscDropGame {
     this.ui.resetBtn.disabled = this.battleMode === "vs-ai";
     this.ui.actionButtonsEl.classList.toggle(
       "show-reset",
-      this.battleMode === "training"
+      this.battleMode !== "vs-ai"
     );
     if (resetTurnResults) {
       this.playerTurnResult = null;
@@ -2154,6 +2162,46 @@ export class DiscDropGame {
           this.gameMode === "slammer" ? 2300 : 1500
         );
       }
+      this.ui.resetBtn.textContent = "Play Again";
+      this.ui.resetBtn.disabled = false;
+      this.ui.actionButtonsEl.classList.add("show-reset");
+      return;
+    }
+    if (this.battleMode === "pvp") {
+      const pvpScore =
+        this.gameMode === "slammer" ? slammerFlips ?? 0 : this.turnScore(result);
+      this.setStatus(
+        result === "win" ? "turn won" : result === "lose" ? "turn lost" : "turn tied",
+        "submitted to PvP room"
+      );
+      this.showCenterNotice(
+        this.gameMode === "slammer"
+          ? `YOUR THROW\n${pvpScore} FLIPS`
+          : `YOUR TURN\n${result.toUpperCase()}`,
+        this.gameMode === "slammer" ? 2300 : 1600
+      );
+      this.onPvpTurnResult?.({
+        round: this.currentRound,
+        turnIndex: 1,
+        throwInput: {
+          x: this.settings.posX,
+          z: this.settings.posZ,
+          height: this.settings.height,
+          power: this.settings.power,
+        },
+        result: {
+          outcome: result,
+          score: pvpScore,
+          landed: true,
+          outOfBounds:
+            this.isOutOfArena(this.upperDiscBody) ||
+            this.floorDiscBodies.some((body) => this.isOutOfArena(body)),
+        },
+        clientProof: {
+          mode: this.gameMode,
+          resolvedAt: Date.now(),
+        },
+      });
       this.ui.resetBtn.textContent = "Play Again";
       this.ui.resetBtn.disabled = false;
       this.ui.actionButtonsEl.classList.add("show-reset");

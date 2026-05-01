@@ -78,6 +78,14 @@ export async function joinPvpRoom({ auraSession, roomCode, capSelection }) {
   });
 }
 
+export async function getPvpRoom({ auraSession, roomId, roomCode }) {
+  return callPvpFunction("pvp-get-room", {
+    roomId,
+    roomCode: normalizeRoomCode(roomCode),
+    player: getAuraPlayerIdentity(auraSession),
+  });
+}
+
 export async function submitPvpTurnResult({ auraSession, roomId, turn }) {
   return callPvpFunction("pvp-submit-turn", {
     roomId,

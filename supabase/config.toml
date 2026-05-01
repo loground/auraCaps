@@ -4,5 +4,8 @@ verify_jwt = false
 [functions.pvp-join-room]
 verify_jwt = false
 
+[functions.pvp-get-room]
+verify_jwt = false
+
 [functions.pvp-submit-turn]
 verify_jwt = false
