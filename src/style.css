@@ -972,6 +972,10 @@ button:disabled {
   gap: 0.45rem;
 }
 
+.mode-buttons:has(> :nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .mode-btn {
   width: 100%;
 }
@@ -1107,6 +1111,61 @@ button:disabled {
 
 .cap-pick-summary .setup-hint {
   min-height: auto;
+}
+
+.pvp-room-panel {
+  width: min(560px, calc(100vw - 1.4rem));
+}
+
+.pvp-room-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.pvp-join-label.hidden {
+  display: none;
+}
+
+.pvp-join-label input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 130, 92, 0.65);
+  background: rgba(57, 12, 10, 0.92);
+  color: #ffe4d6;
+  padding: 0.5rem 0.58rem;
+  font: 800 1rem/1 "Sora", "Avenir Next", sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pvp-room-result {
+  display: grid;
+  gap: 0.28rem;
+  min-height: 4.2rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 130, 92, 0.35);
+  background: rgba(37, 8, 7, 0.58);
+  color: #ffd8c6;
+  padding: 0.72rem;
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.pvp-room-result strong,
+.pvp-room-result span {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pvp-room-result small {
+  opacity: 0.78;
+}
+
+.pvp-room-result button {
+  justify-self: start;
+  padding: 0.42rem 0.62rem;
+  font-size: 0.82rem;
 }
 
 .theme-heaven .play-setup-backdrop {

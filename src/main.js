@@ -284,6 +284,7 @@ let menuModulePromise = null;
 let collectionModulePromise = null;
 let profileModulePromise = null;
 let gameModulePromise = null;
+let pvpModulePromise = null;
 
 function pickRefreshTheme() {
   try {
@@ -333,6 +334,7 @@ function showPlaySetupModal({ theme }) {
           <div class="mode-buttons">
             <button id="setupBattleTrainingBtn" class="mode-btn" type="button">Training</button>
             <button id="setupBattleVsAiBtn" class="mode-btn active" type="button">Vs AI</button>
+            <button id="setupBattlePvpBtn" class="mode-btn" type="button">PvP</button>
           </div>
         </div>
         <p id="setupBattleHint" class="setup-hint">
@@ -355,6 +357,7 @@ function showPlaySetupModal({ theme }) {
     const mapHint = overlay.querySelector("#setupMapHint");
     const battleTrainingBtn = overlay.querySelector("#setupBattleTrainingBtn");
     const battleVsAiBtn = overlay.querySelector("#setupBattleVsAiBtn");
+    const battlePvpBtn = overlay.querySelector("#setupBattlePvpBtn");
     const battleHint = overlay.querySelector("#setupBattleHint");
     const modeClassicBtn = overlay.querySelector("#setupModeClassicBtn");
     const modeSlammerBtn = overlay.querySelector("#setupModeSlammerBtn");
@@ -399,10 +402,13 @@ function showPlaySetupModal({ theme }) {
       }
       battleTrainingBtn?.classList.toggle("active", selectedBattleMode === "training");
       battleVsAiBtn?.classList.toggle("active", selectedBattleMode === "vs-ai");
+      battlePvpBtn?.classList.toggle("active", selectedBattleMode === "pvp");
       battleHint.textContent =
-        selectedBattleMode === "vs-ai"
-          ? "Vs AI: 4 rounds against computer. Best score wins the match."
-          : "Training: infinite throws, no match score.";
+        selectedBattleMode === "pvp"
+          ? "PvP: logged-in room battle. Create a room or join by invite code."
+          : selectedBattleMode === "vs-ai"
+            ? "Vs AI: 4 rounds against computer. Best score wins the match."
+            : "Training: infinite throws, no match score.";
     };
     updateBattleModeUI();
 
@@ -422,8 +428,13 @@ function showPlaySetupModal({ theme }) {
       selectedBattleMode = "vs-ai";
       updateBattleModeUI();
     };
+    const onBattlePvp = () => {
+      selectedBattleMode = "pvp";
+      updateBattleModeUI();
+    };
     battleTrainingBtn?.addEventListener("click", onBattleTraining);
     battleVsAiBtn?.addEventListener("click", onBattleVsAi);
+    battlePvpBtn?.addEventListener("click", onBattlePvp);
     modeClassicBtn?.addEventListener("click", onModeClassic);
     modeSlammerBtn?.addEventListener("click", onModeSlammer);
     arenaSelect?.addEventListener("change", updateMapHint);
@@ -431,6 +442,7 @@ function showPlaySetupModal({ theme }) {
     const cleanup = () => {
       battleTrainingBtn?.removeEventListener("click", onBattleTraining);
       battleVsAiBtn?.removeEventListener("click", onBattleVsAi);
+      battlePvpBtn?.removeEventListener("click", onBattlePvp);
       modeClassicBtn?.removeEventListener("click", onModeClassic);
       modeSlammerBtn?.removeEventListener("click", onModeSlammer);
       arenaSelect?.removeEventListener("change", updateMapHint);
@@ -853,12 +865,20 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     const overlay = document.createElement("div");
     overlay.className = "play-setup-modal";
     const isTraining = battleMode === "training";
+    const isPvp = battleMode === "pvp";
+    const showsCpuPick = battleMode === "vs-ai";
     overlay.innerHTML = `
       <div class="play-setup-backdrop"></div>
       <div class="play-setup-panel caps-select-panel">
         <button id="capsCloseBtn" class="play-setup-close" type="button" aria-label="Close cap selection">×</button>
         <h2>Select Caps</h2>
-        <p>${isTraining ? "Pick your cap from the grid." : "Pick your cap from the grid. CPU gets its own battle cap."}</p>
+        <p>${
+          showsCpuPick
+            ? "Pick your cap from the grid. CPU gets its own battle cap."
+            : isPvp
+              ? "Pick your cap for the PvP room."
+              : "Pick your cap from the grid."
+        }</p>
         <div id="capFilterButtons" class="cap-pick-filters">
           <button class="mode-btn active" type="button" data-cap-filter="all">All</button>
         </div>
@@ -866,7 +886,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         <div class="cap-pick-summary">
           <p id="playerCapHint" class="setup-hint"></p>
           ${
-            isTraining
+            !showsCpuPick
               ? ""
               : `<p id="cpuCapHint" class="setup-hint"></p>`
           }
@@ -1077,7 +1097,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       if (playerHint) {
         playerHint.textContent = renderHint("You", byId(selectedPlayerCapId));
       }
-      if (cpuHint && !isTraining) {
+      if (cpuHint && showsCpuPick) {
         cpuHint.textContent = renderHint("CPU", byId(selectedCpuCapId));
       }
     };
@@ -1104,7 +1124,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       cleanup();
       resolve({
         playerCapPath: playerCap.imagePath,
-        cpuCapPath: isTraining ? null : cpuCap.imagePath,
+        cpuCapPath: showsCpuPick ? cpuCap.imagePath : null,
         playerCapMeta: {
           id: playerCap.id,
           name: playerCap.name,
@@ -1114,9 +1134,8 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           isAuraSprite: Boolean(playerCap.isAuraSprite),
           spriteHints: playerCap.spriteHints || null,
         },
-        cpuCapMeta: isTraining
-          ? null
-          : {
+        cpuCapMeta: showsCpuPick
+          ? {
               id: cpuCap.id,
               name: cpuCap.name,
               imagePath: cpuCap.imagePath,
@@ -1124,7 +1143,8 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
               rarity: cpuCap.rarity || "",
               isAuraSprite: Boolean(cpuCap.isAuraSprite),
               spriteHints: cpuCap.spriteHints || null,
-            },
+            }
+          : null,
       });
     };
     const onFilterClick = (event) => {
@@ -1169,6 +1189,145 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
   });
 }
 
+async function showPvpRoomModal({ setup, capSelection, auraSession }) {
+  const {
+    createPvpRoom,
+    joinPvpRoom,
+    getPvpConfigStatus,
+    isPvpConfigured,
+  } = await loadPvpModule();
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "play-setup-modal";
+    const modeLabel = setup.gameMode === "slammer" ? "Slammer" : "Classic";
+    overlay.innerHTML = `
+      <div class="play-setup-backdrop"></div>
+      <div class="play-setup-panel pvp-room-panel">
+        <button id="pvpCloseBtn" class="play-setup-close" type="button" aria-label="Close PvP rooms">×</button>
+        <h2>PvP Room</h2>
+        <p class="setup-hint">Logged-in only. ${modeLabel} room on ${ARENA_CONFIGS[setup.arenaKey]?.label || "selected map"}.</p>
+        <div class="pvp-room-actions">
+          <button id="pvpCreateBtn" class="mode-btn active" type="button">Create Room</button>
+          <button id="pvpJoinBtn" class="mode-btn" type="button">Join Room</button>
+        </div>
+        <label id="pvpJoinLabel" class="pvp-join-label hidden">
+          Room code
+          <input id="pvpRoomCodeInput" type="text" maxlength="24" autocomplete="off" placeholder="ABC123" />
+        </label>
+        <div id="pvpRoomResult" class="pvp-room-result">
+          ${isPvpConfigured() ? "Create a room or enter a code from another player." : getPvpConfigStatus()}
+        </div>
+        <div class="play-setup-actions">
+          <button id="pvpSubmitBtn" type="button">${isPvpConfigured() ? "create" : "setup needed"}</button>
+        </div>
+      </div>
+    `;
+    app.appendChild(overlay);
+
+    const closeBtn = overlay.querySelector("#pvpCloseBtn");
+    const backdrop = overlay.querySelector(".play-setup-backdrop");
+    const createBtn = overlay.querySelector("#pvpCreateBtn");
+    const joinBtn = overlay.querySelector("#pvpJoinBtn");
+    const submitBtn = overlay.querySelector("#pvpSubmitBtn");
+    const resultEl = overlay.querySelector("#pvpRoomResult");
+    const joinLabel = overlay.querySelector("#pvpJoinLabel");
+    const codeInput = overlay.querySelector("#pvpRoomCodeInput");
+    let mode = "create";
+    let closed = false;
+
+    const setMode = (nextMode) => {
+      mode = nextMode;
+      createBtn?.classList.toggle("active", mode === "create");
+      joinBtn?.classList.toggle("active", mode === "join");
+      joinLabel?.classList.toggle("hidden", mode !== "join");
+      if (submitBtn) {
+        submitBtn.textContent = mode === "join" ? "join" : "create";
+      }
+    };
+
+    const showRoomResult = (roomPayload) => {
+      const room = roomPayload?.room || roomPayload;
+      const roomCode = room?.room_code || room?.code || room?.id || "";
+      const roomId = room?.id || "";
+      const inviteUrl = roomCode
+        ? `${window.location.origin}${window.location.pathname}?pvp=${encodeURIComponent(roomCode)}`
+        : "";
+      resultEl.innerHTML = `
+        <strong>${mode === "join" ? "Joined room" : "Room created"}</strong>
+        <span>code: ${roomCode || "unknown"}</span>
+        ${inviteUrl ? `<button id="pvpCopyInviteBtn" type="button">copy invite</button>` : ""}
+        <small>Next step: realtime waiting room + remote turn sync. Room id: ${roomId || "pending"}</small>
+      `;
+      const copyBtn = resultEl.querySelector("#pvpCopyInviteBtn");
+      copyBtn?.addEventListener("click", () => {
+        navigator.clipboard?.writeText(inviteUrl).catch(() => {});
+      });
+    };
+
+    const cleanup = () => {
+      closed = true;
+      closeBtn?.removeEventListener("click", onCancel);
+      backdrop?.removeEventListener("click", onCancel);
+      createBtn?.removeEventListener("click", onCreateMode);
+      joinBtn?.removeEventListener("click", onJoinMode);
+      submitBtn?.removeEventListener("click", onSubmit);
+      overlay.remove();
+    };
+    const onCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+    const onCreateMode = () => setMode("create");
+    const onJoinMode = () => setMode("join");
+    const onSubmit = async () => {
+      if (!isPvpConfigured()) {
+        resultEl.textContent = getPvpConfigStatus();
+        return;
+      }
+      submitBtn.disabled = true;
+      resultEl.textContent = mode === "join" ? "joining room..." : "creating room...";
+      try {
+        const payload =
+          mode === "join"
+            ? await joinPvpRoom({
+                auraSession,
+                roomCode: codeInput?.value || "",
+                capSelection,
+              })
+            : await createPvpRoom({ auraSession, setup, capSelection });
+        if (closed) {
+          return;
+        }
+        showRoomResult(payload);
+        resolve(payload);
+      } catch (error) {
+        resultEl.textContent = error?.message || "PvP room request failed.";
+      } finally {
+        if (!closed) {
+          submitBtn.disabled = false;
+        }
+      }
+    };
+
+    closeBtn?.addEventListener("click", onCancel);
+    backdrop?.addEventListener("click", onCancel);
+    createBtn?.addEventListener("click", onCreateMode);
+    joinBtn?.addEventListener("click", onJoinMode);
+    submitBtn?.addEventListener("click", onSubmit);
+
+    const urlRoomCode = new URLSearchParams(window.location.search).get("pvp");
+    if (urlRoomCode) {
+      setMode("join");
+      if (codeInput) {
+        codeInput.value = urlRoomCode;
+      }
+    } else {
+      setMode("create");
+    }
+  });
+}
+
 function loadMenuModule() {
   menuModulePromise ??= import("./screens/menu.js");
   return menuModulePromise;
@@ -1187,6 +1346,11 @@ function loadProfileModule() {
 function loadGameModule() {
   gameModulePromise ??= import("./game/DiscDropGame.js");
   return gameModulePromise;
+}
+
+function loadPvpModule() {
+  pvpModulePromise ??= import("./pvp/client.js");
+  return pvpModulePromise;
 }
 
 function clearCurrentScreen() {
@@ -1284,6 +1448,11 @@ async function showPlay() {
   if (!setup) {
     return;
   }
+  auraSession = loadAuraSession();
+  if (setup.battleMode === "pvp" && !hasAuraSession(auraSession)) {
+    showLoginGateIfNeeded();
+    return;
+  }
   const capSelection = await showCapSelectModal({
     theme: currentTheme,
     battleMode: setup.battleMode,
@@ -1293,6 +1462,11 @@ async function showPlay() {
     return;
   }
   if (!capSelection) {
+    return;
+  }
+
+  if (setup.battleMode === "pvp") {
+    await showPvpRoomModal({ setup, capSelection, auraSession });
     return;
   }
 
