@@ -1292,12 +1292,26 @@ export class DiscDropGame {
     this.setStatus(this.lockPlayerInput ? `${this.pvpOpponentName}'s turn` : "your turn");
   }
 
-  setPvpTurnState({ isMyTurn, round, playerScore = 0, opponentScore = 0 } = {}) {
+  setPvpTurnState({
+    isMyTurn,
+    round,
+    playerScore = 0,
+    opponentScore = 0,
+    forceReady = false,
+  } = {}) {
     if (this.battleMode !== "pvp") {
       return;
     }
     const nextRound = Number(round || 1);
-    if (nextRound !== this.currentRound && !this.isReplayingPvpTurn) {
+    const shouldRebuildForPlayableTurn =
+      isMyTurn &&
+      forceReady &&
+      !this.isReplayingPvpTurn &&
+      (this.hasLaunched || this.hasResolved || this.lockPlayerInput);
+    if (
+      (nextRound !== this.currentRound && !this.isReplayingPvpTurn) ||
+      shouldRebuildForPlayableTurn
+    ) {
       this.currentRound = nextRound;
       this.buildRoundBodies();
     } else {
@@ -1310,7 +1324,14 @@ export class DiscDropGame {
     this.ui.resetBtn.disabled = true;
     this.ui.actionButtonsEl.classList.remove("show-reset");
     if (isMyTurn) {
+      this.hasResolved = false;
+      this.hasLaunched = false;
       this.applySelectedCapsForThrower("player", { refresh: true });
+      this.updateLaunchArrow();
+      this.updatePositionGizmo();
+      this.updateMiniMap();
+      this.ui.launchBtn.disabled = false;
+      this.ui.launchBtn.textContent = "Power";
       this.setStatus("your turn, make a turn", "waiting");
     } else {
       this.applySelectedCapsForThrower("cpu", { refresh: true });

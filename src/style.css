@@ -1133,10 +1133,9 @@ button:disabled {
 }
 
 .pvp-private-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  justify-content: flex-start;
+  display: grid;
+  gap: 0.16rem;
+  justify-items: start;
   text-align: left;
   color: var(--theme-panel-text);
   font-weight: 800;
@@ -1151,9 +1150,10 @@ button:disabled {
   margin: 0;
 }
 
-.pvp-private-label span {
-  display: grid;
-  gap: 0.12rem;
+.pvp-private-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .pvp-private-label small {

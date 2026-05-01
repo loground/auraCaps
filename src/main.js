@@ -1217,9 +1217,11 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
           <button id="pvpJoinBtn" class="mode-btn" type="button">Join Room</button>
         </div>
         <label id="pvpPrivateLabel" class="pvp-private-label">
-          <input id="pvpPrivateInput" type="checkbox" />
-          <span>
-            Private invite room
+          <span class="pvp-private-title">
+            <input id="pvpPrivateInput" type="checkbox" />
+            Private match
+          </span>
+          <span class="pvp-private-copy">
             <small>Hidden from public room list. Players join by code/link.</small>
           </span>
         </label>
@@ -1592,6 +1594,7 @@ function startPvpMatchController({
       round,
       playerScore: scores.player,
       opponentScore: scores.opponent,
+      forceReady: isMyTurn && !ownTurn,
     });
 
     if (ownTurn && !opponentTurn) {
