@@ -1496,9 +1496,12 @@ function startPvpMatchController({
   localPlayer,
   opponentPlayer,
   getPvpRoom,
+  subscribePvpRoom,
+  sendPvpAim,
 }) {
   let stopped = false;
   let pollTimeoutId = null;
+  let refreshInFlight = false;
   const replayedTurnIds = new Set();
   const announcedRounds = new Set();
   const localId = localPlayer.auraUserId || localPlayer.walletAddress;
@@ -1607,15 +1610,55 @@ function startPvpMatchController({
 
   const poll = async () => {
     if (stopped || !roomId) return;
+    if (pollTimeoutId !== null) {
+      clearTimeout(pollTimeoutId);
+      pollTimeoutId = null;
+    }
+    if (refreshInFlight) {
+      pollTimeoutId = setTimeout(poll, 1200);
+      return;
+    }
+    refreshInFlight = true;
     try {
       const state = await getPvpRoom({ auraSession, roomId });
       applyState(state);
     } catch (error) {
       console.warn("[AURA PvP] room poll failed", error);
+    } finally {
+      refreshInFlight = false;
     }
     if (!stopped) {
-      pollTimeoutId = setTimeout(poll, 1400);
+      pollTimeoutId = setTimeout(poll, 2500);
     }
+  };
+
+  const unsubscribeRealtime = subscribePvpRoom?.({
+    roomId,
+    onChange: () => {
+      if (pollTimeoutId !== null) {
+        clearTimeout(pollTimeoutId);
+        pollTimeoutId = null;
+      }
+      poll();
+    },
+    onAim: (aim) => {
+      if (!aim || aim.playerId === localId) {
+        return;
+      }
+      gameInstance.showPvpOpponentAim(aim, opponentName);
+    },
+  });
+
+  gameInstance.onPvpAimChange = (aim) => {
+    sendPvpAim?.({
+      roomId,
+      aim: {
+        ...aim,
+        playerId: localId,
+        playerName: localName,
+        round: gameInstance.currentRound,
+      },
+    });
   };
 
   applyState(roomState);
@@ -1623,6 +1666,7 @@ function startPvpMatchController({
 
   return () => {
     stopped = true;
+    unsubscribeRealtime?.();
     if (pollTimeoutId !== null) {
       clearTimeout(pollTimeoutId);
     }
@@ -1787,7 +1831,13 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
     if (localVersion !== viewVersion || !roomState?.room) {
       return;
     }
-    const { getAuraPlayerIdentity, getPvpRoom, submitPvpTurnResult } = await loadPvpModule();
+    const {
+      getAuraPlayerIdentity,
+      getPvpRoom,
+      sendPvpAim,
+      subscribePvpRoom,
+      submitPvpTurnResult,
+    } = await loadPvpModule();
     const localPlayer = getAuraPlayerIdentity(auraSession);
     const players = Array.isArray(roomState.players) ? roomState.players : [];
     const ownPlayer =
@@ -1825,9 +1875,6 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
           auraSession,
           roomId: roomState.room.id,
           turn,
-        }).catch((error) => {
-          console.warn("[AURA PvP] submit turn failed", error);
-          game?.showCenterNotice?.(`PVP ERROR\n${error?.message || "TURN NOT SUBMITTED"}`, 3200);
         }),
     });
     await game.init();
@@ -1838,6 +1885,8 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       localPlayer,
       opponentPlayer,
       getPvpRoom,
+      subscribePvpRoom,
+      sendPvpAim,
     });
     return;
   }

@@ -16,9 +16,15 @@ Deno.serve(async (req) => {
 
     const payload = await req.json().catch(() => ({}));
     requirePlayer(payload.player);
+    const cutoff = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+
+    await rest(`pvp_rooms?status=eq.waiting&created_at=lt.${encodeURIComponent(cutoff)}`, {
+      method: "PATCH",
+      body: { status: "expired" },
+    });
 
     const rooms = await rest(
-      "pvp_rooms?status=eq.waiting&is_private=eq.false&order=created_at.desc&limit=20"
+      `pvp_rooms?status=eq.waiting&is_private=eq.false&created_at=gt.${encodeURIComponent(cutoff)}&order=created_at.desc&limit=20`
     );
     const roomIds = rooms.map((room) => room.id);
     const players =

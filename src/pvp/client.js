@@ -1,5 +1,9 @@
+import { createClient } from "@supabase/supabase-js";
+
 const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || "";
+let supabaseClient = null;
+const pvpChannels = new Map();
 
 export function isPvpConfigured() {
   return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -38,6 +42,17 @@ async function callPvpFunction(name, payload) {
     throw new Error(body?.error || body?.message || `PvP request failed: ${response.status}`);
   }
   return body;
+}
+
+export function getSupabasePvpClient() {
+  if (!isPvpConfigured()) {
+    return null;
+  }
+  supabaseClient ??= createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { params: { eventsPerSecond: 20 } },
+  });
+  return supabaseClient;
 }
 
 export function getAuraPlayerIdentity(auraSession) {
@@ -98,5 +113,60 @@ export async function submitPvpTurnResult({ auraSession, roomId, turn }) {
     roomId,
     player: getAuraPlayerIdentity(auraSession),
     turn,
+  });
+}
+
+export function subscribePvpRoom({ roomId, onChange, onAim }) {
+  const client = getSupabasePvpClient();
+  if (!client || !roomId) {
+    return () => {};
+  }
+  const channel = client
+    .channel(`pvp-room-${roomId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "pvp_rooms",
+        filter: `id=eq.${roomId}`,
+      },
+      onChange
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "pvp_turns",
+        filter: `room_id=eq.${roomId}`,
+      },
+      onChange
+    )
+    .on("broadcast", { event: "aim" }, (event) => {
+      onAim?.(event.payload);
+    })
+    .subscribe();
+  pvpChannels.set(roomId, channel);
+
+  return () => {
+    pvpChannels.delete(roomId);
+    client.removeChannel(channel);
+  };
+}
+
+export function sendPvpAim({ roomId, aim }) {
+  const client = getSupabasePvpClient();
+  if (!client || !roomId) {
+    return;
+  }
+  const channel = pvpChannels.get(roomId);
+  if (!channel) {
+    return;
+  }
+  channel.send({
+    type: "broadcast",
+    event: "aim",
+    payload: aim,
   });
 }

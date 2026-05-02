@@ -57,6 +57,7 @@ export class DiscDropGame {
       playerCapMeta = null,
       cpuCapMeta = null,
       onPvpTurnResult = null,
+      onPvpAimChange = null,
     } = {}
   ) {
     this.app = app;
@@ -73,6 +74,8 @@ export class DiscDropGame {
     this.cpuCapMeta = cpuCapMeta;
     this.onPvpTurnResult =
       typeof onPvpTurnResult === "function" ? onPvpTurnResult : null;
+    this.onPvpAimChange =
+      typeof onPvpAimChange === "function" ? onPvpAimChange : null;
     this.settings = { ...DEFAULT_SETTINGS };
     this.activeArenaKey = initialArenaKey || DEFAULT_ARENA_KEY;
     this.arenaRadius = this.gameMode === "slammer" ? TABLE_RADIUS + 12.5 : TABLE_RADIUS;
@@ -108,6 +111,7 @@ export class DiscDropGame {
     this.pvpOpponentName = "opponent";
     this.isReplayingPvpTurn = false;
     this.pvpReplayScore = null;
+    this.lastPvpAimSentAt = 0;
 
     this.lowerDiscBody = null;
     this.floorDiscBodies = [];
@@ -1184,6 +1188,7 @@ export class DiscDropGame {
         this.upperDiscBody.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 });
         this.updateLaunchArrow();
         this.updatePositionGizmo();
+        this.emitPvpAim();
       }
     };
     let isDraggingHeight = false;
@@ -1360,6 +1365,57 @@ export class DiscDropGame {
     this.launchRound("pvp-opponent");
   }
 
+  emitPvpAim({ immediate = false } = {}) {
+    if (this.battleMode !== "pvp" || this.lockPlayerInput || !this.onPvpAimChange) {
+      return;
+    }
+    const now = performance.now();
+    if (!immediate && now - this.lastPvpAimSentAt < 100) {
+      return;
+    }
+    this.lastPvpAimSentAt = now;
+    this.onPvpAimChange({
+      x: this.settings.posX,
+      z: this.settings.posZ,
+      height: this.settings.height,
+      power: this.isChargingPower ? this.chargeValue : this.settings.power,
+      charging: this.isChargingPower,
+      launched: this.hasLaunched,
+    });
+  }
+
+  showPvpOpponentAim(aim, opponentName = this.pvpOpponentName) {
+    if (
+      this.battleMode !== "pvp" ||
+      !this.lockPlayerInput ||
+      this.hasLaunched ||
+      this.isReplayingPvpTurn ||
+      !aim
+    ) {
+      return;
+    }
+    this.pvpOpponentName = opponentName || this.pvpOpponentName;
+    this.applySelectedCapsForThrower("cpu", { refresh: true });
+    this.settings.posX = Number(aim.x || 0);
+    this.settings.posZ = Number(aim.z || 0);
+    this.settings.height = Number(aim.height || 4);
+    this.settings.power = Number(aim.power || 35);
+    if (this.upperDiscBody) {
+      this.upperDiscBody.setNextKinematicTranslation({
+        x: this.settings.posX,
+        y: this.safeLaunchHeight(),
+        z: this.settings.posZ,
+      });
+      this.upperDiscBody.setNextKinematicRotation({ x: 0, y: 0, z: 0, w: 1 });
+    }
+    this.updateHeightMeterUI();
+    this.updatePowerMeterUI();
+    this.updateLaunchArrow();
+    this.updatePositionGizmo();
+    this.updateMiniMap();
+    this.setStatus(`${this.pvpOpponentName}'s turn, wait for yours`, aim.charging ? "setting power" : "aiming");
+  }
+
   startNewMatch() {
     if (this.battleMode === "training") {
       this.buildRoundBodies();
@@ -1406,11 +1462,13 @@ export class DiscDropGame {
     this.ui.launchBtn.textContent = "Hit";
     this.updatePowerMeterUI();
     this.setStatus("set power and hit", "waiting");
+    this.emitPvpAim({ immediate: true });
   }
 
   commitPowerAndLaunch() {
     this.isChargingPower = false;
     this.settings.power = THREE.MathUtils.clamp(this.chargeValue, 3, 100);
+    this.emitPvpAim({ immediate: true });
     this.launchRound("player");
   }
 
@@ -1867,6 +1925,7 @@ export class DiscDropGame {
     this.updateLaunchArrow();
     this.updatePositionGizmo();
     this.updateMiniMap();
+    this.emitPvpAim();
   }
 
   playSfx(path, volume = 0.8) {
@@ -2277,7 +2336,7 @@ export class DiscDropGame {
           : `YOUR TURN\nSCORE ${pvpScore}`,
         this.gameMode === "slammer" ? 2300 : 1600
       );
-      this.onPvpTurnResult?.({
+      Promise.resolve(this.onPvpTurnResult?.({
         round: this.currentRound,
         turnIndex: 1,
         throwInput: {
@@ -2298,6 +2357,11 @@ export class DiscDropGame {
           mode: this.gameMode,
           resolvedAt: Date.now(),
         },
+      })).catch((error) => {
+        console.warn("[AURA PvP] submit turn failed", error);
+        this.showCenterNotice(`PVP ERROR\n${error?.message || "TURN NOT SUBMITTED"}`, 3200);
+        this.lockPlayerInput = false;
+        this.ui.launchBtn.disabled = false;
       });
       this.lockPlayerInput = true;
       this.ui.resetBtn.textContent = "Waiting";
@@ -2644,6 +2708,7 @@ export class DiscDropGame {
         this.chargeDirection = 1;
       }
       this.updatePowerMeterUI();
+      this.emitPvpAim();
     }
     this.accumulator = Math.min(this.accumulator + delta, 0.25);
 
