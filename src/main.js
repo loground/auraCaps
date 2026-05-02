@@ -1427,6 +1427,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
                 auraSession,
                 setup: {
                   ...setup,
+                  theme: currentTheme,
                   isPrivate: Boolean(privateInput?.checked),
                 },
                 capSelection,
@@ -1504,6 +1505,8 @@ function startPvpMatchController({
   let refreshInFlight = false;
   const replayedTurnIds = new Set();
   const announcedRounds = new Set();
+  const locallySubmittedRounds = new Set();
+  const locallyResolvedRounds = new Set();
   const localId = localPlayer.auraUserId || localPlayer.walletAddress;
   const opponentId = opponentPlayer?.player_id || "";
   const opponentName = opponentPlayer?.player_name || "opponent";
@@ -1536,10 +1539,18 @@ function startPvpMatchController({
     const currentRoundTurns = turnsForRound(turns, round);
     const ownTurn = currentRoundTurns.find((turn) => turn.player_id === localId);
     const opponentTurn = currentRoundTurns.find((turn) => turn.player_id === opponentId);
+    const unseenOpponentTurn = turns
+      .filter((turn) => turn.player_id === opponentId && !replayedTurnIds.has(turn.id))
+      .sort((a, b) => {
+        const roundDelta = Number(a.round || 0) - Number(b.round || 0);
+        if (roundDelta !== 0) return roundDelta;
+        return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+      })[0];
     const isMyTurn =
       state.room.status === "playing" &&
       state.room.current_turn === localId &&
-      !ownTurn;
+      !ownTurn &&
+      !locallySubmittedRounds.has(round);
 
     gameInstance.setPvpPlayers({
       playerName: localName,
@@ -1582,13 +1593,13 @@ function startPvpMatchController({
       return;
     }
 
-    const shouldReplayOpponent =
-      opponentTurn &&
-      !replayedTurnIds.has(opponentTurn.id) &&
-      (!ownTurn || state.room.current_turn === localId);
-    if (shouldReplayOpponent) {
-      replayedTurnIds.add(opponentTurn.id);
-      gameInstance.playPvpOpponentTurn(opponentTurn, opponentName);
+    if (gameInstance.isReplayingPvpTurn) {
+      return;
+    }
+
+    if (unseenOpponentTurn) {
+      replayedTurnIds.add(unseenOpponentTurn.id);
+      gameInstance.playPvpOpponentTurn(unseenOpponentTurn, opponentName);
       return;
     }
 
@@ -1597,10 +1608,15 @@ function startPvpMatchController({
       round,
       playerScore: scores.player,
       opponentScore: scores.opponent,
-      forceReady: isMyTurn && !ownTurn,
+      forceReady:
+        isMyTurn &&
+        !ownTurn &&
+        !locallySubmittedRounds.has(round) &&
+        !locallyResolvedRounds.has(round),
     });
 
     if (ownTurn && !opponentTurn) {
+      locallySubmittedRounds.add(round);
       gameInstance.setStatus("turn submitted", `${opponentName}'s turn`);
       gameInstance.showCenterNotice(`YOUR SCORE\n${scoreFor(ownTurn)}`, 1600);
     } else if (!isMyTurn) {
@@ -1659,6 +1675,18 @@ function startPvpMatchController({
         round: gameInstance.currentRound,
       },
     });
+  };
+
+  const originalTurnResult = gameInstance.onPvpTurnResult;
+  gameInstance.onPvpTurnResult = async (turn) => {
+    const turnRound = Number(turn?.round || gameInstance.currentRound || 1);
+    locallySubmittedRounds.add(turnRound);
+    locallyResolvedRounds.add(turnRound);
+    gameInstance.lockPlayerInput = true;
+    gameInstance.ui.launchBtn.disabled = true;
+    const result = await originalTurnResult?.(turn);
+    poll();
+    return result;
   };
 
   applyState(roomState);
@@ -1790,8 +1818,12 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
         arenaKey: preview?.room?.map_id || DEFAULT_ARENA_KEY,
         battleMode: "pvp",
         gameMode: preview?.room?.mode || "classic",
+        theme: preview?.room?.setup?.theme || currentTheme,
         pvpRoomCode,
       };
+      if (setup.theme && setup.theme !== currentTheme) {
+        setTheme(setup.theme);
+      }
     } catch {
       setup = {
         arenaKey: DEFAULT_ARENA_KEY,
@@ -1851,6 +1883,10 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       ...(roomState.room.setup || {}),
       battleMode: "pvp",
     };
+    const pvpTheme = pvpSetup.theme || currentTheme;
+    if (pvpTheme !== currentTheme) {
+      setTheme(pvpTheme);
+    }
 
     clearCurrentScreen();
     setViewMode("play");
@@ -1859,7 +1895,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       return;
     }
     game = new DiscDropGame(app, {
-      theme: currentTheme,
+      theme: pvpTheme,
       soundEnabled,
       isSoundEnabled: () => soundEnabled,
       initialArenaKey: pvpSetup.arenaKey || roomState.room.map_id || setup.arenaKey,

@@ -1318,6 +1318,9 @@ export class DiscDropGame {
       shouldRebuildForPlayableTurn
     ) {
       this.currentRound = nextRound;
+      if (shouldRebuildForPlayableTurn) {
+        this.settings = { ...this.settings, ...DEFAULT_SETTINGS };
+      }
       this.buildRoundBodies();
     } else {
       this.currentRound = nextRound;
@@ -1370,7 +1373,7 @@ export class DiscDropGame {
       return;
     }
     const now = performance.now();
-    if (!immediate && now - this.lastPvpAimSentAt < 100) {
+    if (!immediate && now - this.lastPvpAimSentAt < 45) {
       return;
     }
     this.lastPvpAimSentAt = now;
