@@ -1127,6 +1127,11 @@ button:disabled {
   display: none;
 }
 
+.pvp-room-actions .hidden,
+.play-setup-actions .hidden {
+  display: none;
+}
+
 .pvp-private-label.hidden,
 .pvp-public-rooms.hidden {
   display: none;
@@ -1239,6 +1244,23 @@ button:disabled {
   justify-self: start;
   padding: 0.42rem 0.62rem;
   font-size: 0.82rem;
+}
+
+.pvp-room-result button.copied {
+  border-color: rgba(255, 224, 156, 0.9);
+  color: #fff3d7;
+  box-shadow:
+    0 0 0 1px rgba(255, 224, 156, 0.2),
+    0 0 12px rgba(255, 154, 82, 0.32);
+}
+
+.pvp-copy-notice {
+  min-height: 1rem;
+  color: #ffe0ad;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.78rem;
 }
 
 .theme-heaven .play-setup-backdrop {

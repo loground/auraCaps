@@ -981,6 +981,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     let selectableCaps = [...baseCaps];
     let capsLoading = canUseAuraFilter;
     let isClosed = false;
+    let renderGridRequestId = 0;
     let spritePreviewNodes = [];
     let spritePreviewRafId = null;
     const getVisibleCaps = () =>
@@ -1011,6 +1012,31 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}${
         cap.rarity ? ` • Rarity ${cap.rarity}` : ""
       }`;
+
+    const preloadedCapImages = new Set();
+    const preloadCapImages = (caps) =>
+      Promise.allSettled(
+        caps.map(
+          (cap) =>
+            new Promise((resolve) => {
+              if (!cap?.imagePath || preloadedCapImages.has(cap.imagePath)) {
+                resolve();
+                return;
+              }
+              const image = new Image();
+              image.decoding = "async";
+              image.onload = () => {
+                preloadedCapImages.add(cap.imagePath);
+                resolve();
+              };
+              image.onerror = () => {
+                preloadedCapImages.add(cap.imagePath);
+                resolve();
+              };
+              image.src = cap.imagePath;
+            })
+        )
+      );
 
     const stopSpritePreviewAnimation = () => {
       if (spritePreviewRafId !== null) {
@@ -1048,22 +1074,34 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       spritePreviewRafId = requestAnimationFrame(tick);
     };
 
-    const renderGrid = () => {
+    const renderGrid = async () => {
       if (!capsGrid) {
         return;
       }
+      const requestId = ++renderGridRequestId;
       stopSpritePreviewAnimation();
       spritePreviewNodes = [];
       const selectedId = selectedPlayerCapId;
       const visibleCaps = getVisibleCaps();
-      if (capsLoading && selectableCaps.length === 0) {
+      if (launchBtn) {
+        launchBtn.disabled = true;
+      }
+      if (capsLoading || visibleCaps.length > 0) {
         capsGrid.innerHTML = `
           <div class="cap-pick-loading">
             <span class="cap-loading-spinner" aria-hidden="true"></span>
-            <span class="cap-loading-text">loading aura caps</span>
+            <span class="cap-loading-text">${capsLoading ? "loading caps" : "preparing caps"}</span>
           </div>
         `;
+      }
+      if (visibleCaps.length > 0) {
+        await preloadCapImages(visibleCaps);
+      }
+      if (isClosed || requestId !== renderGridRequestId) {
         return;
+      }
+      if (launchBtn) {
+        launchBtn.disabled = false;
       }
       if (visibleCaps.length === 0) {
         capsGrid.innerHTML = `
@@ -1309,8 +1347,25 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
     let closed = false;
     let pollTimeoutId = null;
     let hasResolvedRoom = false;
+    let hasActiveRoom = false;
+
+    const lockRoomControls = () => {
+      hasActiveRoom = true;
+      createBtn?.classList.add("hidden");
+      joinBtn?.classList.add("hidden");
+      joinLabel?.classList.add("hidden");
+      privateLabel?.classList.add("hidden");
+      publicRoomsEl?.classList.add("hidden");
+      if (submitBtn) {
+        submitBtn.classList.add("hidden");
+        submitBtn.disabled = true;
+      }
+    };
 
     const setMode = (nextMode) => {
+      if (hasActiveRoom) {
+        return;
+      }
       mode = nextMode;
       createBtn?.classList.toggle("active", mode === "create");
       joinBtn?.classList.toggle("active", mode === "join");
@@ -1372,15 +1427,47 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
               </div>`
             : ""
         }
+        <em id="pvpCopyNotice" class="pvp-copy-notice" aria-live="polite"></em>
         <small>Next step: realtime waiting room + remote turn sync. Room id: ${roomId || "pending"}</small>
       `;
       const copyCodeBtn = resultEl.querySelector("#pvpCopyCodeBtn");
       const copyLinkBtn = resultEl.querySelector("#pvpCopyLinkBtn");
+      const copyNotice = resultEl.querySelector("#pvpCopyNotice");
+      let copyNoticeTimeoutId = null;
+      const copyText = async (text, button, label) => {
+        const originalText = button?.textContent || label;
+        try {
+          await navigator.clipboard?.writeText(text);
+          if (button) {
+            button.textContent = "copied";
+            button.classList.add("copied");
+          }
+          if (copyNotice) {
+            copyNotice.textContent = `${label} copied`;
+          }
+          if (copyNoticeTimeoutId !== null) {
+            clearTimeout(copyNoticeTimeoutId);
+          }
+          copyNoticeTimeoutId = setTimeout(() => {
+            if (button?.isConnected) {
+              button.textContent = originalText;
+              button.classList.remove("copied");
+            }
+            if (copyNotice?.isConnected) {
+              copyNotice.textContent = "";
+            }
+          }, 1400);
+        } catch {
+          if (copyNotice) {
+            copyNotice.textContent = "copy failed";
+          }
+        }
+      };
       copyCodeBtn?.addEventListener("click", () => {
-        navigator.clipboard?.writeText(roomCode).catch(() => {});
+        copyText(roomCode, copyCodeBtn, "code");
       });
       copyLinkBtn?.addEventListener("click", () => {
-        navigator.clipboard?.writeText(inviteUrl).catch(() => {});
+        copyText(inviteUrl, copyLinkBtn, "link");
       });
     };
 
@@ -1464,6 +1551,9 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       }
     };
     const onSubmit = async () => {
+      if (hasActiveRoom) {
+        return;
+      }
       if (!isPvpConfigured()) {
         resultEl.textContent = getPvpConfigStatus();
         return;
@@ -1491,11 +1581,12 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
           return;
         }
         showRoomResult(payload);
+        lockRoomControls();
         await waitForReadyRoom(payload);
       } catch (error) {
         resultEl.textContent = error?.message || "PvP room request failed.";
       } finally {
-        if (!closed) {
+        if (!closed && !hasActiveRoom) {
           submitBtn.disabled = false;
         }
       }
