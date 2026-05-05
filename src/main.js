@@ -204,12 +204,13 @@ function triggerAuraLoginFromGate() {
   window.dispatchEvent(new CustomEvent("aura-caps-open-login"));
 }
 
-function showLoginGateIfNeeded() {
+function showLoginGateIfNeeded({ forceAura = false, inviteCode = "" } = {}) {
   closeLoginGate();
-  if (hasAuraSession(auraSession) || hasChosenGuestMode()) {
+  if (hasAuraSession(auraSession) || (!forceAura && hasChosenGuestMode())) {
     return;
   }
 
+  const isPvpInvite = Boolean(inviteCode);
   const overlay = document.createElement("div");
   overlay.className = "entry-login-gate";
   overlay.innerHTML = `
@@ -217,11 +218,19 @@ function showLoginGateIfNeeded() {
       <p class="entry-login-kicker">welcome to</p>
       <h2>AURA CAPS</h2>
       <p class="entry-login-copy">
-        Connect Aura to unlock your owned collection, or jump in as a guest with free caps.
+        ${
+          isPvpInvite
+            ? `Aura login is required to join PvP room ${inviteCode}.`
+            : "Connect Aura to unlock your owned collection, or jump in as a guest with free caps."
+        }
       </p>
       <div class="entry-login-actions">
         <button id="entryAuraLoginBtn" class="entry-login-primary" type="button">log in with aura</button>
-        <button id="entryGuestBtn" class="entry-login-secondary" type="button">play as guest</button>
+        ${
+          isPvpInvite
+            ? ""
+            : '<button id="entryGuestBtn" class="entry-login-secondary" type="button">play as guest</button>'
+        }
       </div>
     </div>
   `;
@@ -1961,7 +1970,15 @@ function setTheme(nextTheme) {
 }
 
 function maybeStartPendingPvpInvite() {
-  if (!pendingPvpInviteCode || pendingPvpInviteStarted || !hasAuraSession(auraSession)) {
+  if (!pendingPvpInviteCode || pendingPvpInviteStarted) {
+    return;
+  }
+  if (!hasAuraSession(auraSession)) {
+    clearGuestMode();
+    showLoginGateIfNeeded({
+      forceAura: true,
+      inviteCode: pendingPvpInviteCode,
+    });
     return;
   }
   pendingPvpInviteStarted = true;
@@ -2033,7 +2050,13 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
   let resumePvpRoomState = null;
   if (pvpRoomCode) {
     if (!hasAuraSession(auraSession)) {
-      showLoginGateIfNeeded();
+      pendingPvpInviteCode = pvpRoomCode;
+      pendingPvpInviteStarted = false;
+      clearGuestMode();
+      showLoginGateIfNeeded({
+        forceAura: true,
+        inviteCode: pvpRoomCode,
+      });
       return;
     }
     const { getAuraPlayerIdentity, getPvpRoom } = await loadPvpModule();
