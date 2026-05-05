@@ -1814,7 +1814,12 @@ function startPvpMatchController({
 
     if (ownTurn && !opponentTurn) {
       locallySubmittedRounds.add(round);
-      gameInstance.setStatus("turn submitted", `${opponentName}'s turn`);
+      gameInstance.lockPlayerInput = true;
+      gameInstance.ui.launchBtn.disabled = true;
+      gameInstance.setStatus(
+        `${opponentName}'s turn, wait for yours`,
+        "enemy is making turn"
+      );
       if (!submittedScoreNotices.has(round)) {
         submittedScoreNotices.add(round);
         gameInstance.showCenterNotice(`YOUR SCORE\n${scoreFor(ownTurn)}`, 1600);
