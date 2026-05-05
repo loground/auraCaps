@@ -25,6 +25,7 @@ let lastHoverSfxAt = 0;
 let soundEnabled = true;
 const AURA_SESSION_KEY = "aura_session_v1";
 const LOGIN_GATE_KEY = "aura_login_gate_v1";
+const ACTIVE_PVP_ROOM_KEY = "aura_active_pvp_room_v1";
 const AURA_SPRITE_NAMES = new Set([
   "FILTHY",
   "GOLDIE",
@@ -43,7 +44,10 @@ const AURA_SPRITE_OVERRIDES_BY_NAME = {
   },
 };
 let auraSession = loadAuraSession();
-let pendingPvpInviteCode = new URLSearchParams(window.location.search).get("pvp") || "";
+let pendingPvpInviteCode =
+  new URLSearchParams(window.location.search).get("pvp") ||
+  loadActivePvpRoom()?.code ||
+  "";
 let pendingPvpInviteStarted = false;
 
 window.addEventListener("pointerdown", unlockSounds, { once: true, passive: true });
@@ -116,6 +120,43 @@ function setGuestMode() {
 function clearGuestMode() {
   try {
     window.localStorage.removeItem(LOGIN_GATE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function loadActivePvpRoom() {
+  try {
+    const raw = window.localStorage.getItem(ACTIVE_PVP_ROOM_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveActivePvpRoom(room) {
+  try {
+    if (!room?.id && !room?.code) {
+      window.localStorage.removeItem(ACTIVE_PVP_ROOM_KEY);
+      return;
+    }
+    window.localStorage.setItem(
+      ACTIVE_PVP_ROOM_KEY,
+      JSON.stringify({
+        id: room.id || "",
+        code: room.code || "",
+        status: room.status || "",
+        savedAt: Date.now(),
+      })
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function clearActivePvpRoom() {
+  try {
+    window.localStorage.removeItem(ACTIVE_PVP_ROOM_KEY);
   } catch {
     // Ignore storage failures.
   }
@@ -1301,6 +1342,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
 
     const showRoomResult = (roomPayload) => {
       const room = roomPayload?.room || roomPayload;
+      saveActivePvpRoom(room);
       const roomCode = room?.room_code || room?.code || room?.id || "";
       const roomId = room?.id || "";
       const inviteUrl = roomCode
@@ -1533,6 +1575,7 @@ function startPvpMatchController({
 
   const applyState = (state) => {
     if (stopped || !state?.room) return;
+    saveActivePvpRoom(state.room);
     const turns = Array.isArray(state.turns) ? state.turns : [];
     const round = Number(state.room.current_round || 1);
     const scores = matchScore(turns);
@@ -1551,11 +1594,25 @@ function startPvpMatchController({
       state.room.current_turn === localId &&
       !ownTurn &&
       !locallySubmittedRounds.has(round);
+    const isLocallyBusy =
+      isMyTurn &&
+      !ownTurn &&
+      (gameInstance.hasLaunched ||
+        gameInstance.isChargingPower ||
+        gameInstance.isDraggingPosition);
 
     gameInstance.setPvpPlayers({
       playerName: localName,
       opponentName,
     });
+
+    if (isLocallyBusy) {
+      gameInstance.setStatus(
+        gameInstance.hasLaunched ? "your throw in motion" : "your turn, make a turn",
+        "live"
+      );
+      return;
+    }
 
     for (let completedRound = 1; completedRound <= 4; completedRound += 1) {
       if (announcedRounds.has(completedRound)) continue;
@@ -1575,6 +1632,7 @@ function startPvpMatchController({
     }
 
     if (state.room.status === "finished") {
+      clearActivePvpRoom();
       const final =
         scores.player > scores.opponent
           ? "MATCH WON"
@@ -1788,6 +1846,7 @@ async function showMenu() {
     onAuraDisconnect: () => {
       auraSession = null;
       saveAuraSession(null);
+      clearActivePvpRoom();
     },
     onThemeChange: (nextTheme) => {
       if (nextTheme !== currentTheme) {
@@ -1806,14 +1865,22 @@ async function showMenu() {
 async function showPlay({ pvpRoomCode = "" } = {}) {
   const localVersion = ++viewVersion;
   let setup = null;
+  let resumePvpRoomState = null;
   if (pvpRoomCode) {
     if (!hasAuraSession(auraSession)) {
       showLoginGateIfNeeded();
       return;
     }
-    const { getPvpRoom } = await loadPvpModule();
+    const { getAuraPlayerIdentity, getPvpRoom } = await loadPvpModule();
     try {
       const preview = await getPvpRoom({ auraSession, roomCode: pvpRoomCode });
+      const localPlayer = getAuraPlayerIdentity(auraSession);
+      const players = Array.isArray(preview?.players) ? preview.players : [];
+      const isAlreadyInRoom = players.some(
+        (player) =>
+          player.player_id === localPlayer.auraUserId ||
+          player.player_id === localPlayer.walletAddress
+      );
       setup = {
         arenaKey: preview?.room?.map_id || DEFAULT_ARENA_KEY,
         battleMode: "pvp",
@@ -1821,6 +1888,9 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
         theme: preview?.room?.setup?.theme || currentTheme,
         pvpRoomCode,
       };
+      if (isAlreadyInRoom && preview?.room?.status !== "waiting") {
+        resumePvpRoomState = preview;
+      }
       if (setup.theme && setup.theme !== currentTheme) {
         setTheme(setup.theme);
       }
@@ -1846,20 +1916,25 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
     showLoginGateIfNeeded();
     return;
   }
-  const capSelection = await showCapSelectModal({
-    theme: currentTheme,
-    battleMode: setup.battleMode,
-    gameMode: setup.gameMode,
-  });
-  if (localVersion !== viewVersion) {
-    return;
-  }
-  if (!capSelection) {
-    return;
+  let capSelection = null;
+  if (!resumePvpRoomState) {
+    capSelection = await showCapSelectModal({
+      theme: currentTheme,
+      battleMode: setup.battleMode,
+      gameMode: setup.gameMode,
+    });
+    if (localVersion !== viewVersion) {
+      return;
+    }
+    if (!capSelection) {
+      return;
+    }
   }
 
   if (setup.battleMode === "pvp") {
-    const roomState = await showPvpRoomModal({ setup, capSelection, auraSession });
+    const roomState =
+      resumePvpRoomState ||
+      (await showPvpRoomModal({ setup, capSelection, auraSession }));
     if (localVersion !== viewVersion || !roomState?.room) {
       return;
     }
@@ -1902,9 +1977,9 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       battleMode: "pvp",
       gameMode: pvpSetup.gameMode || roomState.room.mode || setup.gameMode,
       playerCapPath:
-        ownPlayer?.selected_cap?.imagePath || capSelection.playerCapPath,
+        ownPlayer?.selected_cap?.imagePath || capSelection?.playerCapPath,
       cpuCapPath: opponentPlayer?.selected_cap?.imagePath || null,
-      playerCapMeta: ownPlayer?.selected_cap || capSelection.playerCapMeta || null,
+      playerCapMeta: ownPlayer?.selected_cap || capSelection?.playerCapMeta || null,
       cpuCapMeta: opponentPlayer?.selected_cap || null,
       onPvpTurnResult: (turn) =>
         submitPvpTurnResult({
