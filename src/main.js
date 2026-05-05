@@ -45,9 +45,7 @@ const AURA_SPRITE_OVERRIDES_BY_NAME = {
 };
 let auraSession = loadAuraSession();
 let pendingPvpInviteCode =
-  new URLSearchParams(window.location.search).get("pvp") ||
-  loadActivePvpRoom()?.code ||
-  "";
+  new URLSearchParams(window.location.search).get("pvp") || "";
 let pendingPvpInviteStarted = false;
 
 window.addEventListener("pointerdown", unlockSounds, { once: true, passive: true });
@@ -159,6 +157,21 @@ function clearActivePvpRoom() {
     window.localStorage.removeItem(ACTIVE_PVP_ROOM_KEY);
   } catch {
     // Ignore storage failures.
+  }
+}
+
+function clearPvpResumeTarget() {
+  pendingPvpInviteCode = "";
+  pendingPvpInviteStarted = false;
+  clearActivePvpRoom();
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("pvp")) {
+      url.searchParams.delete("pvp");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  } catch {
+    // Ignore URL cleanup failures.
   }
 }
 
@@ -1549,11 +1562,30 @@ function startPvpMatchController({
   const announcedRounds = new Set();
   const locallySubmittedRounds = new Set();
   const locallyResolvedRounds = new Set();
-  const localId = localPlayer.auraUserId || localPlayer.walletAddress;
-  const opponentId = opponentPlayer?.player_id || "";
-  const opponentName = opponentPlayer?.player_name || "opponent";
+  const submittedScoreNotices = new Set();
+  const localIdentityIds = new Set(
+    [localPlayer.auraUserId, localPlayer.walletAddress].filter(Boolean)
+  );
+  let localId = localPlayer.auraUserId || localPlayer.walletAddress;
+  let opponentId = opponentPlayer?.player_id || "";
+  let opponentName = opponentPlayer?.player_name || "opponent";
   const localName = localPlayer.username || "you";
   const roomId = roomState?.room?.id;
+
+  const syncRoomPlayers = (players = []) => {
+    const ownPlayer =
+      players.find((player) => localIdentityIds.has(player.player_id)) ||
+      players.find((player) => player.player_id === localId);
+    if (ownPlayer?.player_id) {
+      localId = ownPlayer.player_id;
+    }
+    const otherPlayer = players.find((player) => player.player_id !== localId);
+    if (otherPlayer?.player_id) {
+      opponentId = otherPlayer.player_id;
+      opponentName = otherPlayer.player_name || "opponent";
+      gameInstance.setPvpOpponentCap?.(otherPlayer.selected_cap);
+    }
+  };
 
   const scoreFor = (turn) => Number(turn?.result?.score || 0);
   const turnsForRound = (turns, round) =>
@@ -1576,6 +1608,7 @@ function startPvpMatchController({
   const applyState = (state) => {
     if (stopped || !state?.room) return;
     saveActivePvpRoom(state.room);
+    syncRoomPlayers(Array.isArray(state.players) ? state.players : []);
     const turns = Array.isArray(state.turns) ? state.turns : [];
     const round = Number(state.room.current_round || 1);
     const scores = matchScore(turns);
@@ -1648,6 +1681,10 @@ function startPvpMatchController({
       );
       gameInstance.lockPlayerInput = true;
       gameInstance.ui.launchBtn.disabled = true;
+      gameInstance.ui.resetBtn.textContent = "Exit";
+      gameInstance.ui.resetBtn.disabled = false;
+      gameInstance.ui.actionButtonsEl.classList.add("show-reset");
+      gameInstance.ui.resetBtn.onclick = leavePvpToMenu;
       return;
     }
 
@@ -1676,7 +1713,10 @@ function startPvpMatchController({
     if (ownTurn && !opponentTurn) {
       locallySubmittedRounds.add(round);
       gameInstance.setStatus("turn submitted", `${opponentName}'s turn`);
-      gameInstance.showCenterNotice(`YOUR SCORE\n${scoreFor(ownTurn)}`, 1600);
+      if (!submittedScoreNotices.has(round)) {
+        submittedScoreNotices.add(round);
+        gameInstance.showCenterNotice(`YOUR SCORE\n${scoreFor(ownTurn)}`, 1600);
+      }
     } else if (!isMyTurn) {
       gameInstance.setStatus(`${opponentName}'s turn, wait for yours`, "aiming");
     }
@@ -1793,6 +1833,11 @@ function addBackButton(onClick) {
     button.removeEventListener("click", onClick);
     button.remove();
   };
+}
+
+function leavePvpToMenu() {
+  clearPvpResumeTarget();
+  showMenu();
 }
 
 function setViewMode(mode) {
@@ -2004,6 +2049,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       subscribePvpRoom,
       sendPvpAim,
     });
+    cleanupScreen = composeCleanups(addBackButton(leavePvpToMenu), addGlobalMuteButton());
     return;
   }
 

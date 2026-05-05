@@ -1303,6 +1303,25 @@ export class DiscDropGame {
     this.setStatus(this.lockPlayerInput ? `${this.pvpOpponentName}'s turn` : "your turn");
   }
 
+  setPvpOpponentCap(capMeta = null) {
+    const imagePath = capMeta?.imagePath || "";
+    if (!imagePath || imagePath === this.cpuCapPath) {
+      return;
+    }
+    this.cpuCapPath = imagePath;
+    this.cpuCapMeta = capMeta;
+    let texture = this.resolveCapTextureFromPath(imagePath);
+    texture = this.applyCapMetaToTexture(texture, capMeta);
+    texture = this.applySpriteMetaToTexture(texture, capMeta) || texture;
+    if (!texture) {
+      return;
+    }
+    this.cpuCapTexture = texture;
+    if (this.lockPlayerInput || this.isReplayingPvpTurn || this.pvpReplay) {
+      this.applySelectedCapsForThrower("cpu", { refresh: true });
+    }
+  }
+
   setPvpTurnState({
     isMyTurn,
     round,
