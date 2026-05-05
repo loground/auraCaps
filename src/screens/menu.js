@@ -709,6 +709,8 @@ export function mountMenuScreen({
   auraSession = null,
   onAuraSuccess,
   onAuraDisconnect,
+  activePvpRoom = null,
+  onResumePvp,
 }) {
   const formatAuraStatus = (sessionLike) => {
     const wallet = sessionLike?.walletAddress || "";
@@ -745,6 +747,11 @@ export function mountMenuScreen({
       </div>
       <div class="menu-buttons">
         <button id="menuPlay" class="menu-btn" type="button">play</button>
+        ${
+          activePvpRoom?.code
+            ? `<button id="menuResumePvp" class="menu-btn menu-resume-pvp" type="button">resume pvp</button>`
+            : ""
+        }
         <button id="menuCollection" class="menu-btn" type="button">collection</button>
       </div>
       <div id="auraConnectedStatus" class="menu-aura-status ${auraSession?.connected ? "visible" : ""}">
@@ -1305,6 +1312,7 @@ export function mountMenuScreen({
   );
 
   const playButton = app.querySelector("#menuPlay");
+  const resumePvpButton = app.querySelector("#menuResumePvp");
   const collectionButton = app.querySelector("#menuCollection");
   const menuMuteToggleBtn = app.querySelector("#menuMuteToggle");
   const themeSelectEl = app.querySelector("#menuThemeSelect");
@@ -1725,6 +1733,7 @@ export function mountMenuScreen({
   };
   menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
   playButton.addEventListener("click", onPlay);
+  resumePvpButton?.addEventListener("click", onResumePvp);
   collectionButton.addEventListener("click", onCollection);
   themeSelectEl?.addEventListener("change", onThemeSelect);
   menuButtons.classList.add("disabled");
@@ -1937,6 +1946,7 @@ export function mountMenuScreen({
     window.removeEventListener("aura-caps-open-login", onExternalAuraLoginRequest);
     document.removeEventListener("visibilitychange", onWindowFocus);
     playButton.removeEventListener("click", onPlay);
+    resumePvpButton?.removeEventListener("click", onResumePvp);
     collectionButton.removeEventListener("click", onCollection);
     menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
     themeSelectEl?.removeEventListener("change", onThemeSelect);

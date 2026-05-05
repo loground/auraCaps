@@ -1681,14 +1681,23 @@ function startPvpMatchController({
   const scoreFor = (turn) => Number(turn?.result?.score || 0);
   const turnsForRound = (turns, round) =>
     turns.filter((turn) => Number(turn.round) === Number(round));
+  const isLocalPlayerId = (playerId) =>
+    Boolean(playerId && (playerId === localId || localIdentityIds.has(playerId)));
+  const isLocalTurn = (turn) => isLocalPlayerId(turn?.player_id);
+  const isOpponentTurn = (turn) =>
+    Boolean(
+      turn?.player_id &&
+        !isLocalPlayerId(turn.player_id) &&
+        (!opponentId || turn.player_id === opponentId)
+    );
 
   const matchScore = (turns) => {
     let player = 0;
     let opponent = 0;
     for (let round = 1; round <= 4; round += 1) {
       const roundTurns = turnsForRound(turns, round);
-      const own = roundTurns.find((turn) => turn.player_id === localId);
-      const other = roundTurns.find((turn) => turn.player_id === opponentId);
+      const own = roundTurns.find(isLocalTurn);
+      const other = roundTurns.find(isOpponentTurn);
       if (!own || !other) continue;
       if (scoreFor(own) > scoreFor(other)) player += 1;
       else if (scoreFor(other) > scoreFor(own)) opponent += 1;
@@ -1704,10 +1713,10 @@ function startPvpMatchController({
     const round = Number(state.room.current_round || 1);
     const scores = matchScore(turns);
     const currentRoundTurns = turnsForRound(turns, round);
-    const ownTurn = currentRoundTurns.find((turn) => turn.player_id === localId);
-    const opponentTurn = currentRoundTurns.find((turn) => turn.player_id === opponentId);
+    const ownTurn = currentRoundTurns.find(isLocalTurn);
+    const opponentTurn = currentRoundTurns.find(isOpponentTurn);
     const unseenOpponentTurn = turns
-      .filter((turn) => turn.player_id === opponentId && !replayedTurnIds.has(turn.id))
+      .filter((turn) => isOpponentTurn(turn) && !replayedTurnIds.has(turn.id))
       .sort((a, b) => {
         const roundDelta = Number(a.round || 0) - Number(b.round || 0);
         if (roundDelta !== 0) return roundDelta;
@@ -1715,12 +1724,14 @@ function startPvpMatchController({
       })[0];
     const isMyTurn =
       state.room.status === "playing" &&
-      state.room.current_turn === localId &&
+      isLocalPlayerId(state.room.current_turn) &&
       !ownTurn &&
       !locallySubmittedRounds.has(round);
+    const isBusyInSameRound = Number(gameInstance.currentRound || 1) === round;
     const isLocallyBusy =
       isMyTurn &&
       !ownTurn &&
+      isBusyInSameRound &&
       (gameInstance.hasLaunched ||
         gameInstance.isChargingPower ||
         gameInstance.isDraggingPosition);
@@ -1741,8 +1752,8 @@ function startPvpMatchController({
     for (let completedRound = 1; completedRound <= 4; completedRound += 1) {
       if (announcedRounds.has(completedRound)) continue;
       const roundTurns = turnsForRound(turns, completedRound);
-      const own = roundTurns.find((turn) => turn.player_id === localId);
-      const other = roundTurns.find((turn) => turn.player_id === opponentId);
+      const own = roundTurns.find(isLocalTurn);
+      const other = roundTurns.find(isOpponentTurn);
       if (!own || !other) continue;
       announcedRounds.add(completedRound);
       const ownScore = scoreFor(own);
@@ -1957,6 +1968,7 @@ function maybeStartPendingPvpInvite() {
 async function showMenu() {
   const localVersion = ++viewVersion;
   auraSession = loadAuraSession();
+  const activePvpRoom = loadActivePvpRoom();
   clearCurrentScreen();
   setViewMode("menu");
   const { mountMenuScreen } = await loadMenuModule();
@@ -1993,6 +2005,13 @@ async function showMenu() {
       if (nextTheme !== currentTheme) {
         setTheme(nextTheme);
         showMenu();
+      }
+    },
+    activePvpRoom,
+    onResumePvp: () => {
+      const room = loadActivePvpRoom();
+      if (room?.code) {
+        showPlay({ pvpRoomCode: room.code });
       }
     },
     onPlay: showPlay,
