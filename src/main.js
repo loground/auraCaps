@@ -1651,7 +1651,7 @@ function startPvpMatchController({
       return;
     }
 
-    if (gameInstance.isReplayingPvpTurn) {
+    if (gameInstance.isReplayingPvpTurn || gameInstance.pvpReplay) {
       return;
     }
 
@@ -1735,6 +1735,10 @@ function startPvpMatchController({
     });
   };
 
+  gameInstance.onPvpReplayComplete = () => {
+    poll();
+  };
+
   const originalTurnResult = gameInstance.onPvpTurnResult;
   gameInstance.onPvpTurnResult = async (turn) => {
     const turnRound = Number(turn?.round || gameInstance.currentRound || 1);
@@ -1753,6 +1757,7 @@ function startPvpMatchController({
   return () => {
     stopped = true;
     unsubscribeRealtime?.();
+    gameInstance.onPvpReplayComplete = null;
     if (pollTimeoutId !== null) {
       clearTimeout(pollTimeoutId);
     }

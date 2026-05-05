@@ -33,6 +33,8 @@ const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
 const MATCH_TOTAL_ROUNDS = 4;
 const HELL_FLOOR_SPAWN_LIFT = 0.16;
+const PVP_TRAJECTORY_CAPTURE_STEPS = 4;
+const PVP_TRAJECTORY_MAX_FRAMES = 180;
 const JUNGLE_BAY_CAP_PATHS = [
   "/caps/jb/jbcap1.webp",
   "/caps/jbcap2.webp",
@@ -112,6 +114,10 @@ export class DiscDropGame {
     this.isReplayingPvpTurn = false;
     this.pvpReplayScore = null;
     this.lastPvpAimSentAt = 0;
+    this.pvpTrajectoryFrames = [];
+    this.pvpTrajectoryStep = 0;
+    this.pvpReplay = null;
+    this.onPvpReplayComplete = null;
 
     this.lowerDiscBody = null;
     this.floorDiscBodies = [];
@@ -1312,6 +1318,7 @@ export class DiscDropGame {
       isMyTurn &&
       forceReady &&
       !this.isReplayingPvpTurn &&
+      !this.pvpReplay &&
       (this.hasLaunched || this.hasResolved || this.lockPlayerInput);
     if (
       (nextRound !== this.currentRound && !this.isReplayingPvpTurn) ||
@@ -1352,6 +1359,11 @@ export class DiscDropGame {
       return;
     }
     this.pvpOpponentName = opponentName || this.pvpOpponentName;
+    const trajectory = turn?.client_proof?.trajectory;
+    if (trajectory?.frames?.length > 1) {
+      this.playPvpTrajectoryReplay(turn, opponentName);
+      return;
+    }
     this.isReplayingPvpTurn = true;
     this.pvpReplayScore = Number(turn?.result?.score || 0);
     this.lockPlayerInput = true;
@@ -1366,6 +1378,79 @@ export class DiscDropGame {
     this.updatePositionGizmo();
     this.setStatus(`${this.pvpOpponentName}'s throw`, "watching replay");
     this.launchRound("pvp-opponent");
+  }
+
+  playPvpTrajectoryReplay(turn, opponentName = this.pvpOpponentName) {
+    const trajectory = turn?.client_proof?.trajectory;
+    const frames = Array.isArray(trajectory?.frames) ? trajectory.frames : [];
+    if (frames.length <= 1) {
+      return;
+    }
+    this.pvpOpponentName = opponentName || this.pvpOpponentName;
+    this.isReplayingPvpTurn = true;
+    this.pvpReplayScore = Number(turn?.result?.score || 0);
+    this.lockPlayerInput = true;
+    this.applySelectedCapsForThrower("cpu", { refresh: true });
+    this.buildRoundBodies({ resetTurnResults: false });
+    this.setStatus(`${this.pvpOpponentName}'s throw`, "watching replay");
+    this.pvpReplay = {
+      frames,
+      startedAt: performance.now(),
+      frameMs: Number(trajectory.frameMs || 66),
+      score: this.pvpReplayScore,
+    };
+    this.applyPvpReplayFrame(frames[0]);
+  }
+
+  applyPvpReplayFrame(frame) {
+    const applyMeshFrame = (mesh, value) => {
+      if (!mesh || !value?.p || !value?.q) {
+        return;
+      }
+      mesh.position.set(value.p[0], value.p[1], value.p[2]);
+      mesh.quaternion.set(value.q[0], value.q[1], value.q[2], value.q[3]);
+    };
+
+    applyMeshFrame(this.upperDiscMesh, frame.upper);
+    if (this.gameMode === "slammer") {
+      const floorFrames = Array.isArray(frame.floor) ? frame.floor : [];
+      for (let i = 0; i < Math.min(this.floorDiscMeshes.length, floorFrames.length); i += 1) {
+        applyMeshFrame(this.floorDiscMeshes[i], floorFrames[i]);
+      }
+    } else {
+      applyMeshFrame(this.lowerDiscMesh, frame.lower);
+    }
+  }
+
+  finishPvpReplay() {
+    const score = this.pvpReplay?.score ?? this.pvpReplayScore ?? 0;
+    this.pvpReplay = null;
+    this.isReplayingPvpTurn = false;
+    this.pvpReplayScore = null;
+    this.hasLaunched = false;
+    this.hasResolved = true;
+    this.setStatus(`${this.pvpOpponentName}'s turn ended`, `score ${score}`);
+    this.showCenterNotice(
+      `${this.pvpOpponentName.toUpperCase()}\nSCORE ${score}`,
+      1800
+    );
+    this.onPvpReplayComplete?.();
+  }
+
+  updatePvpTrajectoryReplay() {
+    if (!this.pvpReplay?.frames?.length) {
+      return;
+    }
+    const { frames, startedAt, frameMs } = this.pvpReplay;
+    const elapsed = performance.now() - startedAt;
+    const frameIndex = Math.min(
+      frames.length - 1,
+      Math.max(0, Math.floor(elapsed / Math.max(16, frameMs || 66)))
+    );
+    this.applyPvpReplayFrame(frames[frameIndex]);
+    if (frameIndex >= frames.length - 1) {
+      this.finishPvpReplay();
+    }
   }
 
   emitPvpAim({ immediate = false } = {}) {
@@ -1385,6 +1470,50 @@ export class DiscDropGame {
       charging: this.isChargingPower,
       launched: this.hasLaunched,
     });
+  }
+
+  serializeBodyFrame(body) {
+    if (!body) {
+      return null;
+    }
+    const p = body.translation();
+    const q = body.rotation();
+    return {
+      p: [
+        Number(p.x.toFixed(4)),
+        Number(p.y.toFixed(4)),
+        Number(p.z.toFixed(4)),
+      ],
+      q: [
+        Number(q.x.toFixed(5)),
+        Number(q.y.toFixed(5)),
+        Number(q.z.toFixed(5)),
+        Number(q.w.toFixed(5)),
+      ],
+    };
+  }
+
+  capturePvpTrajectoryFrame({ force = false } = {}) {
+    if (this.battleMode !== "pvp" || this.currentThrower !== "player" || !this.hasLaunched) {
+      return;
+    }
+    this.pvpTrajectoryStep += 1;
+    if (!force && this.pvpTrajectoryStep % PVP_TRAJECTORY_CAPTURE_STEPS !== 0) {
+      return;
+    }
+    const frame = {
+      t: Number(this.roundElapsed.toFixed(3)),
+      upper: this.serializeBodyFrame(this.upperDiscBody),
+    };
+    if (this.gameMode === "slammer") {
+      frame.floor = this.floorDiscBodies.map((body) => this.serializeBodyFrame(body));
+    } else {
+      frame.lower = this.serializeBodyFrame(this.lowerDiscBody);
+    }
+    this.pvpTrajectoryFrames.push(frame);
+    if (this.pvpTrajectoryFrames.length > PVP_TRAJECTORY_MAX_FRAMES) {
+      this.pvpTrajectoryFrames.shift();
+    }
   }
 
   showPvpOpponentAim(aim, opponentName = this.pvpOpponentName) {
@@ -2181,6 +2310,10 @@ export class DiscDropGame {
     this.hasResolved = false;
     this.stableFrames = 0;
     this.roundElapsed = 0;
+    if (this.battleMode === "pvp" && thrower === "player") {
+      this.pvpTrajectoryFrames = [];
+      this.pvpTrajectoryStep = 0;
+    }
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Hit";
     this.updateLaunchArrow();
@@ -2244,6 +2377,8 @@ export class DiscDropGame {
       true
     );
 
+    this.capturePvpTrajectoryFrame({ force: true });
+
     this.playRandomThrowSfx();
     if (thrower === "cpu") {
       this.setStatus("computer in motion", this.formatCpuMove(this.cpuPlannedMove));
@@ -2273,16 +2408,7 @@ export class DiscDropGame {
     const slammerFlips =
       this.gameMode === "slammer" ? this.getSlammerFaceUpCount() : null;
     if (this.battleMode === "pvp" && this.isReplayingPvpTurn) {
-      const replayScore =
-        this.pvpReplayScore ??
-        (this.gameMode === "slammer" ? slammerFlips ?? 0 : this.turnScore(result));
-      this.isReplayingPvpTurn = false;
-      this.pvpReplayScore = null;
-      this.setStatus(`${this.pvpOpponentName}'s turn ended`, `score ${replayScore}`);
-      this.showCenterNotice(
-        `${this.pvpOpponentName.toUpperCase()}\nSCORE ${replayScore}`,
-        1800
-      );
+      this.finishPvpReplay();
       return;
     }
     if (this.battleMode === "training") {
@@ -2327,6 +2453,7 @@ export class DiscDropGame {
       return;
     }
     if (this.battleMode === "pvp") {
+      this.capturePvpTrajectoryFrame({ force: true });
       const pvpScore =
         this.gameMode === "slammer" ? slammerFlips ?? 0 : this.turnScore(result);
       this.setStatus(
@@ -2359,6 +2486,10 @@ export class DiscDropGame {
         clientProof: {
           mode: this.gameMode,
           resolvedAt: Date.now(),
+          trajectory: {
+            frameMs: Math.round(FIXED_STEP * PVP_TRAJECTORY_CAPTURE_STEPS * 1000),
+            frames: this.pvpTrajectoryFrames,
+          },
         },
       })).catch((error) => {
         console.warn("[AURA PvP] submit turn failed", error);
@@ -2647,6 +2778,7 @@ export class DiscDropGame {
     this.world.timestep = FIXED_STEP;
     this.world.step(this.eventQueue);
     this.consumeCollisionSfxEvents();
+    this.capturePvpTrajectoryFrame();
 
     if (
       this.hasLaunched &&
@@ -2715,9 +2847,13 @@ export class DiscDropGame {
     }
     this.accumulator = Math.min(this.accumulator + delta, 0.25);
 
-    while (this.accumulator >= FIXED_STEP) {
-      this.stepPhysics();
-      this.accumulator -= FIXED_STEP;
+    if (this.pvpReplay) {
+      this.accumulator = 0;
+    } else {
+      while (this.accumulator >= FIXED_STEP) {
+        this.stepPhysics();
+        this.accumulator -= FIXED_STEP;
+      }
     }
 
     if (this.upperDiscBody && this.upperDiscMesh) {
@@ -2731,6 +2867,7 @@ export class DiscDropGame {
     } else if (this.lowerDiscBody && this.lowerDiscMesh) {
       this.syncMesh(this.lowerDiscBody, this.lowerDiscMesh);
     }
+    this.updatePvpTrajectoryReplay();
     this.updateMiniMap();
 
     this.controls.update();
