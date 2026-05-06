@@ -807,7 +807,11 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           }
           selectedPlayerCapId = capId;
           updateHints();
-          renderGrid();
+          capsGrid.querySelectorAll(".cap-pick-card").forEach((card) => {
+            const isSelectedCard = card.getAttribute("data-cap-id") === capId;
+            card.classList.toggle("active", isSelectedCard);
+            card.setAttribute("aria-selected", isSelectedCard ? "true" : "false");
+          });
         });
       });
 
@@ -1314,6 +1318,43 @@ function loadPvpModule() {
   return pvpModulePromise;
 }
 
+function normalizePvpIdentity(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getPvpIdentityKeys(identity = {}) {
+  return new Set(
+    [identity.auraUserId, identity.walletAddress]
+      .map(normalizePvpIdentity)
+      .filter(Boolean)
+  );
+}
+
+function pvpRoomPlayerMatchesIdentity(player, identityKeys) {
+  if (!player || !identityKeys?.size) {
+    return false;
+  }
+  return [player.player_id, player.wallet]
+    .map(normalizePvpIdentity)
+    .some((value) => value && identityKeys.has(value));
+}
+
+function splitPvpRoomPlayers(players = [], localPlayer = {}) {
+  const identityKeys = getPvpIdentityKeys(localPlayer);
+  const ownPlayer =
+    players.find((player) => pvpRoomPlayerMatchesIdentity(player, identityKeys)) ||
+    null;
+  const ownKey = normalizePvpIdentity(ownPlayer?.player_id);
+  const opponentPlayer =
+    players.find((player) => {
+      if (!player) return false;
+      if (ownPlayer && player === ownPlayer) return false;
+      const playerKey = normalizePvpIdentity(player.player_id);
+      return !ownKey || playerKey !== ownKey;
+    }) || null;
+  return { ownPlayer, opponentPlayer, identityKeys };
+}
+
 function startPvpMatchController({
   gameInstance,
   auraSession,
@@ -1323,6 +1364,7 @@ function startPvpMatchController({
   getPvpRoom,
   subscribePvpRoom,
   sendPvpAim,
+  sendPvpTurnSubmitted,
 }) {
   let stopped = false;
   let pollTimeoutId = null;
@@ -1332,9 +1374,7 @@ function startPvpMatchController({
   const locallySubmittedRounds = new Set();
   const locallyResolvedRounds = new Set();
   const submittedScoreNotices = new Set();
-  const localIdentityIds = new Set(
-    [localPlayer.auraUserId, localPlayer.walletAddress].filter(Boolean)
-  );
+  const localIdentityIds = getPvpIdentityKeys(localPlayer);
   let localId = localPlayer.auraUserId || localPlayer.walletAddress;
   let opponentId = opponentPlayer?.player_id || "";
   let opponentName = opponentPlayer?.player_name || "opponent";
@@ -1343,12 +1383,21 @@ function startPvpMatchController({
 
   const syncRoomPlayers = (players = []) => {
     const ownPlayer =
-      players.find((player) => localIdentityIds.has(player.player_id)) ||
-      players.find((player) => player.player_id === localId);
+      players.find((player) =>
+        pvpRoomPlayerMatchesIdentity(player, localIdentityIds)
+      ) ||
+      players.find(
+        (player) =>
+          normalizePvpIdentity(player.player_id) === normalizePvpIdentity(localId)
+      );
     if (ownPlayer?.player_id) {
       localId = ownPlayer.player_id;
+      gameInstance.setPvpLocalCap?.(ownPlayer.selected_cap);
     }
-    const otherPlayer = players.find((player) => player.player_id !== localId);
+    const otherPlayer = players.find(
+      (player) =>
+        normalizePvpIdentity(player.player_id) !== normalizePvpIdentity(localId)
+    );
     if (otherPlayer?.player_id) {
       opponentId = otherPlayer.player_id;
       opponentName = otherPlayer.player_name || "opponent";
@@ -1360,7 +1409,11 @@ function startPvpMatchController({
   const turnsForRound = (turns, round) =>
     turns.filter((turn) => Number(turn.round) === Number(round));
   const isLocalPlayerId = (playerId) =>
-    Boolean(playerId && (playerId === localId || localIdentityIds.has(playerId)));
+    Boolean(
+      playerId &&
+        (normalizePvpIdentity(playerId) === normalizePvpIdentity(localId) ||
+          localIdentityIds.has(normalizePvpIdentity(playerId)))
+    );
   const isLocalTurn = (turn) => isLocalPlayerId(turn?.player_id);
   const isOpponentTurn = (turn) =>
     Boolean(
@@ -1514,7 +1567,7 @@ function startPvpMatchController({
       pollTimeoutId = null;
     }
     if (refreshInFlight) {
-      pollTimeoutId = setTimeout(poll, 1200);
+      pollTimeoutId = setTimeout(poll, 500);
       return;
     }
     refreshInFlight = true;
@@ -1527,7 +1580,7 @@ function startPvpMatchController({
       refreshInFlight = false;
     }
     if (!stopped) {
-      pollTimeoutId = setTimeout(poll, 2500);
+      pollTimeoutId = setTimeout(poll, 900);
     }
   };
 
@@ -1545,6 +1598,17 @@ function startPvpMatchController({
         return;
       }
       gameInstance.showPvpOpponentAim(aim, opponentName);
+    },
+    onTurnSubmitted: (turn) => {
+      if (!turn || turn.playerId === localId) {
+        return;
+      }
+      gameInstance.setStatus(`${opponentName}'s throw submitted`, "syncing replay");
+      if (pollTimeoutId !== null) {
+        clearTimeout(pollTimeoutId);
+        pollTimeoutId = null;
+      }
+      poll();
     },
   });
 
@@ -1572,6 +1636,15 @@ function startPvpMatchController({
     gameInstance.lockPlayerInput = true;
     gameInstance.ui.launchBtn.disabled = true;
     const result = await originalTurnResult?.(turn);
+    sendPvpTurnSubmitted?.({
+      roomId,
+      turn: {
+        playerId: localId,
+        playerName: localName,
+        round: turnRound,
+        turnId: result?.turn?.id || "",
+      },
+    });
     poll();
     return result;
   };
@@ -1799,17 +1872,16 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       getAuraPlayerIdentity,
       getPvpRoom,
       sendPvpAim,
+      sendPvpTurnSubmitted,
       subscribePvpRoom,
       submitPvpTurnResult,
     } = await loadPvpModule();
     const localPlayer = getAuraPlayerIdentity(auraSession);
     const players = Array.isArray(roomState.players) ? roomState.players : [];
-    const ownPlayer =
-      players.find((player) => player.player_id === localPlayer.auraUserId) ||
-      players.find((player) => player.player_id === localPlayer.walletAddress) ||
-      players[0];
-    const opponentPlayer =
-      players.find((player) => player.player_id !== ownPlayer?.player_id) || null;
+    const { ownPlayer, opponentPlayer } = splitPvpRoomPlayers(
+      players,
+      localPlayer
+    );
     const pvpSetup = {
       ...setup,
       ...(roomState.room.setup || {}),
@@ -1855,6 +1927,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       getPvpRoom,
       subscribePvpRoom,
       sendPvpAim,
+      sendPvpTurnSubmitted,
     });
     cleanupScreen = composeCleanups(addBackButton(leavePvpToMenu), addGlobalMuteButton());
     return;

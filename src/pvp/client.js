@@ -116,7 +116,7 @@ export async function submitPvpTurnResult({ auraSession, roomId, turn }) {
   });
 }
 
-export function subscribePvpRoom({ roomId, onChange, onAim }) {
+export function subscribePvpRoom({ roomId, onChange, onAim, onTurnSubmitted }) {
   const client = getSupabasePvpClient();
   if (!client || !roomId) {
     return () => {};
@@ -146,6 +146,9 @@ export function subscribePvpRoom({ roomId, onChange, onAim }) {
     .on("broadcast", { event: "aim" }, (event) => {
       onAim?.(event.payload);
     })
+    .on("broadcast", { event: "turn-submitted" }, (event) => {
+      onTurnSubmitted?.(event.payload);
+    })
     .subscribe();
   pvpChannels.set(roomId, channel);
 
@@ -168,5 +171,21 @@ export function sendPvpAim({ roomId, aim }) {
     type: "broadcast",
     event: "aim",
     payload: aim,
+  });
+}
+
+export function sendPvpTurnSubmitted({ roomId, turn }) {
+  const client = getSupabasePvpClient();
+  if (!client || !roomId) {
+    return;
+  }
+  const channel = pvpChannels.get(roomId);
+  if (!channel) {
+    return;
+  }
+  channel.send({
+    type: "broadcast",
+    event: "turn-submitted",
+    payload: turn,
   });
 }

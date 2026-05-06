@@ -1059,6 +1059,8 @@ export class DiscDropGame {
   applySelectedCapsForThrower(thrower, { refresh = true } = {}) {
     const selectedTexture =
       thrower === "cpu" ? this.cpuCapTexture : this.playerCapTexture;
+    const opponentTexture =
+      thrower === "cpu" ? this.playerCapTexture : this.cpuCapTexture;
     if (!selectedTexture) {
       return;
     }
@@ -1066,6 +1068,9 @@ export class DiscDropGame {
     if (this.gameMode === "slammer") {
       this.upperCapTexture = selectedTexture;
       this.upperBackTexture = selectedTexture;
+    } else if (this.battleMode === "pvp" && opponentTexture) {
+      this.lowerCapTexture = opponentTexture;
+      this.upperCapTexture = selectedTexture;
     } else {
       this.lowerCapTexture = selectedTexture;
       this.upperCapTexture = selectedTexture;
@@ -1345,6 +1350,25 @@ export class DiscDropGame {
     }
   }
 
+  setPvpLocalCap(capMeta = null) {
+    const imagePath = capMeta?.imagePath || "";
+    if (!imagePath || imagePath === this.playerCapPath) {
+      return;
+    }
+    this.playerCapPath = imagePath;
+    this.playerCapMeta = capMeta;
+    let texture = this.resolveCapTextureFromPath(imagePath);
+    texture = this.applyCapMetaToTexture(texture, capMeta);
+    texture = this.applySpriteMetaToTexture(texture, capMeta) || texture;
+    if (!texture) {
+      return;
+    }
+    this.playerCapTexture = texture;
+    if (!this.lockPlayerInput && !this.isReplayingPvpTurn && !this.pvpReplay) {
+      this.applySelectedCapsForThrower("player", { refresh: true });
+    }
+  }
+
   setPvpTurnState({
     isMyTurn,
     round,
@@ -1569,6 +1593,10 @@ export class DiscDropGame {
       return;
     }
     this.pvpOpponentName = opponentName || this.pvpOpponentName;
+    if (aim.launched) {
+      this.setStatus(`${this.pvpOpponentName}'s throw in motion`, "syncing replay");
+      return;
+    }
     this.applySelectedCapsForThrower("cpu", { refresh: true });
     this.settings.posX = Number(aim.x || 0);
     this.settings.posZ = Number(aim.z || 0);
