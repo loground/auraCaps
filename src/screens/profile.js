@@ -78,6 +78,7 @@ function saveStoredAuraSession(session) {
 
 function auraDebugLog(...args) {
   try {
+    const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
     const entry = {
       scope: "profile",
       at: new Date().toISOString(),
@@ -87,8 +88,7 @@ function auraDebugLog(...args) {
       ? window.__AURA_LOGS__
       : [];
     window.__AURA_LOGS__.push(entry);
-    console.log("[AURA][PROFILE]", ...args);
-    if (window.localStorage.getItem(AURA_DEBUG_KEY) === "1") {
+    if (debugEnabled) {
       console.log("[AURA][PROFILE][DEBUG]", ...args);
     }
   } catch {
@@ -253,12 +253,11 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
     const id = String(userId || "").trim();
     if (!id) return null;
     const url = `/api/aura-inventory?userId=${encodeURIComponent(id)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`;
-    console.groupCollapsed("[AURA][PROFILE] callInventoryApi()");
-    console.log("inventory request", { url, userId: id });
+    auraDebugLog("inventory request", { url, userId: id });
     auraDebugLog("inventory fetch start", { url, userId: id });
     const response = await fetch(url);
     const json = await response.json().catch(() => null);
-    console.log("inventory response raw json", {
+    auraDebugLog("inventory response raw json", {
       ok: response.ok,
       status: response.status,
       body: json,
@@ -269,13 +268,12 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       body: json,
     });
     if (!response.ok) {
-      console.log("inventory request failed", { status: response.status, body: json });
-      console.groupEnd();
+      auraDebugLog("inventory request failed", { status: response.status, body: json });
       return { error: `http ${response.status}` };
     }
 
     const payload = json?.data || json;
-    console.log("inventory normalized payload", payload);
+    auraDebugLog("inventory normalized payload", payload);
     const items = Array.isArray(payload?.data)
       ? payload.data
       : Array.isArray(payload?.items)
@@ -283,19 +281,18 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         : Array.isArray(payload)
           ? payload
           : [];
-    console.log("inventory selected rows", { count: items.length, rows: items });
+    auraDebugLog("inventory selected rows", { count: items.length, rows: items });
     items.forEach((item, index) => {
-      console.groupCollapsed(`[AURA][PROFILE] inventory row ${index}`);
-      console.log("raw item", item);
-      console.log("metadata", item?.metadata || item?.card?.metadata || item?.packCard?.metadata || {});
-      console.log(
+      auraDebugLog("raw item", item);
+      auraDebugLog("metadata", item?.metadata || item?.card?.metadata || item?.packCard?.metadata || {});
+      auraDebugLog(
         "attributes",
         item?.metadata?.attributes ||
           item?.card?.metadata?.attributes ||
           item?.packCard?.metadata?.attributes ||
           []
       );
-      console.log("image candidates", {
+      auraDebugLog("image candidates", {
         image: item?.image,
         imageUrl: item?.imageUrl,
         image_url: item?.image_url,
@@ -307,7 +304,6 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
         cardImageUrl: item?.card?.imageUrl,
         packCardImage: item?.packCard?.image,
       });
-      console.groupEnd();
     });
     const total =
       payload?.meta?.total ??
@@ -317,8 +313,7 @@ export function mountProfileScreen({ app, onBack, auraSession }) {
       0;
     const page = payload?.meta?.page ?? payload?.page ?? 1;
     const totalPages = payload?.meta?.totalPages ?? payload?.totalPages ?? 1;
-    console.log("inventory summary", { total, page, totalPages });
-    console.groupEnd();
+    auraDebugLog("inventory summary", { total, page, totalPages });
     return {
       raw: payload,
       summary: `items: ${total} • page ${page}/${totalPages}`,

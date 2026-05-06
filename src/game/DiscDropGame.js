@@ -33,6 +33,7 @@ const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
 const MATCH_TOTAL_ROUNDS = 4;
 const HELL_FLOOR_SPAWN_LIFT = 0.16;
+const BRAINROT_FLOOR_TOP_Y = LOWER_DISC_START_Y - DISC_HALF_HEIGHT;
 const PVP_TRAJECTORY_CAPTURE_STEPS = 4;
 const PVP_TRAJECTORY_MAX_FRAMES = 180;
 const JUNGLE_BAY_CAP_PATHS = [
@@ -153,6 +154,11 @@ export class DiscDropGame {
     this._tempUp = new THREE.Vector3(0, 1, 0);
     this._tempForward = new THREE.Vector3();
     this._tempPickPoint = new THREE.Vector3();
+    this._cameraTargetPos = new THREE.Vector3();
+    this._cameraLookTarget = new THREE.Vector3();
+    this._cameraSubjectCenter = new THREE.Vector3();
+    this._cameraSubjectA = new THREE.Vector3();
+    this._cameraSubjectB = new THREE.Vector3();
     this._raycaster = new THREE.Raycaster();
     this._pointerNdc = new THREE.Vector2();
     this._pickPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -LOWER_DISC_START_Y);
@@ -177,6 +183,11 @@ export class DiscDropGame {
     this.lastHitSfxAt = 0;
     this.slammerMiniDots = [];
     this.animatedSpriteTextures = [];
+    this.cameraMode = "free";
+    this.cameraHomePosition = new THREE.Vector3();
+    this.cameraHomeTarget = new THREE.Vector3();
+    this.dynamicCameraLastSwitchAt = 0;
+    this.dynamicCameraSubject = "upper";
   }
 
   async init() {
@@ -374,6 +385,13 @@ export class DiscDropGame {
       return false;
     }
 
+    // Brainrot has a detailed toy/lego-style GLB surface. Using its decorative
+    // mesh as physics makes caps snag in studs and small triangles, so gameplay
+    // uses a clean support floor instead.
+    if (this.theme === "brainrot") {
+      return false;
+    }
+
     // Hell arena has walls/rocks/lava in the GLB. Object_4 is the visible
     // central playable skin; using Object_10/Object_6 puts caps on cliffs or
     // below the textured floor.
@@ -439,14 +457,15 @@ export class DiscDropGame {
       this.arenaSurfaceColliders.push(collider);
     });
 
-    // Brainrot arena needs a guaranteed full-coverage floor so caps never hover/fall
-    // through sparse mesh zones.
+    // Brainrot arena uses a clean floor collider under the visual GLB. This
+    // avoids caps getting stuck in decorative texture/stud geometry.
     if (this.theme === "brainrot") {
+      const halfHeight = 0.16;
       const coverBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
       const coverCollider = this.world.createCollider(
-        RAPIER.ColliderDesc.cuboid(this.floorRadius + 6, 0.08, this.floorRadius + 6)
-          .setTranslation(0, 0.162, 0)
-          .setContactSkin(0.0015),
+        RAPIER.ColliderDesc.cuboid(this.floorRadius + 6, halfHeight, this.floorRadius + 6)
+          .setTranslation(0, BRAINROT_FLOOR_TOP_Y - halfHeight, 0)
+          .setContactSkin(0.003),
         coverBody
       );
       this.arenaSurfaceBodies.push(coverBody);
@@ -1161,6 +1180,10 @@ export class DiscDropGame {
     this.ui.arenaSelectEl.value = this.activeArenaKey;
     this.ui.arenaSelectEl.disabled = !isTrainingMode;
     this.ui.arenaPanelEl?.classList.toggle("hidden-in-vs-ai", !isTrainingMode);
+    this.ui.cameraModeSelectEl.value = this.cameraMode;
+    this.ui.cameraModeSelectEl.addEventListener("change", (event) => {
+      this.setCameraMode(event.target.value);
+    });
 
     this.ui.arenaSelectEl.addEventListener("change", (event) => {
       if (!isTrainingMode) {
@@ -2079,6 +2102,18 @@ export class DiscDropGame {
     this.emitPvpAim();
   }
 
+  setCameraMode(mode) {
+    const nextMode = ["free", "follow", "wide", "dynamic"].includes(mode)
+      ? mode
+      : "free";
+    this.cameraMode = nextMode;
+    if (this.ui?.cameraModeSelectEl) {
+      this.ui.cameraModeSelectEl.value = nextMode;
+    }
+    this.controls.enabled = !this.isDraggingPosition && nextMode === "free";
+    this.dynamicCameraLastSwitchAt = 0;
+  }
+
   playSfx(path, volume = 0.8) {
     if (this.isSoundEnabled && !this.isSoundEnabled()) {
       return;
@@ -2424,6 +2459,7 @@ export class DiscDropGame {
     this.ui.launchBtn.disabled = true;
     this.ui.launchBtn.textContent = "Power";
     const result = this.getRoundResult();
+    const isOffBoundaries = this.isRoundOffBoundaries();
     const slammerFlips =
       this.gameMode === "slammer" ? this.getSlammerFaceUpCount() : null;
     if (this.battleMode === "pvp" && this.isReplayingPvpTurn) {
@@ -2431,6 +2467,14 @@ export class DiscDropGame {
       return;
     }
     if (this.battleMode === "training") {
+      if (isOffBoundaries) {
+        this.setStatus("off boundaries", "training");
+        this.showCenterNotice("OFF BOUNDARIES", 1800);
+        this.ui.resetBtn.textContent = "Play Again";
+        this.ui.resetBtn.disabled = false;
+        this.ui.actionButtonsEl.classList.add("show-reset");
+        return;
+      }
       if (result === "win") {
         this.setStatus(
           "you won",
@@ -2476,11 +2520,19 @@ export class DiscDropGame {
       const pvpScore =
         this.gameMode === "slammer" ? slammerFlips ?? 0 : this.turnScore(result);
       this.setStatus(
-        result === "win" ? "turn won" : result === "lose" ? "turn lost" : "turn tied",
+        isOffBoundaries
+          ? "off boundaries"
+          : result === "win"
+            ? "turn won"
+            : result === "lose"
+              ? "turn lost"
+              : "turn tied",
         "submitted to PvP room"
       );
       this.showCenterNotice(
-        this.gameMode === "slammer"
+        isOffBoundaries
+          ? "OFF BOUNDARIES"
+          : this.gameMode === "slammer"
           ? `YOUR THROW\n${pvpScore} FLIPS`
           : `YOUR TURN\nSCORE ${pvpScore}`,
         this.gameMode === "slammer" ? 2300 : 1600
@@ -2527,11 +2579,11 @@ export class DiscDropGame {
       if (this.gameMode === "slammer") {
         this.playerSlammerFlips = slammerFlips ?? 0;
         this.setStatus(
-          `your throw ${this.playerSlammerFlips} flips`,
+          isOffBoundaries ? "off boundaries" : `your throw ${this.playerSlammerFlips} flips`,
           "cpu preparing throw"
         );
         this.showCenterNotice(
-          `YOUR THROW\n${this.playerSlammerFlips} FLIPS`,
+          isOffBoundaries ? "OFF BOUNDARIES" : `YOUR THROW\n${this.playerSlammerFlips} FLIPS`,
           1500
         );
         if (this.cpuLaunchTimeoutId !== null) {
@@ -2546,7 +2598,13 @@ export class DiscDropGame {
         }, 1450);
         return;
       } else {
-        this.setStatus(`your turn ${result}`, "cpu preparing throw");
+        this.setStatus(
+          isOffBoundaries ? "off boundaries" : `your turn ${result}`,
+          "cpu preparing throw"
+        );
+        if (isOffBoundaries) {
+          this.showCenterNotice("OFF BOUNDARIES", 1500);
+        }
       }
       this.startComputerTurn();
       return;
@@ -2587,6 +2645,15 @@ export class DiscDropGame {
       return "lose";
     }
     return "tie";
+  }
+
+  isRoundOffBoundaries() {
+    return (
+      this.isOutOfArena(this.upperDiscBody) ||
+      this.floorDiscBodies.some((body) => this.isOutOfArena(body)) ||
+      this.hasFallenBelowArena(this.upperDiscBody) ||
+      this.floorDiscBodies.some((body) => this.hasFallenBelowArena(body))
+    );
   }
 
   isOutOfArena(body) {
@@ -2888,6 +2955,7 @@ export class DiscDropGame {
     }
     this.updatePvpTrajectoryReplay();
     this.updateMiniMap();
+    this.updateGameplayCamera(delta);
 
     this.controls.update();
 
@@ -2909,6 +2977,79 @@ export class DiscDropGame {
     this.updateAnimatedSpriteTextures();
   }
 
+  getPrimaryFloorBody() {
+    if (this.gameMode === "slammer") {
+      return this.floorDiscBodies[0] || this.lowerDiscBody;
+    }
+    return this.lowerDiscBody || this.floorDiscBodies[0];
+  }
+
+  getBodyPosition(body, fallback = this._cameraSubjectCenter) {
+    if (!body) {
+      return fallback.set(0, 0.35, 0);
+    }
+    const p = body.translation();
+    return fallback.set(p.x, p.y, p.z);
+  }
+
+  updateGameplayCamera(delta) {
+    if (this.cameraMode === "free") {
+      this.controls.enabled = !this.isDraggingPosition;
+      return;
+    }
+
+    this.controls.enabled = false;
+
+    if (!this.hasLaunched && this.cameraMode !== "wide") {
+      this._cameraTargetPos.copy(this.cameraHomePosition);
+      this._cameraLookTarget.copy(this.cameraHomeTarget);
+    } else if (this.cameraMode === "wide") {
+      this._cameraLookTarget.set(0, 0.4, 0);
+      this._cameraTargetPos.set(
+        0,
+        window.innerWidth <= 760 ? 24 : 20,
+        window.innerWidth <= 760 ? 42 : 36
+      );
+    } else if (this.cameraMode === "follow") {
+      const subjectBody = this.upperDiscBody || this.getPrimaryFloorBody();
+      const subject = this.getBodyPosition(subjectBody, this._cameraSubjectCenter);
+      this._cameraLookTarget.copy(subject);
+      this._cameraTargetPos.set(subject.x + 3.8, subject.y + 4.8, subject.z + 7.2);
+    } else {
+      const now = performance.now();
+      if (
+        now - this.dynamicCameraLastSwitchAt > 1300 ||
+        !this.dynamicCameraLastSwitchAt
+      ) {
+        this.dynamicCameraSubject =
+          this.dynamicCameraSubject === "upper" ? "lower" : "upper";
+        this.dynamicCameraLastSwitchAt = now;
+      }
+      const upper = this.getBodyPosition(this.upperDiscBody, this._cameraSubjectA);
+      const lower = this.getBodyPosition(this.getPrimaryFloorBody(), this._cameraSubjectB);
+      const subject = this.dynamicCameraSubject === "upper" ? upper : lower;
+      const distance = upper.distanceTo(lower);
+      const isWideMoment = distance > 5.2 || this.roundElapsed > 4.5;
+      if (isWideMoment) {
+        this._cameraLookTarget.copy(upper).add(lower).multiplyScalar(0.5);
+        this._cameraTargetPos.set(
+          this._cameraLookTarget.x + 1.2,
+          this._cameraLookTarget.y + 9.5,
+          this._cameraLookTarget.z + 15.5
+        );
+      } else {
+        this._cameraLookTarget.copy(subject);
+        this._cameraTargetPos.set(subject.x + 4.2, subject.y + 4.2, subject.z + 6.5);
+      }
+    }
+
+    const cameraLerp = this.cameraMode === "dynamic" ? 1 - Math.pow(0.025, delta) : 1 - Math.pow(0.04, delta);
+    const targetLerp = 1 - Math.pow(0.02, delta);
+    this.camera.position.lerp(this._cameraTargetPos, cameraLerp);
+    this.controls.target.lerp(this._cameraLookTarget, targetLerp);
+    this.camera.lookAt(this.controls.target);
+  }
+
   applyResponsiveCamera() {
     if (window.innerWidth <= 760) {
       this.camera.position.set(0, 19.2, 31.5);
@@ -2917,6 +3058,8 @@ export class DiscDropGame {
       this.camera.position.set(0, 13.3, 24.6);
       this.controls.target.set(0, 0.35, 0);
     }
+    this.cameraHomePosition.copy(this.camera.position);
+    this.cameraHomeTarget.copy(this.controls.target);
     this.camera.lookAt(this.controls.target);
     this.controls.update();
   }

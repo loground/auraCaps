@@ -1,4 +1,5 @@
 import "./style.css";
+import { fetchAuraInventory } from "./aura/inventory.js";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
 import { playSound, preloadSounds, unlockSounds } from "./sound.js";
@@ -26,23 +27,6 @@ let soundEnabled = true;
 const AURA_SESSION_KEY = "aura_session_v1";
 const LOGIN_GATE_KEY = "aura_login_gate_v1";
 const ACTIVE_PVP_ROOM_KEY = "aura_active_pvp_room_v1";
-const AURA_SPRITE_NAMES = new Set([
-  "FILTHY",
-  "GOLDIE",
-  "ALI",
-  "YODIE",
-  "WILLY",
-  "EAZY",
-  "ANGRYTALIK",
-]);
-const AURA_SPRITE_OVERRIDES_BY_NAME = {
-  ANGRYTALIK: {
-    columns: 4,
-    rows: 1,
-    frameCount: 4,
-    zoom: 1.25,
-  },
-};
 let auraSession = loadAuraSession();
 let pendingPvpInviteCode =
   new URLSearchParams(window.location.search).get("pvp") || "";
@@ -393,7 +377,7 @@ function showPlaySetupModal({ theme }) {
           </div>
         </div>
         <p id="setupModeHint" class="setup-hint">
-          Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with biggest score wins. Don't let the caps fly away, the map has no borders, be smart, mfer.
+          Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. The map has no borders, so aim carefully.
         </p>
         <div class="mode-picker">
           <span class="mode-label">Battle Mode</span>
@@ -458,7 +442,7 @@ function showPlaySetupModal({ theme }) {
       modeHint.textContent =
         selectedMode === "slammer"
           ? "Slammer: Throw a heavy slammer-cap into 6 stacked caps on the floor. Turn more caps faces up than your opponent to win. Map has borders, unleash your full power of throw."
-          : "Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with biggest score wins. Don't let the caps fly away, the map has no borders, be smart, mfer.";
+          : "Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. The map has no borders, so aim carefully.";
     };
     updateModeUI();
 
@@ -570,21 +554,6 @@ const CAP_OPTIONS = [
   })),
 ];
 
-function parseSpriteHints(configLike = {}) {
-  const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
-  const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
-  const frameCount = Number.parseInt(String(configLike.frameCount ?? configLike.frames ?? ""), 10);
-  const fps = Number(configLike.fps);
-  const zoom = Number(configLike.zoom);
-  return {
-    columns: Number.isFinite(columns) && columns > 0 ? columns : undefined,
-    rows: Number.isFinite(rows) && rows > 0 ? rows : undefined,
-    frameCount: Number.isFinite(frameCount) && frameCount > 0 ? frameCount : undefined,
-    fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
-    zoom: Number.isFinite(zoom) && zoom > 1 ? zoom : undefined,
-  };
-}
-
 function resolveSpritePlayback(image, hints) {
   const maxFrames = 64;
   const naturalW = Math.max(1, image.naturalWidth || image.width || 1);
@@ -637,293 +606,8 @@ function drawSpriteFrameToCanvas({ canvas, ctx, image, config, frame }) {
   ctx.drawImage(image, sx, sy, frameW, frameH, dx, dy, dw, dh);
 }
 
-function pickAuraLookupValue(sessionLike) {
-  const user = sessionLike?.user || {};
-  const candidates = [
-    sessionLike?.walletAddress,
-    user?.walletAddress,
-    user?.address,
-    user?.username,
-    user?.handle,
-    user?.displayName,
-  ];
-  for (const candidate of candidates) {
-    const value = String(candidate || "").trim();
-    if (value) {
-      return value;
-    }
-  }
-  return "";
-}
-
-function toAbsImage(imageLike) {
-  const value = String(imageLike || "").trim();
-  if (!value) return "";
-  if (value.startsWith("ipfs://")) {
-    return `https://ipfs.io/ipfs/${value.slice("ipfs://".length)}`;
-  }
-  if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
-    return value;
-  }
-  return `https://ipfs.io/ipfs/${value}`;
-}
-
-const RARITY_LABELS = {
-  1: "common",
-  2: "rare",
-  3: "epic",
-  4: "legendary",
-  5: "mythic",
-};
-
-function normalizeRarity(value) {
-  const rarityNumber = Number.parseInt(String(value ?? ""), 10);
-  if (Number.isFinite(rarityNumber) && RARITY_LABELS[rarityNumber]) {
-    return RARITY_LABELS[rarityNumber];
-  }
-  return String(value || "").trim();
-}
-
-function readTraitValue(traitList, keys) {
-  const normalizedKeys = keys.map((key) => String(key).toLowerCase());
-  if (!traitList) {
-    return "";
-  }
-  if (!Array.isArray(traitList) && typeof traitList === "object") {
-    for (const [traitKey, directValue] of Object.entries(traitList)) {
-      if (
-        normalizedKeys.includes(String(traitKey).toLowerCase()) &&
-        directValue !== undefined &&
-        directValue !== null &&
-        directValue !== ""
-      ) {
-        return directValue;
-      }
-    }
-  }
-  const rows = Array.isArray(traitList) ? traitList : Object.values(traitList);
-  const found = rows.find((trait) => {
-    const traitName = String(
-      trait?.trait_type ||
-        trait?.traitType ||
-        trait?.key ||
-        trait?.name ||
-        trait?.type ||
-        ""
-    ).toLowerCase();
-    return normalizedKeys.includes(traitName);
-  });
-  return found?.value ?? found?.display_value ?? found?.displayValue ?? "";
-}
-
-function parseWeightMultiplier(value) {
-  const parsed = Number.parseFloat(String(value ?? "").replace(/x$/i, ""));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function extractAuraCapOptions(payload) {
-  console.groupCollapsed("[AURA][CAP SELECT] extractAuraCapOptions()");
-  console.log("raw normalized inventory payload", payload);
-  const candidates = [payload?.data, payload?.items, payload?.cards, payload?.results, payload?.packCards, payload];
-  console.log("candidate containers", {
-    data: payload?.data,
-    items: payload?.items,
-    cards: payload?.cards,
-    results: payload?.results,
-    packCards: payload?.packCards,
-    payload,
-  });
-  let rows = [];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      rows = candidate;
-      break;
-    }
-  }
-  console.log("selected inventory rows", { count: rows.length, rows });
-  const seen = new Set();
-  const mapped = [];
-  for (const [index, row] of rows.entries()) {
-    const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
-    const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
-    const traitList =
-      row?.traitList ||
-      row?.traits ||
-      metadata?.traitList ||
-      metadata?.traits ||
-      row?.card?.traitList ||
-      row?.packCard?.traitList ||
-      [];
-    const name = String(
-      row?.name || row?.title || metadata?.name || row?.card?.name || row?.packCard?.name || ""
-    ).trim();
-    const imagePath = toAbsImage(
-      row?.image ||
-        row?.imageUrl ||
-        row?.image_url ||
-        row?.imageURI ||
-        row?.image_uri ||
-        metadata?.image ||
-        metadata?.image_url ||
-        row?.card?.image ||
-        row?.card?.imageUrl ||
-        row?.packCard?.image
-    );
-    const uniqueKey = String(
-      row?.id || row?._id || row?.tokenId || row?.tokenID || row?.mint || row?.packCardId || `${name}-${imagePath}`
-    );
-    console.groupCollapsed(`[AURA][CAP SELECT] inventory row ${index}: ${name || "(no name)"}`);
-    console.log("raw row", row);
-    console.log("metadata", metadata);
-    console.log("attributes", attrs);
-    console.log("parsed basics", { uniqueKey, name, imagePath });
-    if (!name || !imagePath || seen.has(uniqueKey)) {
-      console.log("skipped row", {
-        reason: !name ? "missing name" : !imagePath ? "missing imagePath" : "duplicate uniqueKey",
-      });
-      console.groupEnd();
-      continue;
-    }
-    seen.add(uniqueKey);
-    const upperName = name.toUpperCase();
-    const isAuraSprite = AURA_SPRITE_NAMES.has(upperName);
-    const attrLookup = (keys) => {
-      const normalized = keys.map((k) => String(k).toLowerCase());
-      const found = attrs.find((attr) =>
-        normalized.includes(String(attr?.trait_type || attr?.traitType || attr?.key || "").toLowerCase())
-      );
-      return found?.value ?? found?.display_value ?? "";
-    };
-    const collection = String(
-      metadata?.collection ||
-        metadata?.collectionName ||
-        row?.collectionName ||
-        row?.collection ||
-        "aura collection"
-    ).trim();
-    const series = String(metadata?.series || row?.series || "beta").trim();
-    const rarity = normalizeRarity(
-      metadata?.rarity ??
-        row?.rarity ??
-        readTraitValue(traitList, ["rarity"])
-    );
-    const traitWeight = parseWeightMultiplier(
-      readTraitValue(traitList, ["weight", "weightMultiplier", "weight multiplier"])
-    );
-    const weightMultiplier =
-      traitWeight ?? parseWeightMultiplier(metadata?.weight ?? row?.weight) ?? getCapWeightMultiplier(imagePath);
-    const explicitFrameCount =
-      metadata?.frameCount ??
-      metadata?.frames ??
-      metadata?.spriteFrames ??
-      row?.frameCount ??
-      attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
-    const explicitCols =
-      metadata?.columns ??
-      metadata?.cols ??
-      metadata?.spriteColumns ??
-      row?.columns ??
-      attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
-    const explicitRows =
-      metadata?.rows ??
-      metadata?.spriteRows ??
-      row?.rows ??
-      attrLookup(["rows", "spriteRows", "sprite rows"]);
-    const explicitFps =
-      metadata?.fps ??
-      metadata?.spriteFps ??
-      row?.fps ??
-      attrLookup(["fps", "spriteFps", "sprite fps"]);
-    const spriteOverride = AURA_SPRITE_OVERRIDES_BY_NAME[upperName] || {};
-    const spriteHints = isAuraSprite
-      ? parseSpriteHints({
-          columns: spriteOverride.columns ?? explicitCols,
-          rows: spriteOverride.rows ?? explicitRows,
-          frameCount: spriteOverride.frameCount ?? explicitFrameCount,
-          fps: spriteOverride.fps ?? explicitFps,
-          zoom: spriteOverride.zoom ?? 1,
-        })
-      : null;
-    const mappedItem = {
-      id: `aura-${uniqueKey}`,
-      name,
-      imagePath,
-      collection,
-      series,
-      rarity,
-      weightMultiplier,
-      isAuraSprite,
-      spriteHints,
-    };
-    console.log("trait parsing", {
-      traitList,
-      rarity,
-      traitWeight,
-      weightMultiplier,
-      collection,
-      series,
-    });
-    console.log("sprite parsing", {
-      upperName,
-      isAuraSprite,
-      explicitFrameCount,
-      explicitCols,
-      explicitRows,
-      explicitFps,
-      spriteHints,
-    });
-    console.log("mapped cap option", mappedItem);
-    console.groupEnd();
-    mapped.push(mappedItem);
-  }
-  const sliced = mapped.slice(0, 48);
-  console.log("final mapped aura cap options", { count: sliced.length, items: sliced });
-  console.groupEnd();
-  return sliced;
-}
-
 async function fetchAuraCapOptions(sessionLike) {
-  const lookupValue = pickAuraLookupValue(sessionLike);
-  console.groupCollapsed("[AURA][CAP SELECT] fetchAuraCapOptions()");
-  console.log("sessionLike", sessionLike);
-  console.log("lookupValue", lookupValue);
-  if (!lookupValue) {
-    console.log("no lookup value, returning empty aura cap list");
-    console.groupEnd();
-    return [];
-  }
-  const profileUrl = `/api/aura-profile?username=${encodeURIComponent(lookupValue)}`;
-  console.log("profile request", { profileUrl });
-  const profileResponse = await fetch(profileUrl);
-  const profileJson = await profileResponse.json().catch(() => null);
-  console.log("profile response", {
-    ok: profileResponse.ok,
-    status: profileResponse.status,
-    body: profileJson,
-  });
-  const profilePayload = profileJson?.data || profileJson;
-  const profile = profilePayload?.user || profilePayload?.data || profilePayload || {};
-  const userId = String(profile?.id || profile?._id || profile?.userId || "").trim();
-  if (!profileResponse.ok || !userId) {
-    console.log("profile lookup failed or missing userId", { profile, userId });
-    console.groupEnd();
-    return [];
-  }
-  const inventoryUrl = `/api/aura-inventory?userId=${encodeURIComponent(userId)}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`;
-  console.log("inventory request", { inventoryUrl, userId });
-  const inventoryResponse = await fetch(inventoryUrl);
-  const inventoryJson = await inventoryResponse.json().catch(() => null);
-  console.log("inventory response raw json", {
-    ok: inventoryResponse.ok,
-    status: inventoryResponse.status,
-    body: inventoryJson,
-  });
-  const inventoryPayload = inventoryJson?.data || inventoryJson;
-  console.log("inventory normalized payload", inventoryPayload);
-  const options = extractAuraCapOptions(inventoryPayload);
-  console.log("returning aura cap options", options);
-  console.groupEnd();
-  return options;
+  return fetchAuraInventory({ sessionLike, limit: 48 });
 }
 
 async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
@@ -1022,31 +706,6 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         cap.rarity ? ` • Rarity ${cap.rarity}` : ""
       }`;
 
-    const preloadedCapImages = new Set();
-    const preloadCapImages = (caps) =>
-      Promise.allSettled(
-        caps.map(
-          (cap) =>
-            new Promise((resolve) => {
-              if (!cap?.imagePath || preloadedCapImages.has(cap.imagePath)) {
-                resolve();
-                return;
-              }
-              const image = new Image();
-              image.decoding = "async";
-              image.onload = () => {
-                preloadedCapImages.add(cap.imagePath);
-                resolve();
-              };
-              image.onerror = () => {
-                preloadedCapImages.add(cap.imagePath);
-                resolve();
-              };
-              image.src = cap.imagePath;
-            })
-        )
-      );
-
     const stopSpritePreviewAnimation = () => {
       if (spritePreviewRafId !== null) {
         cancelAnimationFrame(spritePreviewRafId);
@@ -1103,9 +762,6 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           </div>
         `;
       }
-      if (visibleCaps.length > 0) {
-        await preloadCapImages(visibleCaps);
-      }
       if (isClosed || requestId !== renderGridRequestId) {
         return;
       }
@@ -1126,11 +782,14 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         return `
           <button
             type="button"
-            class="cap-pick-card${isSelected ? " active" : ""}"
+            class="cap-pick-card is-loading${isSelected ? " active" : ""}"
             data-cap-id="${cap.id}"
             role="option"
             aria-selected="${isSelected ? "true" : "false"}"
           >
+            <span class="cap-pick-card-loader" aria-hidden="true">
+              <span class="cap-loading-spinner"></span>
+            </span>
             <img src="${cap.imagePath}" alt="${cap.name}" loading="lazy" decoding="async" />
             <span class="cap-pick-name">${cap.name}</span>
             <span class="cap-pick-weight">Weight ${capWeightText(cap)}</span>
@@ -1157,6 +816,14 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         if (!capId) return;
         const cap = byId(capId);
         if (!cap?.isAuraSprite) {
+          const img = button.querySelector("img");
+          const markLoaded = () => button.classList.remove("is-loading");
+          if (img?.complete) {
+            markLoaded();
+          } else {
+            img?.addEventListener("load", markLoaded, { once: true });
+            img?.addEventListener("error", markLoaded, { once: true });
+          }
           return;
         }
         const img = button.querySelector("img");
@@ -1179,10 +846,12 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
             config,
             lastFrame: -1,
           });
+          button.classList.remove("is-loading");
           startSpritePreviewAnimation();
         };
         spriteImage.onerror = () => {
           img.style.display = "";
+          button.classList.remove("is-loading");
         };
         spriteImage.src = cap.imagePath;
       });
@@ -1398,7 +1067,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
         const payload = await listPvpRooms({ auraSession });
         const rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
         if (rooms.length === 0) {
-          publicRoomsEl.innerHTML = `<p>No public rooms yet. Create one and let another mfer join.</p>`;
+          publicRoomsEl.innerHTML = `<p>No public rooms yet. Create one and invite another player.</p>`;
           return;
         }
         publicRoomsEl.innerHTML = rooms
@@ -1437,7 +1106,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
             : ""
         }
         <em id="pvpCopyNotice" class="pvp-copy-notice" aria-live="polite"></em>
-        <small>Next step: realtime waiting room + remote turn sync. Room id: ${roomId || "pending"}</small>
+        <small>Waiting for another player. Room id: ${roomId || "pending"}</small>
       `;
       const copyCodeBtn = resultEl.querySelector("#pvpCopyCodeBtn");
       const copyLinkBtn = resultEl.querySelector("#pvpCopyLinkBtn");

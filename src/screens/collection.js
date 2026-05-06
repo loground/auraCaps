@@ -3,6 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DISC_HEIGHT, DISC_RADIUS } from "../game/constants.js";
 import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
+import { fetchAuraInventory } from "../aura/inventory.js";
 
 export function mountCollectionScreen({ app, onBack, auraSession = null }) {
   const hasAuraSession = Boolean(
@@ -10,36 +11,24 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       auraSession?.walletAddress ||
       auraSession?.user
   );
-  const AURA_SPRITE_NAMES = new Set([
-    "FILTHY",
-    "GOLDIE",
-    "ALI",
-    "YODIE",
-    "WILLY",
-    "EAZY",
-    "ANGRYTALIK",
-  ]);
-  const AURA_SPRITE_OVERRIDES_BY_NAME = {
-    ANGRYTALIK: {
-      columns: 4,
-      rows: 1,
-      frameCount: 4,
-      zoom: 1.25,
-    },
-  };
-  const parseSpriteHints = (configLike = {}) => {
-    const columns = Number.parseInt(String(configLike.columns ?? configLike.cols ?? ""), 10);
-    const rows = Number.parseInt(String(configLike.rows ?? ""), 10);
-    const frameCount = Number.parseInt(String(configLike.frameCount ?? configLike.frames ?? ""), 10);
-    const fps = Number(configLike.fps);
-    const zoom = Number(configLike.zoom);
-    return {
-      columns: Number.isFinite(columns) && columns > 0 ? columns : undefined,
-      rows: Number.isFinite(rows) && rows > 0 ? rows : undefined,
-      frameCount: Number.isFinite(frameCount) && frameCount > 0 ? frameCount : undefined,
-      fps: Number.isFinite(fps) && fps > 0 ? fps : 8,
-      zoom: Number.isFinite(zoom) && zoom > 1 ? zoom : undefined,
-    };
+  const AURA_DEBUG_KEY = "aura_debug";
+  const auraDebugLog = (...args) => {
+    try {
+      const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
+      window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__)
+        ? window.__AURA_LOGS__
+        : [];
+      window.__AURA_LOGS__.push({
+        scope: "collection",
+        at: new Date().toISOString(),
+        args,
+      });
+      if (debugEnabled) {
+        console.log("[AURA][COLLECTION][DEBUG]", ...args);
+      }
+    } catch {
+      // Ignore diagnostic logging failures.
+    }
   };
   const resolveSpritePlayback = (image, hints) => {
     const maxFrames = 64;
@@ -783,391 +772,58 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         parsed?.user?.walletAddress ||
         parsed?.user?.address ||
         "";
-      if (!walletAddress && !parsed?.user) {
-        return null;
-      }
+      if (!walletAddress && !parsed?.user) return null;
       return { connected: true, walletAddress, user: parsed?.user || null };
     } catch {
       return null;
     }
   };
 
-  const pickAuraLookupValue = (sessionLike) => {
-    const user = sessionLike?.user || {};
-    const candidates = [
-      sessionLike?.walletAddress,
-      user?.walletAddress,
-      user?.address,
-      user?.username,
-      user?.handle,
-      user?.displayName,
-    ];
-    for (const candidate of candidates) {
-      const value = String(candidate || "").trim();
-      if (value) {
-        return value;
-      }
+  const mapAuraCollectionItem = (item, index) => {
+    const detailsBits = [`Series ${item.series || "beta"}`];
+    if (item.rarity) {
+      detailsBits.push(`Rarity ${item.rarity}`);
     }
-    return "";
-  };
-
-  const toAbsImage = (imageLike) => {
-    const value = String(imageLike || "").trim();
-    if (!value) return "";
-    if (value.startsWith("ipfs://")) {
-      return `https://ipfs.io/ipfs/${value.slice("ipfs://".length)}`;
-    }
-    if (value.startsWith("http://") || value.startsWith("https://") || value.startsWith("/")) {
-      return value;
-    }
-    return `https://ipfs.io/ipfs/${value}`;
-  };
-
-  const RARITY_LABELS = {
-    1: "common",
-    2: "rare",
-    3: "epic",
-    4: "legendary",
-    5: "mythic",
-  };
-
-  const normalizeRarity = (value) => {
-    const rarityNumber = Number.parseInt(String(value ?? ""), 10);
-    if (Number.isFinite(rarityNumber) && RARITY_LABELS[rarityNumber]) {
-      return RARITY_LABELS[rarityNumber];
-    }
-    return String(value || "").trim();
-  };
-
-  const readTraitValue = (traitList, keys) => {
-    const normalizedKeys = keys.map((key) => String(key).toLowerCase());
-    if (!traitList) {
-      return "";
-    }
-    if (!Array.isArray(traitList) && typeof traitList === "object") {
-      for (const [traitKey, directValue] of Object.entries(traitList)) {
-        if (
-          normalizedKeys.includes(String(traitKey).toLowerCase()) &&
-          directValue !== undefined &&
-          directValue !== null &&
-          directValue !== ""
-        ) {
-          return directValue;
-        }
-      }
-    }
-    const rows = Array.isArray(traitList) ? traitList : Object.values(traitList);
-    const found = rows.find((trait) => {
-      const traitName = String(
-        trait?.trait_type ||
-          trait?.traitType ||
-          trait?.key ||
-          trait?.name ||
-          trait?.type ||
-          ""
-      ).toLowerCase();
-      return normalizedKeys.includes(traitName);
-    });
-    return found?.value ?? found?.display_value ?? found?.displayValue ?? "";
-  };
-
-  const parseWeightMultiplier = (value) => {
-    const parsed = Number.parseFloat(String(value ?? "").replace(/x$/i, ""));
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-  };
-
-  const extractInventoryItems = (payload) => {
-    console.groupCollapsed("[AURA][COLLECTION] extractInventoryItems()");
-    console.log("raw normalized inventory payload", payload);
-    const candidates = [
-      payload?.data,
-      payload?.items,
-      payload?.cards,
-      payload?.results,
-      payload?.packCards,
-      payload,
-    ];
-    console.log("candidate containers", {
-      data: payload?.data,
-      items: payload?.items,
-      cards: payload?.cards,
-      results: payload?.results,
-      packCards: payload?.packCards,
-      payload,
-    });
-    let rows = [];
-    for (const candidate of candidates) {
-      if (Array.isArray(candidate)) {
-        rows = candidate;
-        break;
-      }
-    }
-    console.log("selected inventory rows", { count: rows.length, rows });
-    const seen = new Set();
-    const mapped = [];
-    for (const [index, row] of rows.entries()) {
-      const metadata = row?.metadata || row?.card?.metadata || row?.packCard?.metadata || {};
-      const attrs = Array.isArray(metadata?.attributes) ? metadata.attributes : [];
-      const traitList =
-        row?.traitList ||
-        row?.traits ||
-        metadata?.traitList ||
-        metadata?.traits ||
-        row?.card?.traitList ||
-        row?.packCard?.traitList ||
-        [];
-      const name = String(
-        row?.name ||
-          row?.title ||
-          metadata?.name ||
-          row?.card?.name ||
-          row?.packCard?.name ||
-          ""
-      ).trim();
-      const imagePath = toAbsImage(
-        row?.image ||
-          row?.imageUrl ||
-          row?.image_url ||
-          row?.imageURI ||
-          row?.image_uri ||
-          metadata?.image ||
-          metadata?.image_url ||
-          row?.card?.image ||
-          row?.card?.imageUrl ||
-          row?.packCard?.image
-      );
-      const uniqueKey = String(
-        row?.id ||
-          row?._id ||
-          row?.tokenId ||
-          row?.tokenID ||
-          row?.mint ||
-          row?.packCardId ||
-          `${name}-${imagePath}`
-      );
-      console.groupCollapsed(`[AURA][COLLECTION] inventory row ${index}: ${name || "(no name)"}`);
-      console.log("raw row", row);
-      console.log("metadata", metadata);
-      console.log("attributes", attrs);
-      console.log("parsed basics", { uniqueKey, name, imagePath });
-      if (!imagePath || !name || seen.has(uniqueKey)) {
-        console.log("skipped row", {
-          reason: !name ? "missing name" : !imagePath ? "missing imagePath" : "duplicate uniqueKey",
-        });
-        console.groupEnd();
-        continue;
-      }
-      seen.add(uniqueKey);
-      const subtitle = String(
-        metadata?.collection ||
-          metadata?.collectionName ||
-          row?.collectionName ||
-          row?.collection ||
-          "aura collection"
-      ).trim();
-      const rarity = String(metadata?.rarity || row?.rarity || "").trim();
-      const rarityLabel = normalizeRarity(
-        metadata?.rarity ??
-          row?.rarity ??
-          readTraitValue(traitList, ["rarity"])
-      );
-      const series = String(metadata?.series || row?.series || "beta").trim();
-      const upperName = name.toUpperCase();
-      const spriteFlag = AURA_SPRITE_NAMES.has(upperName);
-      const attrLookup = (keys) => {
-        const normalized = keys.map((k) => String(k).toLowerCase());
-        const found = attrs.find((attr) =>
-          normalized.includes(
-            String(attr?.trait_type || attr?.traitType || attr?.key || "").toLowerCase()
-          )
-        );
-        return found?.value ?? found?.display_value ?? "";
-      };
-      const traitWeight = parseWeightMultiplier(
-        readTraitValue(traitList, ["weight", "weightMultiplier", "weight multiplier"])
-      );
-      const weightMultiplier =
-        traitWeight ?? parseWeightMultiplier(metadata?.weight ?? row?.weight) ?? getCapWeightMultiplier(imagePath);
-      let explicitFrameCount;
-      let explicitCols;
-      let explicitRows;
-      let explicitFps;
-      let spriteHints = null;
-      if (spriteFlag) {
-        explicitFrameCount =
-          metadata?.frameCount ??
-          metadata?.frames ??
-          metadata?.spriteFrames ??
-          row?.frameCount ??
-          attrLookup(["frameCount", "frames", "sprite frames", "spriteFrames"]);
-        explicitCols =
-          metadata?.columns ??
-          metadata?.cols ??
-          metadata?.spriteColumns ??
-          row?.columns ??
-          attrLookup(["columns", "cols", "spriteColumns", "sprite columns"]);
-        explicitRows =
-          metadata?.rows ??
-          metadata?.spriteRows ??
-          row?.rows ??
-          attrLookup(["rows", "spriteRows", "sprite rows"]);
-        explicitFps =
-          metadata?.fps ??
-          metadata?.spriteFps ??
-          row?.fps ??
-          attrLookup(["fps", "spriteFps", "sprite fps"]);
-
-        const columns = Number.parseInt(String(explicitCols || ""), 10);
-        const rows = Number.parseInt(String(explicitRows || ""), 10);
-        const frameCount = Number.parseInt(String(explicitFrameCount || ""), 10);
-        const fps = Number(explicitFps);
-
-        const spriteOverride = AURA_SPRITE_OVERRIDES_BY_NAME[upperName] || {};
-        spriteHints = parseSpriteHints({
-          columns: spriteOverride.columns ?? columns,
-          rows: spriteOverride.rows ?? rows,
-          frameCount: spriteOverride.frameCount ?? frameCount,
-          fps: spriteOverride.fps ?? fps,
-          zoom: spriteOverride.zoom ?? 1,
-        });
-      }
-      const detailsBits = [`Series ${series || "beta"}`];
-      if (rarityLabel) {
-        detailsBits.push(`Rarity ${rarityLabel}`);
-      }
-      detailsBits.push(`Weight ${weightMultiplier.toFixed(2)}x`);
-      const mappedItem = {
-        number: mapped.length + 1,
-        name: name,
-        imagePath,
-        subtitle: subtitle,
-        collectionName: subtitle,
-        details: detailsBits.join(" • "),
-        rarity: rarityLabel,
-        weightMultiplier,
-        spriteHints,
-        isAuraSprite: spriteFlag,
-      };
-      console.log("trait parsing", {
-        traitList,
-        rawRarity: rarity,
-        rarityLabel,
-        traitWeight,
-        weightMultiplier,
-      });
-      console.log("sprite parsing", {
-        upperName,
-        spriteFlag,
-        explicitFrameCount: spriteFlag ? explicitFrameCount : undefined,
-        explicitCols: spriteFlag ? explicitCols : undefined,
-        explicitRows: spriteFlag ? explicitRows : undefined,
-        explicitFps: spriteFlag ? explicitFps : undefined,
-        spriteHints,
-      });
-      console.log("mapped collection item", mappedItem);
-      console.groupEnd();
-      mapped.push(mappedItem);
-    }
-    console.log("final mapped collection inventory items", {
-      count: mapped.length,
-      items: mapped,
-    });
-    console.groupEnd();
-    return mapped;
+    detailsBits.push(`Weight ${Number(item.weightMultiplier || 1).toFixed(2)}x`);
+    return {
+      number: index + 1,
+      name: item.name,
+      imagePath: item.imagePath,
+      subtitle: item.collection || "aura collection",
+      collectionName: item.collection || "aura collection",
+      details: detailsBits.join(" • "),
+      rarity: item.rarity || "",
+      weightMultiplier: item.weightMultiplier || 1,
+      spriteHints: item.spriteHints || null,
+      isAuraSprite: Boolean(item.isAuraSprite),
+    };
   };
 
   const loadAuraCollection = async () => {
-    if (!COLLECTIONS.aura) {
-      return;
-    }
-    const session = auraSession || readStoredAuraSession();
-    const lookupValue = pickAuraLookupValue(session);
-    if (!lookupValue) {
-      COLLECTIONS.aura.loading = false;
-      COLLECTIONS.aura.subcollections = {};
-      if (!unmounted) {
-        renderSwitcher();
-        renderSubSwitcher();
-        renderCards();
-      }
-      return;
-    }
-    try {
-      const profileResponse = await fetch(
-        `/api/aura-profile?username=${encodeURIComponent(lookupValue)}`
-      );
-      const profileJson = await profileResponse.json().catch(() => null);
-      console.log("[AURA][COLLECTION] profile lookup response", {
-        lookupValue,
-        ok: profileResponse.ok,
-        status: profileResponse.status,
-        body: profileJson,
-      });
-      const profilePayload = profileJson?.data || profileJson;
-      const profile =
-        profilePayload?.user || profilePayload?.data || profilePayload || {};
-      const userId = String(
-        profile?.id || profile?._id || profile?.userId || ""
-      ).trim();
-      if (!profileResponse.ok || !userId) {
-        COLLECTIONS.aura.loading = false;
-        COLLECTIONS.aura.subcollections = {};
-        if (!unmounted) {
-          renderSwitcher();
-          renderSubSwitcher();
-          renderCards();
-        }
-        return;
-      }
+    if (!COLLECTIONS.aura) return;
 
-      const inventoryResponse = await fetch(
-        `/api/aura-inventory?userId=${encodeURIComponent(
-          userId
-        )}&condensed=true&ownedOnly=true&packType=all&limit=200&page=1`
-      );
-      const inventoryJson = await inventoryResponse.json().catch(() => null);
-      console.log("[AURA][COLLECTION] GET USER INVENTORY raw", {
-        ok: inventoryResponse.ok,
-        status: inventoryResponse.status,
-        userId,
-        body: inventoryJson,
+    try {
+      const inventoryItems = await fetchAuraInventory({
+        sessionLike: auraSession || readStoredAuraSession(),
+        limit: 24,
       });
-      const inventoryPayload = inventoryJson?.data || inventoryJson;
-      console.log("[AURA][COLLECTION] inventory normalized payload", {
-        payload: inventoryPayload,
-      });
-      const items = extractInventoryItems(inventoryPayload).slice(0, 24);
-      console.log(
-        "[AURA][COLLECTION] mapped inventory items",
-        items.map((item) => ({
-          name: item.name,
-          imagePath: item.imagePath,
-          details: item.details,
-          isAuraSprite: item.isAuraSprite,
-          spriteHints: item.spriteHints,
-          parsedWeight: Number(
-            String(item.details || "").match(/Weight\\s+([0-9.]+)x/i)?.[1] || 0
-          ),
-        }))
-      );
+      const items = inventoryItems.map(mapAuraCollectionItem);
+      auraDebugLog("mapped Aura collection inventory items", items);
       COLLECTIONS.aura.loading = false;
       COLLECTIONS.aura.subcollections = groupAuraItemsByCollection(items);
       if (activeCollectionKey === "aura") {
         activeSubKey = Object.keys(COLLECTIONS.aura.subcollections)[0] || "";
       }
-      if (!unmounted) {
-        renderSwitcher();
-        renderSubSwitcher();
-        renderCards();
-      }
-    } catch {
+    } catch (error) {
+      auraDebugLog("failed to load Aura collection", error);
       COLLECTIONS.aura.loading = false;
       COLLECTIONS.aura.subcollections = {};
-      if (!unmounted) {
-        renderSwitcher();
-        renderSubSwitcher();
-        renderCards();
-      }
+    }
+
+    if (!unmounted) {
+      renderSwitcher();
+      renderSubSwitcher();
+      renderCards();
     }
   };
 

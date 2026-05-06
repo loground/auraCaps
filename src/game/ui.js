@@ -51,6 +51,15 @@ export function renderGameUI(app) {
       <p id="statusMove" class="status-move">choose a position to hit</p>
       <p id="statusCpuMove" class="status-cpu-move">computer move: waiting</p>
       <p id="statusScore" class="status-score">r1/4 • you 0 - cpu 0</p>
+      <label class="camera-mode-control">
+        <span>camera</span>
+        <select id="cameraModeSelect" aria-label="Camera mode">
+          <option value="free">Free</option>
+          <option value="follow">Follow cap</option>
+          <option value="wide">Wide scene</option>
+          <option value="dynamic">Dynamic</option>
+        </select>
+      </label>
     </div>
     <div id="centerNotice" class="center-notice" aria-live="polite"></div>
   `;
@@ -68,6 +77,7 @@ export function renderGameUI(app) {
     statusMoveEl: app.querySelector("#statusMove"),
     statusCpuMoveEl: app.querySelector("#statusCpuMove"),
     statusScoreEl: app.querySelector("#statusScore"),
+    cameraModeSelectEl: app.querySelector("#cameraModeSelect"),
     centerNoticeEl: app.querySelector("#centerNotice"),
     launchBtn: app.querySelector("#launchBtn"),
     resetBtn: app.querySelector("#resetBtn"),

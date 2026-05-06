@@ -1,7 +1,6 @@
 {
-  "name": "vibecaps",
-  "version": "0.0.0",
-  "private": true,
+  "name": "aura-caps",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

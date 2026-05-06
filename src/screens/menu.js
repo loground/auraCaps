@@ -85,6 +85,7 @@ function pickFirstString(...values) {
 
 function auraDebugLog(...args) {
   try {
+    const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
     const entry = {
       scope: "menu",
       at: new Date().toISOString(),
@@ -94,8 +95,7 @@ function auraDebugLog(...args) {
       ? window.__AURA_LOGS__
       : [];
     window.__AURA_LOGS__.push(entry);
-    console.log("[AURA][MENU]", ...args);
-    if (window.localStorage.getItem(AURA_DEBUG_KEY) === "1") {
+    if (debugEnabled) {
       console.log("[AURA][MENU][DEBUG]", ...args);
     }
   } catch {
