@@ -1,5 +1,13 @@
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
+import {
+  BatchedRenderer,
+  ConstantColor,
+  ConstantValue,
+  IntervalValue,
+  ParticleSystem,
+  SphereEmitter,
+} from "three.quarks";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
@@ -36,6 +44,43 @@ const HELL_FLOOR_SPAWN_LIFT = 0.16;
 const BRAINROT_FLOOR_TOP_Y = LOWER_DISC_START_Y - DISC_HALF_HEIGHT;
 const PVP_TRAJECTORY_CAPTURE_STEPS = 4;
 const PVP_TRAJECTORY_MAX_FRAMES = 180;
+const IMPACT_VFX_COOLDOWN_MS = 120;
+const IMPACT_VFX_LIFETIME_MS = 1200;
+const IMPACT_VFX_PROFILES = {
+  spark: {
+    duration: 0.18,
+    radius: 0.025,
+    thickness: 0.35,
+    life: [0.16, 0.32],
+    speed: [3.2, 6.2],
+    size: [0.055, 0.13],
+    count: 24,
+    color: [1, 0.62, 0.18, 1],
+    cooldown: 95,
+  },
+  burst: {
+    duration: 0.24,
+    radius: 0.045,
+    thickness: 0.5,
+    life: [0.24, 0.52],
+    speed: [5.2, 9.4],
+    size: [0.09, 0.22],
+    count: 42,
+    color: [1, 0.43, 0.1, 1],
+    cooldown: 120,
+  },
+  explosion: {
+    duration: 0.32,
+    radius: 0.085,
+    thickness: 0.8,
+    life: [0.34, 0.72],
+    speed: [8.5, 15.5],
+    size: [0.16, 0.36],
+    count: 82,
+    color: [1, 0.24, 0.03, 1],
+    cooldown: 180,
+  },
+};
 const JUNGLE_BAY_CAP_PATHS = [
   "/caps/jb/jbcap1.webp",
   "/caps/jbcap2.webp",
@@ -181,8 +226,12 @@ export class DiscDropGame {
     ];
     preloadSounds([...this.throwSfxPaths, ...this.winSfxPaths, "/sounds/hit.mp3"]);
     this.lastHitSfxAt = 0;
+    this.lastImpactVfxAt = 0;
     this.slammerMiniDots = [];
     this.animatedSpriteTextures = [];
+    this.impactVfx = null;
+    this.impactVfxMaterial = null;
+    this.activeImpactVfx = [];
     this.cameraMode = "free";
     this.cameraHomePosition = new THREE.Vector3();
     this.cameraHomeTarget = new THREE.Vector3();
@@ -204,6 +253,7 @@ export class DiscDropGame {
     this.tableMaterial = worldView.tableMaterial;
     this.skyUniforms = worldView.skyUniforms;
     this.skyBackdrop = worldView.skyBackdrop;
+    this.setupImpactVfx();
 
     await RAPIER.init();
     this.setupWorld();
@@ -2831,6 +2881,130 @@ export class DiscDropGame {
     mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
   }
 
+  setupImpactVfx() {
+    this.impactVfx = new BatchedRenderer();
+    this.impactVfx.name = "cap-impact-vfx";
+    this.scene.add(this.impactVfx);
+    this.impactVfxMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffa24a,
+      transparent: true,
+      opacity: 0.82,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+  }
+
+  resolveImpactVfxProfile(handleA, handleB) {
+    const bodyA = this.getDiscBodyByColliderHandle(handleA);
+    const bodyB = this.getDiscBodyByColliderHandle(handleB);
+    const velA = bodyA?.linvel?.();
+    const velB = bodyB?.linvel?.();
+    const relativeSpeed =
+      velA && velB
+        ? Math.hypot(velA.x - velB.x, velA.y - velB.y, velA.z - velB.z)
+        : velA
+          ? Math.hypot(velA.x, velA.y, velA.z)
+          : 0;
+    const power = Number(this.settings.power || 0);
+    const impactScore =
+      relativeSpeed + power * (this.gameMode === "slammer" ? 0.16 : 0.11);
+
+    if (power >= 82 || impactScore >= 42) {
+      return IMPACT_VFX_PROFILES.explosion;
+    }
+    if (power >= 48 || impactScore >= 24) {
+      return IMPACT_VFX_PROFILES.burst;
+    }
+    return IMPACT_VFX_PROFILES.spark;
+  }
+
+  createImpactExplosion(position, profile = IMPACT_VFX_PROFILES.burst) {
+    if (!this.impactVfx || !position) {
+      return;
+    }
+    const countMultiplier = this.gameMode === "slammer" ? 1.22 : 1;
+
+    const system = new ParticleSystem({
+      autoDestroy: false,
+      looping: false,
+      duration: profile.duration,
+      worldSpace: true,
+      shape: new SphereEmitter({
+        radius: profile.radius,
+        thickness: profile.thickness,
+      }),
+      startLife: new IntervalValue(profile.life[0], profile.life[1]),
+      startSpeed: new IntervalValue(profile.speed[0], profile.speed[1]),
+      startSize: new IntervalValue(profile.size[0], profile.size[1]),
+      startColor: new ConstantColor(new THREE.Vector4(...profile.color)),
+      emissionOverTime: new ConstantValue(0),
+      emissionBursts: [
+        {
+          time: 0,
+          count: new ConstantValue(Math.round(profile.count * countMultiplier)),
+          cycle: 1,
+          interval: 0,
+          probability: 1,
+        },
+      ],
+      material: this.impactVfxMaterial,
+    });
+
+    system.emitter.position.copy(position);
+    system.emitter.renderOrder = 35;
+    this.scene.add(system.emitter);
+    this.impactVfx.addSystem(system);
+    system.restart();
+    this.activeImpactVfx.push({
+      system,
+      expiresAt:
+        performance.now() +
+        Math.max(IMPACT_VFX_LIFETIME_MS, profile.life[1] * 1000 + 550),
+    });
+  }
+
+  updateImpactVfx(delta) {
+    if (!this.impactVfx) {
+      return;
+    }
+    this.impactVfx.update(delta);
+    const now = performance.now();
+    for (let i = this.activeImpactVfx.length - 1; i >= 0; i -= 1) {
+      const entry = this.activeImpactVfx[i];
+      if (now < entry.expiresAt) {
+        continue;
+      }
+      entry.system?.dispose?.();
+      this.activeImpactVfx.splice(i, 1);
+    }
+  }
+
+  getDiscBodyByColliderHandle(handle) {
+    if (this.upperDiscCollider?.handle === handle) {
+      return this.upperDiscBody;
+    }
+    const floorIndex = this.floorDiscColliders.findIndex(
+      (collider) => collider.handle === handle
+    );
+    return floorIndex >= 0 ? this.floorDiscBodies[floorIndex] : null;
+  }
+
+  getDiscCollisionPoint(handleA, handleB) {
+    const bodyA = this.getDiscBodyByColliderHandle(handleA);
+    const bodyB = this.getDiscBodyByColliderHandle(handleB);
+    const posA = bodyA?.translation?.();
+    const posB = bodyB?.translation?.();
+    if (posA && posB) {
+      return new THREE.Vector3(
+        (posA.x + posB.x) * 0.5,
+        (posA.y + posB.y) * 0.5,
+        (posA.z + posB.z) * 0.5
+      );
+    }
+    const fallback = posA || posB;
+    return fallback ? new THREE.Vector3(fallback.x, fallback.y, fallback.z) : null;
+  }
+
   isDiscCollisionPair(handleA, handleB) {
     if (!this.upperDiscCollider) {
       return false;
@@ -2860,6 +3034,15 @@ export class DiscDropGame {
       }
       this.lastHitSfxAt = now;
       this.playSfx("/sounds/hit.mp3", 0.82);
+      const profile = this.resolveImpactVfxProfile(handleA, handleB);
+      const cooldown = profile.cooldown || IMPACT_VFX_COOLDOWN_MS;
+      if (now - this.lastImpactVfxAt >= cooldown) {
+        this.lastImpactVfxAt = now;
+        this.createImpactExplosion(
+          this.getDiscCollisionPoint(handleA, handleB),
+          profile
+        );
+      }
     });
   }
 
@@ -2984,6 +3167,7 @@ export class DiscDropGame {
     this.updatePvpTrajectoryReplay();
     this.updateMiniMap();
     this.updateGameplayCamera(delta);
+    this.updateImpactVfx(delta);
 
     this.controls.update();
 
@@ -3135,6 +3319,16 @@ export class DiscDropGame {
     }
     this.lavaUniforms.length = 0;
     this.animatedSpriteTextures.length = 0;
+    for (const entry of this.activeImpactVfx) {
+      entry.system?.dispose?.();
+    }
+    this.activeImpactVfx.length = 0;
+    if (this.impactVfx) {
+      this.scene.remove(this.impactVfx);
+      this.impactVfx = null;
+    }
+    this.impactVfxMaterial?.dispose?.();
+    this.impactVfxMaterial = null;
     this.clearArenaSurfacePhysics();
     this.clearArenaObstacles();
     this.renderer.dispose();
