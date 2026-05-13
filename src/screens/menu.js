@@ -34,6 +34,31 @@ const HEAVEN_MENU_TUNING = {
   bloomRadius: 0.2,
   bloomThreshold: 0.95,
 };
+const MOGGMON_MODEL_PATHS = Array.from(
+  { length: 20 },
+  (_, idx) => `/moggmons/compressed${idx === 0 ? "" : idx + 1}.glb`
+).filter((path) => path !== "/moggmons/compressed10.glb");
+
+function pickRandomUnique(values, count) {
+  const pool = [...values];
+  const picked = [];
+  while (pool.length > 0 && picked.length < count) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
+function disposeObject3D(root) {
+  root?.traverse?.((child) => {
+    child.geometry?.dispose?.();
+    if (Array.isArray(child.material)) {
+      child.material.forEach((material) => material?.dispose?.());
+    } else {
+      child.material?.dispose?.();
+    }
+  });
+}
 
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
@@ -1218,6 +1243,8 @@ export function mountMenuScreen({
 
   let demon = null;
   let demonPivot = null;
+  const sideCharacterPivots = [];
+  const sideCharacterPaths = pickRandomUnique(MOGGMON_MODEL_PATHS, 2);
   const dracoLoader = new DRACOLoader();
   dracoLoader.setDecoderPath("/draco/");
   const ktx2Loader = new KTX2Loader();
@@ -1240,6 +1267,79 @@ export function mountMenuScreen({
   const brainrotMenuYMobile = 1.02;
   const brainrotMenuScaleDesktop = 9.2;
   const brainrotMenuScaleMobile = 7.6;
+
+  const applySideCharacterLayout = () => {
+    const isMobile = window.innerWidth <= 640;
+    const positions = [
+      {
+        x: isMobile ? -3.5 : -4.95,
+        y: isMobile ? 6 : -1,
+        z: isMobile ? -1.05 : -1.2,
+        rotationY: -Math.PI * 0.5,
+      },
+      {
+        x: isMobile ? 3.5 : 4.95,
+        y: isMobile ? 6 : -1,
+        z: isMobile ? -1.05 : -1.2,
+        rotationY: -Math.PI * 0.5,
+      },
+    ];
+    sideCharacterPivots.forEach((pivot, idx) => {
+      const layout = positions[idx] || positions[0];
+      const targetHeight = isMobile ? 2.15 : 3.35;
+      const normalizedHeight = Math.max(0.001, pivot.userData.normalizedHeight || 1);
+      pivot.position.set(layout.x, layout.y, layout.z);
+      pivot.rotation.y = layout.rotationY;
+      pivot.scale.setScalar(targetHeight / normalizedHeight);
+      pivot.userData.baseY = layout.y;
+      pivot.userData.baseRotationY = layout.rotationY;
+    });
+  };
+
+  const loadSideCharacters = () => {
+    sideCharacterPaths.forEach((modelPath, idx) => {
+      gltfLoader.load(
+        modelPath,
+        (gltf) => {
+          const model = gltf.scene;
+          model.traverse((child) => {
+            if (!child.isMesh) {
+              return;
+            }
+            child.castShadow = true;
+            child.receiveShadow = true;
+            if (child.material && !Array.isArray(child.material)) {
+              child.material.roughness = Math.min(child.material.roughness ?? 1, 0.82);
+              child.material.needsUpdate = true;
+            }
+          });
+
+          const bbox = new THREE.Box3().setFromObject(model);
+          const center = new THREE.Vector3();
+          const size = new THREE.Vector3();
+          bbox.getCenter(center);
+          bbox.getSize(size);
+          model.position.sub(center);
+
+          const pivot = new THREE.Group();
+          pivot.name = `moggmon-side-character-${idx + 1}`;
+          pivot.userData.normalizedHeight = size.y || 1;
+          pivot.userData.floatPhase = Math.random() * Math.PI * 2;
+          pivot.add(model);
+          sideCharacterPivots[idx] = pivot;
+          scene.add(pivot);
+          applySideCharacterLayout();
+        },
+        undefined,
+        () => {
+          // Side characters are decorative, so failed loads should not block the menu.
+        }
+      );
+    });
+  };
+
+  loadSideCharacters();
+
   gltfLoader.load(
     menuModelPath,
     (gltf) => {
@@ -1851,6 +1951,16 @@ export function mountMenuScreen({
       titleMesh.position.y = 8.3 + Math.sin(t * 1.8) * 0.2;
       titleMesh.rotation.y = Math.sin(t * 0.55) * 0.08;
     }
+    sideCharacterPivots.forEach((pivot, idx) => {
+      if (!pivot) {
+        return;
+      }
+      const phase = pivot.userData.floatPhase || 0;
+      pivot.position.y =
+        (pivot.userData.baseY ?? pivot.position.y) + Math.sin(t * 1.2 + phase) * 0.08;
+      pivot.rotation.y =
+        (pivot.userData.baseRotationY ?? 0) + Math.sin(t * 0.75 + idx) * 0.08;
+    });
     if (hellBackground) {
       hellBackground.uniforms.iTime.value = t;
     }
@@ -1929,6 +2039,7 @@ export function mountMenuScreen({
             : 1.5;
       demonPivot.position.set(0, y, -1);
     }
+    applySideCharacterLayout();
   };
 
   handleResize();
@@ -1985,6 +2096,11 @@ export function mountMenuScreen({
     for (const child of brainrotGround?.group.children ?? []) {
       child.geometry?.dispose?.();
       child.material?.dispose?.();
+    }
+    for (const pivot of sideCharacterPivots) {
+      if (!pivot) continue;
+      scene.remove(pivot);
+      disposeObject3D(pivot);
     }
     hellEmbers?.points.geometry.dispose();
     hellEmbers?.points.material.dispose();
