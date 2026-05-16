@@ -42,6 +42,16 @@ const SLAMMER_DENSITY_MULT = 2.45;
 const MATCH_TOTAL_ROUNDS = 4;
 const HELL_FLOOR_SPAWN_LIFT = 0.16;
 const BRAINROT_FLOOR_TOP_Y = LOWER_DISC_START_Y - DISC_HALF_HEIGHT;
+const HEAVEN_CLASSIC_PHYSICS = {
+  floorFriction: 0.22,
+  floorRestitution: 0.78,
+  lowerFriction: 0.055,
+  lowerRestitution: 0.92,
+  lowerDensityScale: 0.82,
+  lowerLinearDamping: 0.006,
+  lowerAngularDamping: 0.00045,
+  impactCooldownMs: 140,
+};
 const PVP_TRAJECTORY_CAPTURE_STEPS = 4;
 const PVP_TRAJECTORY_MAX_FRAMES = 180;
 const IMPACT_VFX_COOLDOWN_MS = 120;
@@ -232,6 +242,7 @@ export class DiscDropGame {
     this.impactVfx = null;
     this.impactVfxMaterial = null;
     this.activeImpactVfx = [];
+    this.lastHeavenClassicImpactBoostAt = 0;
     this.cameraMode = "free";
     this.cameraHomePosition = new THREE.Vector3();
     this.cameraHomeTarget = new THREE.Vector3();
@@ -1952,22 +1963,33 @@ export class DiscDropGame {
     this.arenaObstacleMeshes.push(mesh);
   }
 
+  isHeavenClassicPhysicsBoostEnabled() {
+    return this.theme === "heaven" && this.gameMode === "classic";
+  }
+
   applyArena(key) {
     this.activeArenaKey = key;
     const arena = ARENA_CONFIGS[this.activeArenaKey];
+    const heavenClassicBoost = this.isHeavenClassicPhysicsBoostEnabled();
+    const floorFriction = heavenClassicBoost
+      ? Math.min(arena.floorFriction, HEAVEN_CLASSIC_PHYSICS.floorFriction)
+      : arena.floorFriction;
+    const floorRestitution = heavenClassicBoost
+      ? Math.max(arena.floorRestitution, HEAVEN_CLASSIC_PHYSICS.floorRestitution)
+      : arena.floorRestitution;
 
     this.world.gravity = { x: 0, y: arena.gravity, z: 0 };
-    this.floorCollider.setFriction(arena.floorFriction);
-    this.floorCollider.setRestitution(arena.floorRestitution);
-    this.catchFloorCollider.setFriction(Math.max(0.25, arena.floorFriction));
+    this.floorCollider.setFriction(floorFriction);
+    this.floorCollider.setRestitution(floorRestitution);
+    this.catchFloorCollider.setFriction(Math.max(0.25, floorFriction));
     this.catchFloorCollider.setRestitution(0.22);
 
     if (this.useArenaMeshFloor && this.arenaSurfaceColliders.length > 0) {
       for (const collider of this.arenaSurfaceColliders) {
         const surfaceFriction =
-          this.theme === "hell" ? Math.min(arena.floorFriction, 0.22) : arena.floorFriction;
+          this.theme === "hell" ? Math.min(floorFriction, 0.22) : floorFriction;
         collider.setFriction(surfaceFriction);
-        collider.setRestitution(arena.floorRestitution);
+        collider.setRestitution(floorRestitution);
       }
     }
 
@@ -2096,6 +2118,15 @@ export class DiscDropGame {
       this.upperDiscBody.setSoftCcdPrediction(0.34);
       this.minLaunchClearance = LOWER_DISC_START_Y + stackCount * stackStep + 0.75;
     } else {
+      const heavenClassicBoost = this.isHeavenClassicPhysicsBoostEnabled();
+      const lowerFriction = heavenClassicBoost
+        ? Math.min(arena.lowerFriction, HEAVEN_CLASSIC_PHYSICS.lowerFriction)
+        : arena.lowerFriction;
+      const lowerRestitution = heavenClassicBoost
+        ? Math.max(arena.lowerRestitution, HEAVEN_CLASSIC_PHYSICS.lowerRestitution)
+        : arena.lowerRestitution;
+      const lowerDensity = arena.lowerDensity * textureWeight(this.lowerCapTexture) *
+        (heavenClassicBoost ? HEAVEN_CLASSIC_PHYSICS.lowerDensityScale : 1);
       this.lowerDiscBody = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.dynamic().setTranslation(
           lowerStart.x,
@@ -2103,16 +2134,20 @@ export class DiscDropGame {
           lowerStart.z
         )
       );
-      this.lowerDiscBody.setLinearDamping(0.015);
-      this.lowerDiscBody.setAngularDamping(0.0016);
+      this.lowerDiscBody.setLinearDamping(
+        heavenClassicBoost ? HEAVEN_CLASSIC_PHYSICS.lowerLinearDamping : 0.015
+      );
+      this.lowerDiscBody.setAngularDamping(
+        heavenClassicBoost ? HEAVEN_CLASSIC_PHYSICS.lowerAngularDamping : 0.0016
+      );
       this.lowerDiscBody.setAdditionalSolverIterations(8);
       this.lowerDiscBody.enableCcd(true);
       this.lowerDiscBody.setSoftCcdPrediction(0.3);
       this.lowerDiscCollider = this.world.createCollider(
         RAPIER.ColliderDesc.cylinder(DISC_HEIGHT * 0.5, DISC_RADIUS)
-          .setFriction(arena.lowerFriction)
-          .setRestitution(arena.lowerRestitution)
-          .setDensity(arena.lowerDensity * textureWeight(this.lowerCapTexture))
+          .setFriction(lowerFriction)
+          .setRestitution(lowerRestitution)
+          .setDensity(lowerDensity)
           .setContactSkin(0.0008)
           .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
         this.lowerDiscBody
@@ -3020,6 +3055,66 @@ export class DiscDropGame {
     return false;
   }
 
+  applyHeavenClassicImpactBoost(handleA, handleB) {
+    if (!this.isHeavenClassicPhysicsBoostEnabled() || !this.upperDiscCollider) {
+      return;
+    }
+
+    const now = performance.now();
+    if (
+      now - this.lastHeavenClassicImpactBoostAt <
+      HEAVEN_CLASSIC_PHYSICS.impactCooldownMs
+    ) {
+      return;
+    }
+
+    const upperHandle = this.upperDiscCollider.handle;
+    const lowerHandle = handleA === upperHandle ? handleB : handleA;
+    const lowerBody = this.getDiscBodyByColliderHandle(lowerHandle);
+    const upperBody = this.upperDiscBody;
+    if (!lowerBody || !upperBody || lowerBody === upperBody) {
+      return;
+    }
+
+    const upperPos = upperBody.translation();
+    const lowerPos = lowerBody.translation();
+    const upperVel = upperBody.linvel();
+    const impactSpeed = Math.hypot(upperVel.x, upperVel.y, upperVel.z);
+    const power01 = THREE.MathUtils.clamp((this.settings.power || 0) / 100, 0, 1);
+    const kickDir = new THREE.Vector3(
+      lowerPos.x - upperPos.x,
+      0,
+      lowerPos.z - upperPos.z
+    );
+    if (kickDir.lengthSq() < 0.0001) {
+      kickDir.set(1, 0, 0);
+    } else {
+      kickDir.normalize();
+    }
+
+    const lift = Math.min(2.6, 0.42 + power01 * 1.15 + impactSpeed * 0.024);
+    const sideKick = Math.min(1.15, 0.22 + power01 * 0.62 + impactSpeed * 0.012);
+    const spin = Math.min(2.1, 0.28 + power01 * 1.35 + impactSpeed * 0.018);
+
+    lowerBody.applyImpulse(
+      {
+        x: kickDir.x * sideKick,
+        y: lift,
+        z: kickDir.z * sideKick,
+      },
+      true
+    );
+    lowerBody.applyTorqueImpulse(
+      {
+        x: kickDir.z * spin,
+        y: power01 * 0.28,
+        z: -kickDir.x * spin,
+      },
+      true
+    );
+    this.lastHeavenClassicImpactBoostAt = now;
+  }
+
   consumeCollisionSfxEvents() {
     if (!this.eventQueue) {
       return;
@@ -3034,6 +3129,7 @@ export class DiscDropGame {
       }
       this.lastHitSfxAt = now;
       this.playSfx("/sounds/hit.mp3", 0.82);
+      this.applyHeavenClassicImpactBoost(handleA, handleB);
       const profile = this.resolveImpactVfxProfile(handleA, handleB);
       const cooldown = profile.cooldown || IMPACT_VFX_COOLDOWN_MS;
       if (now - this.lastImpactVfxAt >= cooldown) {
