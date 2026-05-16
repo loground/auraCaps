@@ -50,6 +50,7 @@ const HEAVEN_CLASSIC_PHYSICS = {
   lowerDensityScale: 0.82,
   lowerLinearDamping: 0.006,
   lowerAngularDamping: 0.00045,
+  maxBoostHeightAboveFloor: 0.24,
   impactCooldownMs: 140,
 };
 const PVP_TRAJECTORY_CAPTURE_STEPS = 4;
@@ -3078,6 +3079,11 @@ export class DiscDropGame {
 
     const upperPos = upperBody.translation();
     const lowerPos = lowerBody.translation();
+    const floorY = this.getArenaSurfaceSpawnY(lowerPos.x, lowerPos.z, LOWER_DISC_START_Y);
+    if (lowerPos.y > floorY + HEAVEN_CLASSIC_PHYSICS.maxBoostHeightAboveFloor) {
+      return;
+    }
+
     const upperVel = upperBody.linvel();
     const impactSpeed = Math.hypot(upperVel.x, upperVel.y, upperVel.z);
     const power01 = THREE.MathUtils.clamp((this.settings.power || 0) / 100, 0, 1);
@@ -3092,9 +3098,9 @@ export class DiscDropGame {
       kickDir.normalize();
     }
 
-    const lift = Math.min(2.6, 0.42 + power01 * 1.15 + impactSpeed * 0.024);
-    const sideKick = Math.min(1.15, 0.22 + power01 * 0.62 + impactSpeed * 0.012);
-    const spin = Math.min(2.1, 0.28 + power01 * 1.35 + impactSpeed * 0.018);
+    const lift = Math.min(1.65, 0.28 + power01 * 0.78 + impactSpeed * 0.015);
+    const sideKick = Math.min(0.42, 0.08 + power01 * 0.22 + impactSpeed * 0.004);
+    const spin = Math.min(1.65, 0.24 + power01 * 1.05 + impactSpeed * 0.012);
 
     lowerBody.applyImpulse(
       {
