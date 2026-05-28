@@ -7,6 +7,7 @@ import { playSound, preloadSounds, unlockSounds } from "./sound.js";
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
 const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "brainrot"];
+const DEFAULT_THEME = "jungle-bay";
 const SOUND_PATHS = [
   "/sounds/menuHover.mp3",
   "/sounds/throw.mp3",
@@ -338,15 +339,14 @@ let pvpModulePromise = null;
 
 function pickRefreshTheme() {
   try {
-    const lastTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-    const pool = THEME_OPTIONS.filter((theme) => theme !== lastTheme);
-    const selectedPool = pool.length > 0 ? pool : THEME_OPTIONS;
-    const selected =
-      selectedPool[Math.floor(Math.random() * selectedPool.length)] || "hell";
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const selected = THEME_OPTIONS.includes(storedTheme)
+      ? storedTheme
+      : DEFAULT_THEME;
     window.localStorage.setItem(THEME_STORAGE_KEY, selected);
     return selected;
   } catch {
-    return THEME_OPTIONS[Math.floor(Math.random() * THEME_OPTIONS.length)] || "hell";
+    return DEFAULT_THEME;
   }
 }
 
@@ -354,57 +354,56 @@ function showPlaySetupModal({ theme }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "play-setup-modal";
-
-    const arenaKeys = Object.keys(ARENA_CONFIGS);
-    const arenaOptions = arenaKeys
-      .map(
-        (key) =>
-          `<option value="${key}">${ARENA_CONFIGS[key]?.label ?? key}</option>`
-      )
-      .join("");
+    const canSelectPvp = hasAuraSession(auraSession || loadAuraSession());
 
     overlay.innerHTML = `
       <div class="play-setup-backdrop"></div>
       <div class="play-setup-panel">
         <button id="setupCloseBtn" class="play-setup-close" type="button" aria-label="Close setup">×</button>
-        <h2>Choose Battle Setup</h2>
-        <p>Select map and mode before launching the round.</p>
-        <div class="mode-picker">
-          <span class="mode-label">Mode</span>
-          <div class="mode-buttons">
-            <button id="setupModeClassicBtn" class="mode-btn active" type="button">Classic</button>
-            <button id="setupModeSlammerBtn" class="mode-btn" type="button">Slammer</button>
+        <h2 id="setupTitle">Choose Game Mode</h2>
+        <p id="setupIntro">Pick the rules first. Battle type comes next.</p>
+        <div id="setupModeStep" class="setup-step">
+          <div class="mode-buttons setup-mode-buttons">
+            <button id="setupModeClassicBtn" class="mode-btn setup-mode-card active" type="button">
+              Classic
+            </button>
+            <button id="setupModeSlammerBtn" class="mode-btn setup-mode-card" type="button">
+              Slammer
+            </button>
           </div>
+          <div class="setup-rules-preview">
+            <img id="setupRulesGif" src="/gameImgs/rulesClassic.gif" alt="Classic mode rules preview" />
+          </div>
+          <p id="setupModeHint" class="setup-hint">
+            Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. No borders, so aim carefully.
+          </p>
         </div>
-        <p id="setupModeHint" class="setup-hint">
-          Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. The map has no borders, so aim carefully.
-        </p>
-        <div class="mode-picker">
+        <div id="setupBattleStep" class="setup-step hidden">
           <span class="mode-label">Battle Mode</span>
           <div class="mode-buttons">
             <button id="setupBattleTrainingBtn" class="mode-btn" type="button">Training</button>
             <button id="setupBattleVsAiBtn" class="mode-btn active" type="button">Vs AI</button>
-            <button id="setupBattlePvpBtn" class="mode-btn" type="button">PvP</button>
+            <button id="setupBattlePvpBtn" class="mode-btn" type="button" ${
+              canSelectPvp ? "" : 'disabled title="Log in with Aura to play PvP"'
+            }>PvP</button>
           </div>
+          <p id="setupBattleHint" class="setup-hint">
+            Vs AI: 4 rounds against computer. Best score wins the match.
+          </p>
         </div>
-        <p id="setupBattleHint" class="setup-hint">
-          Vs AI: 4 rounds against computer. Best score wins the match.
-        </p>
-        <label>
-          Map
-          <select id="setupArenaSelect">${arenaOptions}</select>
-        </label>
-        <p id="setupMapHint" class="setup-hint"></p>
         <div class="play-setup-actions">
-          <button id="setupLaunchBtn" type="button">next</button>
+          <button id="setupBackBtn" class="hidden" type="button">Back</button>
+          <button id="setupLaunchBtn" type="button">Next</button>
         </div>
       </div>
     `;
 
     app.appendChild(overlay);
 
-    const arenaSelect = overlay.querySelector("#setupArenaSelect");
-    const mapHint = overlay.querySelector("#setupMapHint");
+    const title = overlay.querySelector("#setupTitle");
+    const intro = overlay.querySelector("#setupIntro");
+    const modeStep = overlay.querySelector("#setupModeStep");
+    const battleStep = overlay.querySelector("#setupBattleStep");
     const battleTrainingBtn = overlay.querySelector("#setupBattleTrainingBtn");
     const battleVsAiBtn = overlay.querySelector("#setupBattleVsAiBtn");
     const battlePvpBtn = overlay.querySelector("#setupBattlePvpBtn");
@@ -412,26 +411,14 @@ function showPlaySetupModal({ theme }) {
     const modeClassicBtn = overlay.querySelector("#setupModeClassicBtn");
     const modeSlammerBtn = overlay.querySelector("#setupModeSlammerBtn");
     const modeHint = overlay.querySelector("#setupModeHint");
+    const rulesGif = overlay.querySelector("#setupRulesGif");
     const closeBtn = overlay.querySelector("#setupCloseBtn");
+    const backBtn = overlay.querySelector("#setupBackBtn");
     const launchBtn = overlay.querySelector("#setupLaunchBtn");
     const backdrop = overlay.querySelector(".play-setup-backdrop");
     let selectedBattleMode = "vs-ai";
     let selectedMode = "classic";
-
-    if (arenaSelect) {
-      arenaSelect.value = arenaKeys.includes(DEFAULT_ARENA_KEY)
-        ? DEFAULT_ARENA_KEY
-        : arenaKeys[0];
-    }
-
-    const updateMapHint = () => {
-      if (!mapHint) {
-        return;
-      }
-      const arenaKey = arenaSelect?.value || DEFAULT_ARENA_KEY;
-      mapHint.textContent = ARENA_CONFIGS[arenaKey]?.hint || "";
-    };
-    updateMapHint();
+    let setupStep = "mode";
 
     const updateModeUI = () => {
       if (!modeHint) {
@@ -439,10 +426,20 @@ function showPlaySetupModal({ theme }) {
       }
       modeClassicBtn?.classList.toggle("active", selectedMode === "classic");
       modeSlammerBtn?.classList.toggle("active", selectedMode === "slammer");
+      if (rulesGif) {
+        rulesGif.src =
+          selectedMode === "slammer"
+            ? "/gameImgs/rulesSlammer.gif"
+            : "/gameImgs/rulesClassic.gif";
+        rulesGif.alt =
+          selectedMode === "slammer"
+            ? "Slammer mode rules preview"
+            : "Classic mode rules preview";
+      }
       modeHint.textContent =
         selectedMode === "slammer"
-          ? "Slammer: Throw a heavy slammer-cap into 6 stacked caps on the floor. Turn more caps faces up than your opponent to win. Map has borders, unleash your full power of throw."
-          : "Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. The map has no borders, so aim carefully.";
+          ? "Slammer: Throw a heavy slammer-cap into 6 stacked caps on the floor. Turn more caps face up than your opponent to win. Borders keep the chaos in play, so unleash the full throw."
+          : "Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. No borders, so aim carefully.";
     };
     updateModeUI();
 
@@ -462,6 +459,25 @@ function showPlaySetupModal({ theme }) {
     };
     updateBattleModeUI();
 
+    const updateStepUI = () => {
+      const isBattleStep = setupStep === "battle";
+      modeStep?.classList.toggle("hidden", isBattleStep);
+      battleStep?.classList.toggle("hidden", !isBattleStep);
+      backBtn?.classList.toggle("hidden", !isBattleStep);
+      if (title) {
+        title.textContent = isBattleStep ? "Choose Battle Mode" : "Choose Game Mode";
+      }
+      if (intro) {
+        intro.textContent = isBattleStep
+          ? "Select how you want to play this battle."
+          : "Pick the rules first. Battle type comes next.";
+      }
+      if (launchBtn) {
+        launchBtn.textContent = "Next";
+      }
+    };
+    updateStepUI();
+
     const onModeClassic = () => {
       selectedMode = "classic";
       updateModeUI();
@@ -479,15 +495,22 @@ function showPlaySetupModal({ theme }) {
       updateBattleModeUI();
     };
     const onBattlePvp = () => {
+      if (!canSelectPvp) {
+        return;
+      }
       selectedBattleMode = "pvp";
       updateBattleModeUI();
+    };
+    const onBack = () => {
+      setupStep = "mode";
+      updateStepUI();
     };
     battleTrainingBtn?.addEventListener("click", onBattleTraining);
     battleVsAiBtn?.addEventListener("click", onBattleVsAi);
     battlePvpBtn?.addEventListener("click", onBattlePvp);
     modeClassicBtn?.addEventListener("click", onModeClassic);
     modeSlammerBtn?.addEventListener("click", onModeSlammer);
-    arenaSelect?.addEventListener("change", updateMapHint);
+    backBtn?.addEventListener("click", onBack);
 
     const cleanup = () => {
       battleTrainingBtn?.removeEventListener("click", onBattleTraining);
@@ -495,7 +518,7 @@ function showPlaySetupModal({ theme }) {
       battlePvpBtn?.removeEventListener("click", onBattlePvp);
       modeClassicBtn?.removeEventListener("click", onModeClassic);
       modeSlammerBtn?.removeEventListener("click", onModeSlammer);
-      arenaSelect?.removeEventListener("change", updateMapHint);
+      backBtn?.removeEventListener("click", onBack);
       closeBtn?.removeEventListener("click", onCancel);
       launchBtn?.removeEventListener("click", onLaunch);
       backdrop?.removeEventListener("click", onCancel);
@@ -508,8 +531,13 @@ function showPlaySetupModal({ theme }) {
     };
 
     const onLaunch = () => {
+      if (setupStep === "mode") {
+        setupStep = "battle";
+        updateStepUI();
+        return;
+      }
       const value = {
-        arenaKey: arenaSelect?.value || DEFAULT_ARENA_KEY,
+        arenaKey: DEFAULT_ARENA_KEY,
         battleMode: selectedBattleMode,
         gameMode: selectedMode,
       };
@@ -647,7 +675,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
             : ``
         }
         <div class="play-setup-actions">
-          <button id="capsLaunchBtn" type="button">launch</button>
+          <button id="capsLaunchBtn" type="button">Launch</button>
         </div>
       </div>
     `;
@@ -985,7 +1013,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       <div class="play-setup-panel pvp-room-panel">
         <button id="pvpCloseBtn" class="play-setup-close" type="button" aria-label="Close PvP rooms">×</button>
         <h2>PvP Room</h2>
-        <p class="setup-hint">Logged-in only. ${modeLabel} room on ${ARENA_CONFIGS[setup.arenaKey]?.label || "selected map"}.</p>
+        <p class="setup-hint">Logged-in only. ${modeLabel} room.</p>
         <div class="pvp-room-actions">
           <button id="pvpCreateBtn" class="mode-btn active" type="button">Create Room</button>
           <button id="pvpJoinBtn" class="mode-btn" type="button">Join Room</button>
