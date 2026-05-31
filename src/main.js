@@ -1,4 +1,5 @@
 import "./style.css";
+import Wavedash from "@wvdsh/sdk-js";
 import { fetchAuraInventory } from "./aura/inventory.js";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
@@ -2016,4 +2017,5 @@ async function showProfile() {
   );
 }
 
+Wavedash.init();
 showMenu();
