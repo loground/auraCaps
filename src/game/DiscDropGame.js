@@ -20,6 +20,7 @@ import {
   FLOOR_RADIUS,
   LOWER_DISC_START_Y,
   TABLE_RADIUS,
+  TABLE_TOP_Y,
 } from "./constants.js";
 import {
   createDiscMesh,
@@ -41,7 +42,6 @@ const SLAMMER_HEIGHT_MULT = 2.64;
 const SLAMMER_DENSITY_MULT = 2.45;
 const MATCH_TOTAL_ROUNDS = 4;
 const HELL_FLOOR_SPAWN_LIFT = 0.16;
-const BRAINROT_FLOOR_TOP_Y = LOWER_DISC_START_Y - DISC_HALF_HEIGHT;
 const HEAVEN_CLASSIC_PHYSICS = {
   floorFriction: 0.22,
   floorRestitution: 0.78,
@@ -52,6 +52,20 @@ const HEAVEN_CLASSIC_PHYSICS = {
   lowerAngularDamping: 0.00045,
   maxBoostHeightAboveFloor: 0.24,
   impactCooldownMs: 140,
+};
+const BANKR_CLASSIC_PHYSICS = {
+  floorFriction: 0.2,
+  floorRestitution: 0.82,
+  lowerFriction: 0.05,
+  lowerRestitution: 0.94,
+  lowerDensityScale: 0.76,
+  lowerLinearDamping: 0.004,
+  lowerAngularDamping: 0.00035,
+  maxBoostHeightAboveFloor: 0.26,
+  impactCooldownMs: 120,
+  liftScale: 1.22,
+  sideKickScale: 1.12,
+  spinScale: 1.3,
 };
 const PVP_TRAJECTORY_CAPTURE_STEPS = 4;
 const PVP_TRAJECTORY_MAX_FRAMES = 180;
@@ -100,6 +114,7 @@ const JUNGLE_BAY_CAP_PATHS = [
   "/caps/jb/jbcap5.webp",
   "/caps/jb/jbcap6.webp",
 ];
+const BANKR_CAP_PATHS = [1, 2, 3].map((idx) => `/caps/bankr/${idx}.webp`);
 
 export class DiscDropGame {
   constructor(
@@ -142,11 +157,6 @@ export class DiscDropGame {
       this.gameMode === "slammer"
         ? this.arenaRadius + 8.5
         : Math.max(this.arenaRadius, FLOOR_RADIUS);
-    if (this.theme === "brainrot" && this.gameMode !== "slammer") {
-      this.arenaRadius = Math.max(this.arenaRadius, 16.5);
-      this.floorRadius = Math.max(this.floorRadius, 24);
-    }
-
     this.hasLaunched = false;
     this.hasResolved = false;
     this.stableFrames = 0;
@@ -308,7 +318,7 @@ export class DiscDropGame {
     this.world.integrationParameters.maxCcdSubsteps = 8;
 
     const floorBody = this.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.22, 0)
+      RAPIER.RigidBodyDesc.fixed().setTranslation(0, TABLE_TOP_Y - 0.22, 0)
     );
     this.floorCollider = this.world.createCollider(
       RAPIER.ColliderDesc.cylinder(0.22, this.floorRadius)
@@ -332,7 +342,7 @@ export class DiscDropGame {
 
   setupArenaVisualModel() {
     const usesProceduralArena =
-      this.theme === "heaven" || this.gameMode === "slammer";
+      this.theme === "heaven" || this.theme === "bankr" || this.gameMode === "slammer";
     if (usesProceduralArena) {
       this.floorMesh.visible = true;
       this.tableMesh.visible = true;
@@ -349,11 +359,7 @@ export class DiscDropGame {
     }
 
     const arenaModelPath =
-      this.theme === "jungle-bay"
-        ? "/3d/jbArena.glb"
-        : this.theme === "brainrot"
-          ? "/3d/brainrotArena.glb"
-          : "/3d/hellArena1.glb";
+      this.theme === "jungle-bay" ? "/3d/jbArena.glb" : "/3d/hellArena1.glb";
 
     this.floorMesh.visible = false;
     this.tableMesh.visible = false;
@@ -406,8 +412,6 @@ export class DiscDropGame {
           const scale =
             this.theme === "jungle-bay"
               ? ((this.arenaRadius * 2) / Math.max(size.x, size.z, 0.001)) * 5
-              : this.theme === "brainrot"
-                ? ((this.arenaRadius * 2) / Math.max(size.x, size.z, 0.001)) * 5.25
               : 10;
 
           this.arenaVisualRoot.clear();
@@ -415,7 +419,7 @@ export class DiscDropGame {
           this.arenaVisualRoot.scale.setScalar(scale);
           this.arenaVisualRoot.position.set(
             this.theme === "jungle-bay" ? 10 : 0,
-            this.theme === "jungle-bay" ? -15 : this.theme === "brainrot" ? 7.6 : -0.62,
+            this.theme === "jungle-bay" ? -15 : -0.62,
             this.theme === "jungle-bay" ? -5 : 0
           );
           this.createArenaSurfacePhysics();
@@ -444,13 +448,6 @@ export class DiscDropGame {
 
   isArenaSurfaceMesh(child) {
     if (!child?.isMesh || !child.geometry?.attributes?.position) {
-      return false;
-    }
-
-    // Brainrot has a detailed toy/lego-style GLB surface. Using its decorative
-    // mesh as physics makes caps snag in studs and small triangles, so gameplay
-    // uses a clean support floor instead.
-    if (this.theme === "brainrot") {
       return false;
     }
 
@@ -518,21 +515,6 @@ export class DiscDropGame {
       this.arenaSurfaceBodies.push(body);
       this.arenaSurfaceColliders.push(collider);
     });
-
-    // Brainrot arena uses a clean floor collider under the visual GLB. This
-    // avoids caps getting stuck in decorative texture/stud geometry.
-    if (this.theme === "brainrot") {
-      const halfHeight = 0.16;
-      const coverBody = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed());
-      const coverCollider = this.world.createCollider(
-        RAPIER.ColliderDesc.cuboid(this.floorRadius + 6, halfHeight, this.floorRadius + 6)
-          .setTranslation(0, BRAINROT_FLOOR_TOP_Y - halfHeight, 0)
-          .setContactSkin(0.003),
-        coverBody
-      );
-      this.arenaSurfaceBodies.push(coverBody);
-      this.arenaSurfaceColliders.push(coverCollider);
-    }
 
     // Jungle Bay's visual deck is a GLB trimesh. Hard direct hits can tunnel
     // through sparse/angled triangles, so add a thin deck-only support collider.
@@ -760,9 +742,11 @@ export class DiscDropGame {
         ? JUNGLE_BAY_CAP_PATHS.map((path) =>
             loadDiscTexture(this.renderer, path)
           )
-        : Array.from({ length: 9 }, (_, idx) =>
-            loadDiscTexture(this.renderer, `/caps/${idx + 1}.webp`)
-          );
+        : this.theme === "bankr"
+          ? BANKR_CAP_PATHS.map((path) => loadDiscTexture(this.renderer, path))
+          : Array.from({ length: 9 }, (_, idx) =>
+              loadDiscTexture(this.renderer, `/caps/${idx + 1}.webp`)
+            );
 
     this.capTextureByPath = new Map();
     const registerCapTexture = (texture) => {
@@ -1964,19 +1948,28 @@ export class DiscDropGame {
     this.arenaObstacleMeshes.push(mesh);
   }
 
-  isHeavenClassicPhysicsBoostEnabled() {
-    return this.theme === "heaven" && this.gameMode === "classic";
+  getClassicPhysicsBoost() {
+    if (this.gameMode !== "classic") {
+      return null;
+    }
+    if (this.theme === "heaven") {
+      return HEAVEN_CLASSIC_PHYSICS;
+    }
+    if (this.theme === "bankr") {
+      return BANKR_CLASSIC_PHYSICS;
+    }
+    return null;
   }
 
   applyArena(key) {
     this.activeArenaKey = key;
     const arena = ARENA_CONFIGS[this.activeArenaKey];
-    const heavenClassicBoost = this.isHeavenClassicPhysicsBoostEnabled();
-    const floorFriction = heavenClassicBoost
-      ? Math.min(arena.floorFriction, HEAVEN_CLASSIC_PHYSICS.floorFriction)
+    const classicPhysicsBoost = this.getClassicPhysicsBoost();
+    const floorFriction = classicPhysicsBoost
+      ? Math.min(arena.floorFriction, classicPhysicsBoost.floorFriction)
       : arena.floorFriction;
-    const floorRestitution = heavenClassicBoost
-      ? Math.max(arena.floorRestitution, HEAVEN_CLASSIC_PHYSICS.floorRestitution)
+    const floorRestitution = classicPhysicsBoost
+      ? Math.max(arena.floorRestitution, classicPhysicsBoost.floorRestitution)
       : arena.floorRestitution;
 
     this.world.gravity = { x: 0, y: arena.gravity, z: 0 };
@@ -2014,9 +2007,9 @@ export class DiscDropGame {
     } else if (this.theme === "jungle-bay") {
       this.floorMaterial.color.set("#d4e6ba");
       this.tableMaterial.color.set("#8cb07a");
-    } else if (this.theme === "brainrot") {
-      this.floorMaterial.color.set("#e99cff");
-      this.tableMaterial.color.set("#83f85b");
+    } else if (this.theme === "bankr") {
+      this.floorMaterial.color.set("#D6D4C8");
+      this.tableMaterial.color.set("#7A5EE6");
     } else {
       this.floorMaterial.color.set(
         key === "bumperGarden" ? "#2c2a5d" : "#263049"
@@ -2119,15 +2112,15 @@ export class DiscDropGame {
       this.upperDiscBody.setSoftCcdPrediction(0.34);
       this.minLaunchClearance = LOWER_DISC_START_Y + stackCount * stackStep + 0.75;
     } else {
-      const heavenClassicBoost = this.isHeavenClassicPhysicsBoostEnabled();
-      const lowerFriction = heavenClassicBoost
-        ? Math.min(arena.lowerFriction, HEAVEN_CLASSIC_PHYSICS.lowerFriction)
+      const classicPhysicsBoost = this.getClassicPhysicsBoost();
+      const lowerFriction = classicPhysicsBoost
+        ? Math.min(arena.lowerFriction, classicPhysicsBoost.lowerFriction)
         : arena.lowerFriction;
-      const lowerRestitution = heavenClassicBoost
-        ? Math.max(arena.lowerRestitution, HEAVEN_CLASSIC_PHYSICS.lowerRestitution)
+      const lowerRestitution = classicPhysicsBoost
+        ? Math.max(arena.lowerRestitution, classicPhysicsBoost.lowerRestitution)
         : arena.lowerRestitution;
       const lowerDensity = arena.lowerDensity * textureWeight(this.lowerCapTexture) *
-        (heavenClassicBoost ? HEAVEN_CLASSIC_PHYSICS.lowerDensityScale : 1);
+        (classicPhysicsBoost ? classicPhysicsBoost.lowerDensityScale : 1);
       this.lowerDiscBody = this.world.createRigidBody(
         RAPIER.RigidBodyDesc.dynamic().setTranslation(
           lowerStart.x,
@@ -2136,10 +2129,10 @@ export class DiscDropGame {
         )
       );
       this.lowerDiscBody.setLinearDamping(
-        heavenClassicBoost ? HEAVEN_CLASSIC_PHYSICS.lowerLinearDamping : 0.015
+        classicPhysicsBoost ? classicPhysicsBoost.lowerLinearDamping : 0.015
       );
       this.lowerDiscBody.setAngularDamping(
-        heavenClassicBoost ? HEAVEN_CLASSIC_PHYSICS.lowerAngularDamping : 0.0016
+        classicPhysicsBoost ? classicPhysicsBoost.lowerAngularDamping : 0.0016
       );
       this.lowerDiscBody.setAdditionalSolverIterations(8);
       this.lowerDiscBody.enableCcd(true);
@@ -3056,15 +3049,16 @@ export class DiscDropGame {
     return false;
   }
 
-  applyHeavenClassicImpactBoost(handleA, handleB) {
-    if (!this.isHeavenClassicPhysicsBoostEnabled() || !this.upperDiscCollider) {
+  applyClassicImpactBoost(handleA, handleB) {
+    const physicsBoost = this.getClassicPhysicsBoost();
+    if (!physicsBoost || !this.upperDiscCollider) {
       return;
     }
 
     const now = performance.now();
     if (
       now - this.lastHeavenClassicImpactBoostAt <
-      HEAVEN_CLASSIC_PHYSICS.impactCooldownMs
+      physicsBoost.impactCooldownMs
     ) {
       return;
     }
@@ -3080,7 +3074,7 @@ export class DiscDropGame {
     const upperPos = upperBody.translation();
     const lowerPos = lowerBody.translation();
     const floorY = this.getArenaSurfaceSpawnY(lowerPos.x, lowerPos.z, LOWER_DISC_START_Y);
-    if (lowerPos.y > floorY + HEAVEN_CLASSIC_PHYSICS.maxBoostHeightAboveFloor) {
+    if (lowerPos.y > floorY + physicsBoost.maxBoostHeightAboveFloor) {
       return;
     }
 
@@ -3098,9 +3092,15 @@ export class DiscDropGame {
       kickDir.normalize();
     }
 
-    const lift = Math.min(1.65, 0.28 + power01 * 0.78 + impactSpeed * 0.015);
-    const sideKick = Math.min(0.42, 0.08 + power01 * 0.22 + impactSpeed * 0.004);
-    const spin = Math.min(1.65, 0.24 + power01 * 1.05 + impactSpeed * 0.012);
+    const lift =
+      Math.min(1.65, 0.28 + power01 * 0.78 + impactSpeed * 0.015) *
+      (physicsBoost.liftScale || 1);
+    const sideKick =
+      Math.min(0.42, 0.08 + power01 * 0.22 + impactSpeed * 0.004) *
+      (physicsBoost.sideKickScale || 1);
+    const spin =
+      Math.min(1.65, 0.24 + power01 * 1.05 + impactSpeed * 0.012) *
+      (physicsBoost.spinScale || 1);
 
     lowerBody.applyImpulse(
       {
@@ -3135,7 +3135,7 @@ export class DiscDropGame {
       }
       this.lastHitSfxAt = now;
       this.playSfx("/sounds/hit.mp3", 0.82);
-      this.applyHeavenClassicImpactBoost(handleA, handleB);
+      this.applyClassicImpactBoost(handleA, handleB);
       const profile = this.resolveImpactVfxProfile(handleA, handleB);
       const cooldown = profile.cooldown || IMPACT_VFX_COOLDOWN_MS;
       if (now - this.lastImpactVfxAt >= cooldown) {

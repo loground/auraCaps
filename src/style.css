@@ -238,19 +238,6 @@ canvas {
   color: #29563c;
 }
 
-.theme-brainrot .entry-login-gate {
-  background:
-    radial-gradient(circle at 50% 38%, rgba(235, 255, 39, 0.13), transparent 34%),
-    rgba(21, 0, 35, 0.74);
-}
-
-.theme-brainrot .entry-login-card {
-  border-color: rgba(255, 241, 69, 0.74);
-  background:
-    linear-gradient(135deg, rgba(79, 12, 126, 0.94), rgba(8, 67, 112, 0.94)),
-    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.05) 0 8px, transparent 8px 18px);
-}
-
 .theme-switch {
   position: absolute;
   top: 1rem;
@@ -2340,32 +2327,6 @@ button:disabled {
     linear-gradient(180deg, #94dabf 0%, #63b594 100%);
 }
 
-#app.theme-brainrot.mode-collection {
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(255, 39, 208, 0.16) 0 16px,
-      rgba(33, 255, 163, 0.16) 16px 32px,
-      rgba(0, 191, 255, 0.16) 32px 48px
-    ),
-    radial-gradient(circle at 12% 20%, #8e00ff 0%, transparent 34%),
-    radial-gradient(circle at 82% 14%, #ff7b00 0%, transparent 32%),
-    linear-gradient(180deg, #220033 0%, #080015 100%);
-}
-
-#app.theme-brainrot.mode-profile {
-  background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(255, 39, 208, 0.16) 0 16px,
-      rgba(33, 255, 163, 0.16) 16px 32px,
-      rgba(0, 191, 255, 0.16) 32px 48px
-    ),
-    radial-gradient(circle at 12% 20%, #8e00ff 0%, transparent 34%),
-    radial-gradient(circle at 82% 14%, #ff7b00 0%, transparent 32%),
-    linear-gradient(180deg, #220033 0%, #080015 100%);
-}
-
 .mode-play .panel {
   border: 1px solid rgba(255, 118, 84, 0.5);
   background: rgba(25, 7, 7, 0.82);
@@ -2849,208 +2810,196 @@ button:disabled {
   color: #1f3c59;
 }
 
-.theme-brainrot {
-  color: #fff7a8;
+.theme-bankr {
+  color: #241b47;
+  background: #d6d4c8;
+}
+
+.theme-bankr .entry-login-gate,
+.theme-bankr .play-setup-backdrop,
+.theme-bankr .inspector-backdrop {
+  background: rgba(52, 42, 88, 0.42);
+}
+
+.theme-bankr .entry-login-card,
+.theme-bankr .play-setup-panel,
+.theme-bankr .profile-card,
+.theme-bankr .inspector-panel,
+.theme-bankr .collection-card,
+.theme-bankr.mode-play .panel,
+.theme-bankr.mode-play .arena-panel,
+.theme-bankr.mode-play .mini-map {
+  border: 1px solid rgba(122, 94, 230, 0.58);
+  background: linear-gradient(155deg, rgba(246, 244, 235, 0.96), rgba(214, 212, 200, 0.94));
+  color: #241b47;
+  box-shadow: 0 12px 30px rgba(44, 31, 92, 0.18);
+}
+
+.theme-bankr .menu-btn,
+.theme-bankr .theme-btn,
+.theme-bankr .menu-mute-btn,
+.theme-bankr .global-mute-btn,
+.theme-bankr .back-btn,
+.theme-bankr .inspect-btn,
+.theme-bankr .collection-tab,
+.theme-bankr .play-setup-panel button,
+.theme-bankr .play-setup-actions button,
+.theme-bankr .mode-btn,
+.theme-bankr.mode-play button {
+  border: 1px solid rgba(79, 58, 166, 0.72);
+  background: linear-gradient(180deg, #8c73ed, #7a5ee6);
+  color: #f8f7f0;
+  text-shadow: 0 1px 1px rgba(31, 21, 70, 0.35);
+  box-shadow: 0 7px 18px rgba(74, 51, 163, 0.22);
+}
+
+.theme-bankr .menu-btn:hover,
+.theme-bankr .theme-btn:hover,
+.theme-bankr .mode-btn:hover,
+.theme-bankr.mode-play button:hover {
+  background: linear-gradient(180deg, #9c88f0, #8469e8);
+}
+
+.theme-bankr .mode-btn.active,
+.theme-bankr .collection-tab.active,
+.theme-bankr .theme-btn.active {
+  border-color: #5640b5;
+  background: #d6d4c8;
+  color: #4c399f;
+  box-shadow: inset 0 0 0 2px rgba(122, 94, 230, 0.22);
+}
+
+.theme-bankr .menu-theme-select,
+.theme-bankr .play-setup-panel select,
+.theme-bankr .panel select,
+.theme-bankr .arena-panel select,
+.theme-bankr .profile-lookup-input {
+  border: 1px solid rgba(122, 94, 230, 0.56);
+  color: #372969;
+}
+
+.theme-bankr .menu-theme-select {
   background:
-    repeating-linear-gradient(
-      135deg,
-      rgba(255, 39, 208, 0.16) 0 16px,
-      rgba(33, 255, 163, 0.16) 16px 32px,
-      rgba(0, 191, 255, 0.16) 32px 48px
-    ),
-    radial-gradient(circle at 12% 20%, #8e00ff 0%, transparent 34%),
-    radial-gradient(circle at 82% 14%, #ff7b00 0%, transparent 32%),
-    linear-gradient(180deg, #220033 0%, #080015 100%);
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 0.7rem center / 0.38rem 0.38rem no-repeat,
+    linear-gradient(180deg, rgba(246, 244, 235, 0.98), rgba(214, 212, 200, 0.98));
 }
 
-.theme-brainrot .menu-btn,
-.theme-brainrot .theme-btn,
-.theme-brainrot .menu-mute-btn,
-.theme-brainrot .global-mute-btn,
-.theme-brainrot .back-btn,
-.theme-brainrot .inspect-btn,
-.theme-brainrot .collection-tab,
-.theme-brainrot .play-setup-panel button,
-.theme-brainrot .play-setup-actions button,
-.theme-brainrot .mode-btn,
-.theme-brainrot.mode-play button {
-  border: 2px dashed rgba(255, 250, 126, 0.9);
-  background:
-    linear-gradient(90deg, rgba(255, 0, 181, 0.86), rgba(0, 234, 255, 0.82)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.2) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
-  color: #fffdf0;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
-  box-shadow: 0 0 0 2px rgba(79, 0, 104, 0.42), 0 0 16px rgba(255, 131, 35, 0.34);
+.theme-bankr .menu-theme-picker::after,
+.theme-bankr .menu-aura-status,
+.theme-bankr .play-setup-panel h2,
+.theme-bankr .play-setup-panel p,
+.theme-bankr .play-setup-panel label,
+.theme-bankr .mode-label,
+.theme-bankr .profile-screen h2,
+.theme-bankr .profile-title-block h3,
+.theme-bankr .profile-status,
+.theme-bankr .profile-username,
+.theme-bankr .profile-bio,
+.theme-bankr .profile-meta-item span,
+.theme-bankr .profile-meta-item strong,
+.theme-bankr.mode-play .panel h1,
+.theme-bankr.mode-play .panel p,
+.theme-bankr.mode-play .panel label,
+.theme-bankr.mode-play .panel span,
+.theme-bankr.mode-play .hint,
+.theme-bankr.mode-play .status {
+  color: #372969;
 }
 
-.theme-brainrot .mode-btn.active,
-.theme-brainrot .collection-tab.active,
-.theme-brainrot .theme-btn.active {
-  border-style: solid;
-  background:
-    linear-gradient(90deg, rgba(176, 255, 63, 0.96), rgba(255, 86, 196, 0.96)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.24) 0 6px,
-      rgba(0, 0, 0, 0.12) 6px 12px
-    );
-  color: #23003a;
-  box-shadow: 0 0 0 2px rgba(255, 254, 164, 0.62), 0 0 18px rgba(255, 164, 35, 0.5);
+.theme-bankr .profile-meta-item,
+.theme-bankr .cap-info {
+  border-color: rgba(122, 94, 230, 0.34);
+  background: rgba(231, 228, 217, 0.84);
 }
 
-.theme-brainrot .menu-theme-select,
-.theme-brainrot .play-setup-panel select,
-.theme-brainrot .panel select,
-.theme-brainrot .arena-panel select {
-  border: 2px dashed rgba(255, 252, 147, 0.9);
-  background:
-    linear-gradient(90deg, rgba(161, 0, 255, 0.86), rgba(255, 93, 0, 0.84)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.18) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
-  color: #fffce8;
+.theme-bankr .collection-card::after {
+  background: rgba(122, 94, 230, 0.3);
 }
 
-.theme-brainrot .menu-theme-picker::after {
-  color: #fff26f;
+.theme-bankr .cap-info h3 {
+  color: #3b2b78;
 }
 
-.theme-brainrot .menu-aura-status,
-.theme-brainrot .play-setup-panel p,
-.theme-brainrot .play-setup-panel label,
-.theme-brainrot .mode-label,
-.theme-brainrot .panel p,
-.theme-brainrot .panel label,
-.theme-brainrot .panel span,
-.theme-brainrot .hint,
-.theme-brainrot .status,
-.theme-brainrot .cap-info p {
-  color: #fff8be;
+.theme-bankr .cap-info p {
+  color: #594795;
 }
 
-.theme-brainrot.mode-play {
-  background:
-    repeating-linear-gradient(
-      45deg,
-      rgba(255, 82, 205, 0.2) 0 20px,
-      rgba(0, 255, 213, 0.18) 20px 40px,
-      rgba(255, 227, 92, 0.16) 40px 60px
-    ),
-    radial-gradient(circle at 15% 20%, #8200ff 0%, transparent 36%),
-    radial-gradient(circle at 85% 15%, #ff5500 0%, transparent 33%),
-    linear-gradient(180deg, #19002f 0%, #050010 100%);
+.theme-bankr .cap-loading {
+  background: radial-gradient(circle at 35% 30%, #eeeafc, #b9aceb);
+  color: #372969;
 }
 
-.theme-brainrot.mode-play .panel,
-.theme-brainrot.mode-play .arena-panel,
-.theme-brainrot.mode-play .mini-map,
-.theme-brainrot .collection-card,
-.theme-brainrot .inspector-panel,
-.theme-brainrot .play-setup-panel {
-  border: 2px dashed rgba(255, 246, 127, 0.86);
-  background:
-    linear-gradient(135deg, rgba(126, 0, 194, 0.68), rgba(0, 112, 195, 0.62)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.12) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
-  box-shadow: 0 0 0 2px rgba(88, 0, 136, 0.5), 0 0 20px rgba(255, 122, 45, 0.4);
+.theme-bankr .cap-loading-spinner {
+  border-color: rgba(122, 94, 230, 0.3);
+  border-top-color: #7a5ee6;
 }
 
-.theme-brainrot .center-notice {
-  color: #fff76c;
+.theme-bankr .center-notice {
+  color: #f7cc7d;
   text-shadow:
-    0 0 16px rgba(255, 80, 219, 0.62),
-    0 0 36px rgba(83, 227, 255, 0.52),
-    0 8px 20px rgba(8, 0, 20, 0.65);
+    0 0 18px rgba(247, 204, 125, 0.58),
+    0 5px 20px rgba(76, 57, 159, 0.34);
 }
 
-.theme-brainrot .menu-preloader,
-.theme-brainrot .play-preloader {
-  background:
-    repeating-linear-gradient(
-      45deg,
-      rgba(255, 71, 204, 0.2) 0 16px,
-      rgba(63, 255, 179, 0.2) 16px 32px
-    ),
-    radial-gradient(circle at 50% 50%, rgba(175, 41, 255, 0.86), rgba(64, 0, 115, 0.95));
-}
-
-.theme-brainrot .menu-preloader p,
-.theme-brainrot .play-preloader p {
-  color: #fff9be;
-}
-
-.theme-brainrot .cap-pick-card {
-  border: 2px dashed rgba(255, 252, 147, 0.9);
-  background:
-    linear-gradient(90deg, rgba(161, 0, 255, 0.66), rgba(255, 93, 0, 0.64)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.14) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
-  color: #fffce8;
-}
-
-.theme-brainrot .profile-card {
-  border: 2px dashed rgba(255, 246, 127, 0.86);
-  background:
-    linear-gradient(135deg, rgba(126, 0, 194, 0.68), rgba(0, 112, 195, 0.62)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.12) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
-  box-shadow: 0 0 0 2px rgba(88, 0, 136, 0.5), 0 0 20px rgba(255, 122, 45, 0.4);
-}
-
-.theme-brainrot .profile-screen h2,
-.theme-brainrot .profile-title-block h3 {
-  color: #fff8be;
-}
-
-.theme-brainrot .profile-status,
-.theme-brainrot .profile-username,
-.theme-brainrot .profile-bio,
-.theme-brainrot .profile-meta-item span,
-.theme-brainrot .profile-meta-item strong {
-  color: #fff8be;
-}
-
-.theme-brainrot .profile-meta-item {
-  border: 1px dashed rgba(255, 252, 147, 0.9);
-  background:
-    linear-gradient(90deg, rgba(161, 0, 255, 0.66), rgba(255, 93, 0, 0.64)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.14) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
-}
-
-.theme-brainrot .aura-connector-btn {
-  border: 2px solid rgba(255, 252, 147, 0.98);
-  color: #21002f;
-  background:
-    linear-gradient(90deg, rgba(184, 255, 66, 0.98), rgba(255, 86, 196, 0.96), rgba(0, 234, 255, 0.9)),
-    repeating-linear-gradient(
-      -45deg,
-      rgba(255, 255, 255, 0.24) 0 6px,
-      rgba(0, 0, 0, 0.08) 6px 12px
-    );
+.theme-bankr.mode-play .status {
+  border: 1px solid rgba(122, 94, 230, 0.58);
+  background: linear-gradient(155deg, rgba(246, 244, 235, 0.94), rgba(214, 212, 200, 0.9));
+  color: #372969;
   text-shadow: none;
-  box-shadow:
-    0 0 0 2px rgba(255, 252, 147, 0.42),
-    0 0 22px rgba(255, 71, 204, 0.48),
-    0 10px 24px rgba(0, 0, 0, 0.36);
+  box-shadow: 0 12px 30px rgba(44, 31, 92, 0.18);
+}
+
+.theme-bankr.mode-play .camera-mode-control {
+  border-color: rgba(122, 94, 230, 0.48);
+  background: rgba(231, 228, 217, 0.88);
+  color: #4c399f;
+}
+
+.theme-bankr.mode-play .camera-mode-control select {
+  border: 1px solid rgba(122, 94, 230, 0.62);
+  color: #372969;
+  background:
+    linear-gradient(45deg, transparent 50%, currentColor 50%) right 0.65rem center / 0.38rem 0.38rem no-repeat,
+    linear-gradient(180deg, rgba(246, 244, 235, 0.98), rgba(214, 212, 200, 0.98));
+}
+
+.theme-bankr.mode-play .arena-panel label,
+.theme-bankr.mode-play .arena-panel span,
+.theme-bankr.mode-play .arena-panel .hint,
+.theme-bankr.mode-play .mini-label {
+  color: #372969;
+  text-shadow: none;
+}
+
+.theme-bankr.mode-play .arena-panel select,
+.theme-bankr.mode-play .panel select {
+  border: 1px solid rgba(122, 94, 230, 0.62);
+  background: rgba(246, 244, 235, 0.96);
+  color: #372969;
+}
+
+.theme-bankr.mode-play .panel input[type="range"],
+.theme-bankr.mode-play .arena-panel input[type="range"] {
+  accent-color: #7a5ee6;
+}
+
+.theme-bankr .menu-preloader,
+.theme-bankr .play-preloader {
+  background: radial-gradient(circle at 50% 45%, rgba(122, 94, 230, 0.92), rgba(38, 28, 76, 0.96));
+}
+
+.theme-bankr .menu-preloader p,
+.theme-bankr .play-preloader p {
+  color: #d6d4c8;
+}
+
+#app.theme-bankr.mode-collection,
+#app.theme-bankr.mode-profile,
+.theme-bankr.mode-play {
+  background:
+    radial-gradient(circle at 18% 16%, rgba(122, 94, 230, 0.24), transparent 34%),
+    radial-gradient(circle at 84% 12%, rgba(255, 255, 255, 0.5), transparent 32%),
+    #d6d4c8;
 }
 
 @media (min-width: 641px) {

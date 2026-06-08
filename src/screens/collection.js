@@ -148,6 +148,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     "/caps/jb/jbcap5.webp",
     "/caps/jb/jbcap6.webp",
   ];
+  const BANKR_CAP_PATHS = [1, 2, 3].map((idx) => `/caps/bankr/${idx}.webp`);
 
   const F2P_CAP_ITEMS = [
     ...Array.from({ length: 9 }, (_, i) => ({
@@ -164,6 +165,13 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       name: `Jungle cap ${i + 1}`,
       imagePath: path,
       subtitle: "loground's collection",
+      details: `Series beta • Weight ${getCapWeightMultiplier(path).toFixed(2)}x`,
+    })),
+    ...BANKR_CAP_PATHS.map((path, i) => ({
+      number: i + 16,
+      name: `Bankr cap ${i + 1}`,
+      imagePath: path,
+      subtitle: "bankr collection",
       details: `Series beta • Weight ${getCapWeightMultiplier(path).toFixed(2)}x`,
     })),
   ];

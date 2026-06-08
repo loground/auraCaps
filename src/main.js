@@ -1,5 +1,4 @@
 import "./style.css";
-import Wavedash from "@wvdsh/sdk-js";
 import { fetchAuraInventory } from "./aura/inventory.js";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
@@ -7,7 +6,7 @@ import { playSound, preloadSounds, unlockSounds } from "./sound.js";
 
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
-const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "brainrot"];
+const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "bankr"];
 const DEFAULT_THEME = "jungle-bay";
 const SOUND_PATHS = [
   "/sounds/menuHover.mp3",
@@ -558,6 +557,7 @@ const CAP_OPTIONS = [
     name: `Cap ${i + 1}`,
     imagePath: `/caps/${i + 1}.webp`,
     collection: "ink's collection",
+    filterGroup: "classics",
     series: "beta",
   })),
   ...[
@@ -572,6 +572,15 @@ const CAP_OPTIONS = [
     name: `Jungle cap ${i + 1}`,
     imagePath: path,
     collection: "loground's collection",
+    filterGroup: "jungle-bay",
+    series: "beta",
+  })),
+  ...[1, 2, 3].map((i) => ({
+    id: `bankr-${i}`,
+    name: `Bankr cap ${i}`,
+    imagePath: `/caps/bankr/${i}.webp`,
+    collection: "bankr collection",
+    filterGroup: "bankr",
     series: "beta",
   })),
   ...[1, 2, 3].map((i) => ({
@@ -660,6 +669,15 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         }</p>
         <div id="capFilterButtons" class="cap-pick-filters">
           <button class="mode-btn active" type="button" data-cap-filter="all">All</button>
+          ${
+            gameMode === "slammer"
+              ? ""
+              : `
+                <button class="mode-btn" type="button" data-cap-filter="classics">Classics</button>
+                <button class="mode-btn" type="button" data-cap-filter="jungle-bay">Jungle Bay</button>
+                <button class="mode-btn" type="button" data-cap-filter="bankr">Bankr</button>
+              `
+          }
         </div>
         <div id="capsGrid" class="cap-pick-grid" role="listbox" aria-label="Cap choices"></div>
         <div class="cap-pick-summary">
@@ -690,7 +708,6 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     const launchBtn = overlay.querySelector("#capsLaunchBtn");
     const backdrop = overlay.querySelector(".play-setup-backdrop");
 
-    const isBrainrot = theme === "brainrot";
     const baseCaps = CAP_OPTIONS.filter((cap) =>
       gameMode === "slammer"
         ? cap.id.startsWith("slammer-")
@@ -707,7 +724,9 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     let spritePreviewNodes = [];
     let spritePreviewRafId = null;
     const getVisibleCaps = () =>
-      activeCapFilter === "aura" ? auraCaps : selectableCaps;
+      activeCapFilter === "all"
+        ? selectableCaps
+        : baseCaps.filter((cap) => cap.filterGroup === activeCapFilter);
     const byId = (id) =>
       selectableCaps.find((cap) => cap.id === id) ||
       auraCaps.find((cap) => cap.id === id) ||
@@ -715,18 +734,11 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       auraCaps[0];
     const playerDefaultCandidate = gameMode === "slammer" ? "slammer-1" : "classic-1";
     const cpuDefaultCandidate =
-      gameMode === "slammer" ? "slammer-3" : isBrainrot ? "classic-9" : "classic-8";
+      gameMode === "slammer" ? "slammer-3" : "classic-8";
     const playerDefault = byId(playerDefaultCandidate)?.id;
     const cpuDefault = byId(cpuDefaultCandidate)?.id;
     let selectedPlayerCapId = playerDefault;
     let selectedCpuCapId = cpuDefault;
-
-    if (canUseAuraFilter && capFilterButtons) {
-      capFilterButtons.insertAdjacentHTML(
-        "beforeend",
-        '<button class="mode-btn" type="button" data-cap-filter="aura">Aura</button>'
-      );
-    }
 
     const capWeightText = (cap) =>
       `${(cap.weightMultiplier ?? getCapWeightMultiplier(cap.imagePath)).toFixed(2)}x`;
@@ -1731,10 +1743,14 @@ function setViewMode(mode) {
   app.className = `mode-${mode} theme-${currentTheme}`;
 }
 
+function normalizeTheme(theme) {
+  return THEME_OPTIONS.includes(theme) ? theme : DEFAULT_THEME;
+}
+
 function setTheme(nextTheme) {
-  currentTheme = nextTheme;
+  currentTheme = normalizeTheme(nextTheme);
   try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, currentTheme);
   } catch {
     // Ignore storage failures.
   }
@@ -1916,7 +1932,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       ...(roomState.room.setup || {}),
       battleMode: "pvp",
     };
-    const pvpTheme = pvpSetup.theme || currentTheme;
+    const pvpTheme = normalizeTheme(pvpSetup.theme || currentTheme);
     if (pvpTheme !== currentTheme) {
       setTheme(pvpTheme);
     }
@@ -2017,5 +2033,4 @@ async function showProfile() {
   );
 }
 
-Wavedash.init();
 showMenu();

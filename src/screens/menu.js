@@ -1,19 +1,19 @@
-import * as THREE from "three";
-import { FontLoader } from "three/examples/jsm/loaders/FontLoader.js";
-import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
-import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import * as THREE from 'three';
+import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-const AURA_ORIGIN = "https://auramaxx.gg";
+const AURA_ORIGIN = 'https://auramaxx.gg';
 const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
-const AURA_CLIENT_ID_STORAGE_KEY = "aura_client_id";
-const AURA_DEBUG_KEY = "aura_debug";
-const AURA_DEFAULT_CLIENT_ID = "your-app";
+const AURA_CLIENT_ID_STORAGE_KEY = 'aura_client_id';
+const AURA_DEBUG_KEY = 'aura_debug';
+const AURA_DEFAULT_CLIENT_ID = 'your-app';
 const HELL_MENU_TUNING = {
   backgroundDarkness: 1.0,
   haloIntensity: 0.22,
@@ -34,57 +34,29 @@ const HEAVEN_MENU_TUNING = {
   bloomRadius: 0.2,
   bloomThreshold: 0.95,
 };
-const MOGGMON_MODEL_PATHS = Array.from(
-  { length: 20 },
-  (_, idx) => `/moggmons/compressed${idx === 0 ? "" : idx + 1}.glb`
-).filter((path) => path !== "/moggmons/compressed10.glb");
-
-function pickRandomUnique(values, count) {
-  const pool = [...values];
-  const picked = [];
-  while (pool.length > 0 && picked.length < count) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picked.push(pool.splice(idx, 1)[0]);
-  }
-  return picked;
-}
-
-function disposeObject3D(root) {
-  root?.traverse?.((child) => {
-    child.geometry?.dispose?.();
-    if (Array.isArray(child.material)) {
-      child.material.forEach((material) => material?.dispose?.());
-    } else {
-      child.material?.dispose?.();
-    }
-  });
-}
-
 function loadAuraSdk() {
   return new Promise((resolve, reject) => {
-    if (typeof window !== "undefined" && window.Aura?.SigninButton) {
+    if (typeof window !== 'undefined' && window.Aura?.SigninButton) {
       resolve(window.Aura);
       return;
     }
 
     const existing = document.querySelector('script[data-aura-sdk="true"]');
     if (existing) {
-      existing.addEventListener("load", () => resolve(window.Aura), { once: true });
-      existing.addEventListener(
-        "error",
-        () => reject(new Error("Failed to load Aura SDK")),
-        { once: true }
-      );
+      existing.addEventListener('load', () => resolve(window.Aura), { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load Aura SDK')), {
+        once: true,
+      });
       return;
     }
 
-    const script = document.createElement("script");
+    const script = document.createElement('script');
     script.src = AURA_SDK_URL;
     script.async = true;
-    script.dataset.auraSdk = "true";
+    script.dataset.auraSdk = 'true';
     script.dataset.auraOrigin = AURA_ORIGIN;
     script.onload = () => resolve(window.Aura);
-    script.onerror = () => reject(new Error("Failed to load Aura SDK"));
+    script.onerror = () => reject(new Error('Failed to load Aura SDK'));
     document.head.appendChild(script);
   });
 }
@@ -100,28 +72,26 @@ function safeCall(fn, context) {
 
 function pickFirstString(...values) {
   for (const value of values) {
-    const s = String(value || "").trim();
+    const s = String(value || '').trim();
     if (s) {
       return s;
     }
   }
-  return "";
+  return '';
 }
 
 function auraDebugLog(...args) {
   try {
-    const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
+    const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === '1';
     const entry = {
-      scope: "menu",
+      scope: 'menu',
       at: new Date().toISOString(),
       args,
     };
-    window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__)
-      ? window.__AURA_LOGS__
-      : [];
+    window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__) ? window.__AURA_LOGS__ : [];
     window.__AURA_LOGS__.push(entry);
     if (debugEnabled) {
-      console.log("[AURA][MENU][DEBUG]", ...args);
+      console.log('[AURA][MENU][DEBUG]', ...args);
     }
   } catch {
     // Ignore logging failures.
@@ -280,9 +250,9 @@ function createHeavenMotes() {
     phases[i] = Math.random() * Math.PI * 2;
   }
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
-  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+  geometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
   const uniforms = { iTime: { value: 0 } };
   const material = new THREE.ShaderMaterial({
     uniforms,
@@ -446,10 +416,10 @@ function createHellCrackedGround() {
   const basePlate = new THREE.Mesh(
     new THREE.CylinderGeometry(7.6, 8.5, 0.95, 48),
     new THREE.MeshStandardMaterial({
-      color: new THREE.Color("#130707"),
+      color: new THREE.Color('#130707'),
       roughness: 0.93,
       metalness: 0.05,
-    })
+    }),
   );
   basePlate.position.y = -3.16;
   basePlate.receiveShadow = true;
@@ -534,10 +504,10 @@ function createJungleMenuGround() {
   const sand = new THREE.Mesh(
     new THREE.CylinderGeometry(5.4, 6.2, 0.46, 44),
     new THREE.MeshStandardMaterial({
-      color: "#d8bd72",
+      color: '#d8bd72',
       roughness: 0.86,
       metalness: 0.02,
-    })
+    }),
   );
   sand.position.y = -2.92;
   sand.receiveShadow = true;
@@ -546,10 +516,10 @@ function createJungleMenuGround() {
   const grass = new THREE.Mesh(
     new THREE.CircleGeometry(5.15, 64),
     new THREE.MeshStandardMaterial({
-      color: "#6faf52",
+      color: '#6faf52',
       roughness: 0.74,
       metalness: 0.03,
-    })
+    }),
   );
   grass.rotation.x = -Math.PI / 2;
   grass.position.y = -2.68;
@@ -557,7 +527,7 @@ function createJungleMenuGround() {
   group.add(grass);
 
   const woodMat = new THREE.MeshStandardMaterial({
-    color: "#9a612a",
+    color: '#9a612a',
     roughness: 0.62,
     metalness: 0.04,
   });
@@ -572,12 +542,12 @@ function createJungleMenuGround() {
   const waterRing = new THREE.Mesh(
     new THREE.TorusGeometry(5.9, 0.08, 10, 72),
     new THREE.MeshBasicMaterial({
-      color: "#50c9d6",
+      color: '#50c9d6',
       transparent: true,
       opacity: 0.42,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-    })
+    }),
   );
   waterRing.rotation.x = Math.PI / 2;
   waterRing.position.y = -2.66;
@@ -587,76 +557,42 @@ function createJungleMenuGround() {
   return { group, waterRing };
 }
 
-function createBrainrotMenuGround() {
-  const uniforms = { iTime: { value: 0 } };
+function createBankrMenuGround() {
   const group = new THREE.Group();
-
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(5.2, 5.85, 0.52, 48),
+    new THREE.CylinderGeometry(5.4, 5.8, 0.42, 64),
     new THREE.MeshStandardMaterial({
-      color: "#170025",
+      color: "#D6D4C8",
       roughness: 0.72,
-      metalness: 0.18,
-      emissive: new THREE.Color("#32005a"),
-      emissiveIntensity: 0.2,
+      metalness: 0.08,
     })
   );
-  base.position.y = -2.95;
+  base.position.y = -2.92;
   base.receiveShadow = true;
   group.add(base);
 
-  const padMaterial = new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vUv;
-      uniform float iTime;
-
-      void main() {
-        vec2 uv = vUv - 0.5;
-        float d = length(uv);
-        float grid = mod(floor((vUv.x + iTime * 0.05) * 9.0) + floor(vUv.y * 9.0), 2.0);
-        vec3 purple = vec3(0.35, 0.0, 0.72);
-        vec3 cyan = vec3(0.0, 0.85, 1.0);
-        vec3 pink = vec3(1.0, 0.05, 0.72);
-        vec3 color = mix(purple, cyan, grid * 0.36);
-        color = mix(color, pink, smoothstep(0.44, 0.2, abs(uv.x + uv.y) * 0.55) * 0.2);
-        float rim = smoothstep(0.49, 0.37, d);
-        float alpha = smoothstep(0.52, 0.46, d);
-        color *= 0.42 + rim * 0.58;
-        gl_FragColor = vec4(color, alpha);
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide,
-  });
-  const pad = new THREE.Mesh(new THREE.CircleGeometry(5.3, 72), padMaterial);
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.y = -2.66;
-  group.add(pad);
-
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(5.45, 0.075, 10, 72),
-    new THREE.MeshBasicMaterial({
-      color: "#eaff35",
-      transparent: true,
-      opacity: 0.82,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+  const platform = new THREE.Mesh(
+    new THREE.CylinderGeometry(4.9, 5.15, 0.2, 64),
+    new THREE.MeshStandardMaterial({
+      color: "#7A5EE6",
+      roughness: 0.55,
+      metalness: 0.12,
     })
   );
+  platform.position.y = -2.61;
+  platform.receiveShadow = true;
+  group.add(platform);
+
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(5.05, 0.055, 10, 80),
+    new THREE.MeshBasicMaterial({ color: "#F7CC7D" })
+  );
   ring.rotation.x = Math.PI / 2;
-  ring.position.y = -2.6;
+  ring.position.y = -2.49;
   group.add(ring);
 
-  group.position.set(0, -0.5, -1);
-  return { group, pad, ring, uniforms };
+  group.position.z = -1;
+  return { group };
 }
 
 // Hell menu: sparse embers for atmosphere, intentionally low count for performance.
@@ -677,9 +613,9 @@ function createHellEmbers() {
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
-  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+  geometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
 
   const uniforms = { iTime: { value: 0 } };
   const material = new THREE.ShaderMaterial({
@@ -727,7 +663,7 @@ export function mountMenuScreen({
   onPlay,
   onCollection,
   onProfile,
-  theme = "hell",
+  theme = 'hell',
   onThemeChange,
   soundEnabled = true,
   onSoundToggle,
@@ -738,11 +674,11 @@ export function mountMenuScreen({
   onResumePvp,
 }) {
   const formatAuraStatus = (sessionLike) => {
-    const wallet = sessionLike?.walletAddress || "";
+    const wallet = sessionLike?.walletAddress || '';
     if (wallet.length >= 10) {
       return `connected with aura • ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
     }
-    return "connected with aura";
+    return 'connected with aura';
   };
   const hasConnectedSession = (sessionLike) =>
     Boolean(sessionLike?.connected || sessionLike?.walletAddress || sessionLike?.user);
@@ -751,8 +687,10 @@ export function mountMenuScreen({
   app.innerHTML = `
     <div class="menu-overlay">
       <div class="menu-mute-switch" role="group" aria-label="Menu mute switcher">
-        <button id="menuMuteToggle" class="menu-mute-btn ${soundEnabled ? "" : "muted"}" type="button">
-          ${soundEnabled ? "mute: off" : "mute: on"}
+        <button id="menuMuteToggle" class="menu-mute-btn ${
+          soundEnabled ? '' : 'muted'
+        }" type="button">
+          ${soundEnabled ? 'mute: off' : 'mute: on'}
         </button>
       </div>
       <div class="menu-top-right">
@@ -760,10 +698,10 @@ export function mountMenuScreen({
       </div>
       <div class="menu-theme-picker" role="group" aria-label="Theme switcher">
         <select id="menuThemeSelect" class="menu-theme-select">
-          <option value="heaven" ${theme === "heaven" ? "selected" : ""}>heaven</option>
-          <option value="hell" ${theme === "hell" ? "selected" : ""}>hell</option>
-          <option value="jungle-bay" ${theme === "jungle-bay" ? "selected" : ""}>jungle bay</option>
-          <option value="brainrot" ${theme === "brainrot" ? "selected" : ""}>brainrot</option>
+          <option value="heaven" ${theme === 'heaven' ? 'selected' : ''}>heaven</option>
+          <option value="hell" ${theme === 'hell' ? 'selected' : ''}>hell</option>
+          <option value="jungle-bay" ${theme === 'jungle-bay' ? 'selected' : ''}>jungle bay</option>
+          <option value="bankr" ${theme === 'bankr' ? 'selected' : ''}>bankr</option>
         </select>
       </div>
       <div id="menuPreloader" class="menu-preloader">
@@ -775,12 +713,14 @@ export function mountMenuScreen({
         ${
           activePvpRoom?.code
             ? `<button id="menuResumePvp" class="menu-btn menu-resume-pvp" type="button">resume pvp</button>`
-            : ""
+            : ''
         }
         <button id="menuCollection" class="menu-btn" type="button">collection</button>
       </div>
-      <div id="auraConnectedStatus" class="menu-aura-status ${auraSession?.connected ? "visible" : ""}">
-        ${auraSession?.connected ? formatAuraStatus(auraSession) : ""}
+      <div id="auraConnectedStatus" class="menu-aura-status ${
+        auraSession?.connected ? 'visible' : ''
+      }">
+        ${auraSession?.connected ? formatAuraStatus(auraSession) : ''}
       </div>
       <div id="auraHintStatus" class="menu-aura-status"></div>
     </div>
@@ -788,38 +728,27 @@ export function mountMenuScreen({
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setClearAlpha(1);
-  renderer.domElement.style.pointerEvents = "auto";
+  renderer.domElement.style.pointerEvents = 'auto';
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.domElement.className = "menu-canvas";
+  renderer.domElement.className = 'menu-canvas';
   app.prepend(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const isHeaven = theme === "heaven";
-  const isJungle = theme === "jungle-bay";
-  const isBrainrot = theme === "brainrot";
-  const isHell = !isHeaven && !isJungle && !isBrainrot;
-  const bgColor = isHeaven
-    ? "#8ccfff"
-    : isJungle
-      ? "#8edcb4"
-      : isBrainrot
-        ? "#25003a"
-        : "#170807";
+  const isHeaven = theme === 'heaven';
+  const isJungle = theme === 'jungle-bay';
+  const isBankr = theme === 'bankr';
+  const isHell = !isHeaven && !isJungle && !isBankr;
+  const bgColor = isHeaven ? '#8ccfff' : isJungle ? '#8edcb4' : isBankr ? '#D6D4C8' : '#170807';
   scene.background = new THREE.Color(bgColor);
   scene.fog = isHell
-    ? new THREE.FogExp2("#120404", HELL_MENU_TUNING.fogDensity)
+    ? new THREE.FogExp2('#120404', HELL_MENU_TUNING.fogDensity)
     : isHeaven
-      ? new THREE.Fog("#c8dff4", 20, 72)
-      : new THREE.Fog(bgColor, 18, 58);
+    ? new THREE.Fog('#c8dff4', 20, 72)
+    : new THREE.Fog(bgColor, 18, 58);
 
-  const camera = new THREE.PerspectiveCamera(
-    50,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    700
-  );
+  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 700);
   camera.position.set(0, 4.8, 18);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -836,33 +765,33 @@ export function mountMenuScreen({
   controls.update();
 
   const ambient = new THREE.AmbientLight(
-    isHeaven ? 0xe6f6ff : isJungle ? 0xf4ffd6 : isBrainrot ? 0xffe5fb : 0xffb48a,
-    isHeaven ? 0.78 : isJungle ? 0.82 : isBrainrot ? 0.92 : 0.56
+    isHeaven ? 0xe6f6ff : isJungle ? 0xf4ffd6 : isBankr ? 0xf5f3eb : 0xffb48a,
+    isHeaven ? 0.78 : isJungle ? 0.82 : isBankr ? 1.0 : 0.56,
   );
   scene.add(ambient);
 
   const keyLight = new THREE.DirectionalLight(
-    isHeaven ? 0xd2ecff : isJungle ? 0xffefbd : isBrainrot ? 0xa7ff3d : 0xff5b31,
-    isHeaven ? 1.45 : isJungle ? 1.52 : isBrainrot ? 1.75 : 1.6
+    isHeaven ? 0xd2ecff : isJungle ? 0xffefbd : isBankr ? 0x9c87ff : 0xff5b31,
+    isHeaven ? 1.45 : isJungle ? 1.52 : isBankr ? 1.7 : 1.6,
   );
   keyLight.position.set(8, 10, 6);
   keyLight.castShadow = true;
   scene.add(keyLight);
 
   const fillLight = new THREE.DirectionalLight(
-    isHeaven ? 0xffffff : isJungle ? 0xd1ffd2 : isBrainrot ? 0x77d2ff : 0xffda99,
-    isHeaven ? 0.88 : isJungle ? 0.76 : isBrainrot ? 1.04 : 0.72
+    isHeaven ? 0xffffff : isJungle ? 0xd1ffd2 : isBankr ? 0xe8e4ff : 0xffda99,
+    isHeaven ? 0.88 : isJungle ? 0.76 : isBankr ? 1.0 : 0.72,
   );
   fillLight.position.set(-8, 5, 2);
   scene.add(fillLight);
 
   const demonTopLight = new THREE.SpotLight(
-    isHeaven ? 0xf2fbff : isJungle ? 0xfff5ca : isBrainrot ? 0xff7eea : 0xffc58f,
-    isHeaven ? 2.0 : isJungle ? 2.18 : isBrainrot ? 2.45 : 2.32,
+    isHeaven ? 0xf2fbff : isJungle ? 0xfff5ca : isBankr ? 0x7a5ee6 : 0xffc58f,
+    isHeaven ? 2.0 : isJungle ? 2.18 : isBankr ? 2.5 : 2.32,
     60,
     0.45,
     0.35,
-    1
+    1,
   );
   demonTopLight.position.set(0, 10, 4);
   demonTopLight.castShadow = true;
@@ -875,62 +804,57 @@ export function mountMenuScreen({
   let heavenBounceLight = null;
   let heavenAccentLight = null;
   if (isHeaven) {
-    ambient.color.set("#e6f2ff");
+    ambient.color.set('#e6f2ff');
     ambient.intensity = 0.74;
-    keyLight.color.set("#cee5ff");
+    keyLight.color.set('#cee5ff');
     keyLight.intensity = 1.36;
     keyLight.position.set(7.4, 10.1, 5.8);
-    fillLight.color.set("#f9fdff");
+    fillLight.color.set('#f9fdff');
     fillLight.intensity = 0.82;
     fillLight.position.set(-7.8, 5.0, 1.8);
-    demonTopLight.color.set("#eef8ff");
+    demonTopLight.color.set('#eef8ff');
     demonTopLight.intensity = 2.06;
     demonTopLight.position.set(0, 10.0, 3.2);
     demonTopLight.angle = 0.48;
     demonTopLight.penumbra = 0.44;
 
-    heavenRimLight = new THREE.DirectionalLight("#f4e8d8", 0.46);
+    heavenRimLight = new THREE.DirectionalLight('#f4e8d8', 0.46);
     heavenRimLight.position.set(-7.0, 6.7, -7.8);
     scene.add(heavenRimLight);
 
-    heavenBounceLight = new THREE.PointLight("#d6ecff", 0.82, 18, 1.7);
+    heavenBounceLight = new THREE.PointLight('#d6ecff', 0.82, 18, 1.7);
     heavenBounceLight.position.set(0, -2.15, -0.6);
     scene.add(heavenBounceLight);
 
-    heavenAccentLight = new THREE.DirectionalLight("#ffe6c4", 0.2);
+    heavenAccentLight = new THREE.DirectionalLight('#ffe6c4', 0.2);
     heavenAccentLight.position.set(5.5, 5.0, -6.5);
     scene.add(heavenAccentLight);
   }
   if (isHell) {
     // Cinematic hell lighting rig tuned for readability and silhouette separation.
-    ambient.color.set("#52201a");
+    ambient.color.set('#52201a');
     ambient.intensity = 0.2;
-    keyLight.color.set("#ffd6b5");
+    keyLight.color.set('#ffd6b5');
     keyLight.intensity = 0.8;
     keyLight.position.set(5.6, 9.2, 5.3);
-    fillLight.color.set("#5a1712");
+    fillLight.color.set('#5a1712');
     fillLight.intensity = 0.24;
     fillLight.position.set(-6.4, 4.0, -1.6);
-    demonTopLight.color.set("#ffcc96");
+    demonTopLight.color.set('#ffcc96');
     demonTopLight.intensity = 2.2;
     demonTopLight.position.set(0.4, 10.1, 3.0);
     demonTopLight.angle = 0.5;
     demonTopLight.penumbra = 0.42;
 
-    hellUnderLight = new THREE.PointLight(
-      "#ff4a1f",
-      HELL_MENU_TUNING.underlightIntensity,
-      18,
-      1.9
-    );
+    hellUnderLight = new THREE.PointLight('#ff4a1f', HELL_MENU_TUNING.underlightIntensity, 18, 1.9);
     hellUnderLight.position.set(0, -2.25, -0.3);
     scene.add(hellUnderLight);
 
-    hellRimLight = new THREE.DirectionalLight("#ff6b42", 0.56);
+    hellRimLight = new THREE.DirectionalLight('#ff6b42', 0.56);
     hellRimLight.position.set(-6.8, 6.9, -9.0);
     scene.add(hellRimLight);
 
-    hellBackLight = new THREE.PointLight("#5d130d", 0.48, 24, 2.1);
+    hellBackLight = new THREE.PointLight('#5d130d', 0.48, 24, 2.1);
     hellBackLight.position.set(0, 6.0, -15.0);
     scene.add(hellBackLight);
   }
@@ -938,10 +862,10 @@ export function mountMenuScreen({
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(90, 90),
     new THREE.MeshStandardMaterial({
-      color: isHeaven ? "#d4e8f6" : isJungle ? "#acc98d" : isBrainrot ? "#300942" : "#24100d",
+      color: isHeaven ? '#d4e8f6' : isJungle ? '#acc98d' : isBankr ? '#D6D4C8' : '#24100d',
       roughness: 0.92,
       metalness: 0.02,
-    })
+    }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.7;
@@ -955,16 +879,16 @@ export function mountMenuScreen({
   let hellGround = null;
   let hellEmbers = null;
   let jungleGround = null;
-  let brainrotGround = null;
+  let bankrGround = null;
   const menuTexturePath = isHeaven
-    ? "/themes/heaven.webp"
+    ? '/themes/heaven.webp'
     : isJungle
-      ? "/themes/junglebay.webp"
-      : isBrainrot
-        ? "/themes/brainrot.webp"
-        : isHell
-          ? "/themes/hell.webp"
-          : "";
+    ? '/themes/junglebay.webp'
+    : isBankr
+    ? '/themes/bankr.webp'
+    : isHell
+    ? '/themes/hell.webp'
+    : '';
   if (menuTexturePath) {
     menuTextureSphere = createMenuTextureSphere(renderer, menuTexturePath);
     scene.add(menuTextureSphere.mesh);
@@ -985,9 +909,9 @@ export function mountMenuScreen({
     jungleGround = createJungleMenuGround();
     scene.add(jungleGround.group);
   }
-  if (isBrainrot) {
-    brainrotGround = createBrainrotMenuGround();
-    scene.add(brainrotGround.group);
+  if (isBankr) {
+    bankrGround = createBankrMenuGround();
+    scene.add(bankrGround.group);
   }
 
   const titleUniforms = {
@@ -1162,55 +1086,120 @@ export function mountMenuScreen({
       gl_FragColor = vec4(finalmix.rgb, 1.0);
     }
   `;
-  const brainrotFragmentShader = `
+  const bankrFragmentShader = `
+    precision highp float;
+
     uniform float iTime;
     uniform vec2 iResolution;
+    uniform vec2 iMouse;
+    uniform float iHover;
     varying vec2 vUv;
 
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    float hash(float n) {
+      return fract(sin(n) * 43758.5453123);
+    }
+
+    float box(vec2 p, vec4 bounds) {
+      return step(bounds.x, p.x) * step(bounds.y, p.y)
+        * step(p.x, bounds.z) * step(p.y, bounds.w);
+    }
+
+    float letterB(vec2 p) {
+      return max(
+        box(p, vec4(0.08, 0.08, 0.25, 0.92)),
+        max(
+          box(p, vec4(0.2, 0.78, 0.72, 0.92)),
+          max(
+            box(p, vec4(0.2, 0.45, 0.66, 0.58)),
+            max(
+              box(p, vec4(0.2, 0.08, 0.72, 0.22)),
+              max(
+                box(p, vec4(0.62, 0.53, 0.78, 0.82)),
+                box(p, vec4(0.62, 0.18, 0.78, 0.48))
+              )
+            )
+          )
+        )
+      );
+    }
+
+    float letterA(vec2 p) {
+      float left = box(p, vec4(0.08, 0.08, 0.25, 0.78));
+      float right = box(p, vec4(0.68, 0.08, 0.85, 0.78));
+      float top = box(p, vec4(0.2, 0.75, 0.73, 0.92));
+      float middle = box(p, vec4(0.2, 0.43, 0.73, 0.57));
+      return max(max(left, right), max(top, middle));
+    }
+
+    float letterN(vec2 p) {
+      float sides = max(
+        box(p, vec4(0.08, 0.08, 0.25, 0.92)),
+        box(p, vec4(0.7, 0.08, 0.87, 0.92))
+      );
+      float diagonal = step(abs(p.x - p.y), 0.12)
+        * step(0.12, p.x) * step(p.x, 0.83);
+      return max(sides, diagonal);
+    }
+
+    float letterK(vec2 p) {
+      float stem = box(p, vec4(0.08, 0.08, 0.25, 0.92));
+      float upper = step(abs((p.x + p.y) - 1.05), 0.12)
+        * step(0.2, p.x) * step(p.x, 0.82);
+      float lower = step(abs(p.x - p.y - 0.02), 0.12)
+        * step(0.2, p.x) * step(p.x, 0.82);
+      return max(stem, max(upper, lower));
+    }
+
+    float letterR(vec2 p) {
+      float bowl = max(
+        letterB(p) * step(0.46, p.y),
+        box(p, vec4(0.08, 0.08, 0.25, 0.52))
+      );
+      float leg = step(abs(p.x - p.y - 0.02), 0.12)
+        * step(0.22, p.x) * step(p.x, 0.82) * step(p.y, 0.52);
+      return max(bowl, leg);
+    }
+
+    float bankrLetter(vec2 p, float index) {
+      p = (p - 0.5) * 0.7 + 0.5;
+      if (index < 0.5) return letterB(p);
+      if (index < 1.5) return letterA(p);
+      if (index < 2.5) return letterN(p);
+      if (index < 3.5) return letterK(p);
+      return letterR(p);
     }
 
     void main() {
-      vec2 uv = vUv * 2.0 - 1.0;
-      float t = iTime * 0.65;
+      vec2 grid = vec2(12.0, 4.0);
+      vec2 cell = vUv * grid;
+      float column = floor(cell.x);
+      float row = floor(cell.y);
+      vec2 glyphUv = fract(cell);
 
-      vec3 baseA = vec3(0.18, 0.00, 0.30); // dark purple
-      vec3 baseB = vec3(0.03, 0.00, 0.10); // near-black violet
-      vec3 color = mix(baseB, baseA, vUv.y);
+      float speed = 0.75 + hash(column * 13.17) * 1.35;
+      float stream = fract(row / grid.y + iTime * speed * 0.12 + hash(column * 7.91));
+      float head = smoothstep(0.82, 1.0, stream);
+      float trail = pow(stream, 3.4) * (0.4 + hash(column + row * 31.0) * 0.6);
+      float letterIndex = mod(floor(row + iTime * speed * 3.0 + hash(column) * 5.0), 5.0);
+      float glyph = bankrLetter(glyphUv, letterIndex);
 
-      // Cheap animated bands and swirl.
-      float bands = sin((uv.y + t * 0.85) * 11.0) * 0.5 + 0.5;
-      float swirl = sin((uv.x * 1.7 + uv.y * 0.8 - t * 0.45) * 7.0) * 0.5 + 0.5;
-      float pulse = 0.5 + 0.5 * sin(t * 1.6);
-
-      // Tiny grain without expensive fbm loops.
-      float grain = hash(floor((uv + 1.0) * 46.0 + t * 3.0)) * 0.12;
-
-      vec3 pink = vec3(0.96, 0.23, 0.78);
-      vec3 cyan = vec3(0.20, 0.86, 1.00);
-      vec3 lime = vec3(0.74, 0.98, 0.22);
-
-      color = mix(color, pink, bands * 0.32);
-      color = mix(color, cyan, swirl * 0.28);
-      color += lime * (bands * swirl * pulse * 0.09);
-      color += grain;
-      color = clamp(color, 0.0, 1.0);
-
-      gl_FragColor = vec4(color, 1.0);
+      vec3 amber = vec3(0.969, 0.8, 0.49);
+      vec3 color = amber * glyph * (trail * 0.78 + head * 1.4);
+      color += amber * glyph * iHover * 0.24;
+      float alpha = clamp(max(max(color.r, color.g), color.b) * 1.45, 0.12, 1.0);
+      gl_FragColor = vec4(color, alpha);
     }
   `;
-
   const titleMaterial = new THREE.ShaderMaterial({
     uniforms: titleUniforms,
     vertexShader: titleVertexShader,
     fragmentShader: isHeaven
       ? heavenFragmentShader
       : isJungle
-        ? kaleFragmentShader
-        : isBrainrot
-          ? brainrotFragmentShader
-        : hellFragmentShader,
+      ? kaleFragmentShader
+      : isBankr
+      ? bankrFragmentShader
+      : hellFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
@@ -1222,8 +1211,8 @@ export function mountMenuScreen({
   const titleScreen = new THREE.Vector3();
   let hoverTarget = 0;
   const loader = new FontLoader();
-  loader.load("/fonts/hell.json", (font) => {
-    const titleGeometry = new TextGeometry("AURA CAPS", {
+  loader.load('/fonts/hell.json', (font) => {
+    const titleGeometry = new TextGeometry('AURA CAPS', {
       font,
       size: 3.1,
       depth: 0.9,
@@ -1243,102 +1232,24 @@ export function mountMenuScreen({
 
   let demon = null;
   let demonPivot = null;
-  const sideCharacterPivots = [];
-  const sideCharacterPaths = pickRandomUnique(MOGGMON_MODEL_PATHS, 2);
   const dracoLoader = new DRACOLoader();
-  dracoLoader.setDecoderPath("/draco/");
+  dracoLoader.setDecoderPath('/draco/');
   const ktx2Loader = new KTX2Loader();
-  ktx2Loader.setTranscoderPath("/basis/");
+  ktx2Loader.setTranscoderPath('/basis/');
   ktx2Loader.detectSupport(renderer);
   const gltfLoader = new GLTFLoader();
   gltfLoader.setDRACOLoader(dracoLoader);
   gltfLoader.setKTX2Loader(ktx2Loader);
 
   const menuModelPath = isHeaven
-    ? "/3d/heaven.glb"
+    ? '/3d/heaven.glb'
     : isJungle
-      ? "/3d/jbMenu.glb"
-      : isBrainrot
-        ? "/3d/tungMain.glb"
-      : "/3d/demon.glb";
+    ? '/3d/jbMenu.glb'
+    : isBankr
+    ? '/3d/bankr.glb'
+    : '/3d/demon.glb';
   const jungleMenuYDesktop = 1.38;
   const jungleMenuYMobile = 0.93;
-  const brainrotMenuYDesktop = 1.42;
-  const brainrotMenuYMobile = 1.02;
-  const brainrotMenuScaleDesktop = 9.2;
-  const brainrotMenuScaleMobile = 7.6;
-
-  const applySideCharacterLayout = () => {
-    const isMobile = window.innerWidth <= 640;
-    const positions = [
-      {
-        x: isMobile ? -3.5 : -4.95,
-        y: isMobile ? 6 : -1,
-        z: isMobile ? -1.05 : -1.2,
-        rotationY: -Math.PI * 0.5,
-      },
-      {
-        x: isMobile ? 3.5 : 4.95,
-        y: isMobile ? 6 : -1,
-        z: isMobile ? -1.05 : -1.2,
-        rotationY: -Math.PI * 0.5,
-      },
-    ];
-    sideCharacterPivots.forEach((pivot, idx) => {
-      const layout = positions[idx] || positions[0];
-      const targetHeight = isMobile ? 2.15 : 3.35;
-      const normalizedHeight = Math.max(0.001, pivot.userData.normalizedHeight || 1);
-      pivot.position.set(layout.x, layout.y, layout.z);
-      pivot.rotation.y = layout.rotationY;
-      pivot.scale.setScalar(targetHeight / normalizedHeight);
-      pivot.userData.baseY = layout.y;
-      pivot.userData.baseRotationY = layout.rotationY;
-    });
-  };
-
-  const loadSideCharacters = () => {
-    sideCharacterPaths.forEach((modelPath, idx) => {
-      gltfLoader.load(
-        modelPath,
-        (gltf) => {
-          const model = gltf.scene;
-          model.traverse((child) => {
-            if (!child.isMesh) {
-              return;
-            }
-            child.castShadow = true;
-            child.receiveShadow = true;
-            if (child.material && !Array.isArray(child.material)) {
-              child.material.roughness = Math.min(child.material.roughness ?? 1, 0.82);
-              child.material.needsUpdate = true;
-            }
-          });
-
-          const bbox = new THREE.Box3().setFromObject(model);
-          const center = new THREE.Vector3();
-          const size = new THREE.Vector3();
-          bbox.getCenter(center);
-          bbox.getSize(size);
-          model.position.sub(center);
-
-          const pivot = new THREE.Group();
-          pivot.name = `moggmon-side-character-${idx + 1}`;
-          pivot.userData.normalizedHeight = size.y || 1;
-          pivot.userData.floatPhase = Math.random() * Math.PI * 2;
-          pivot.add(model);
-          sideCharacterPivots[idx] = pivot;
-          scene.add(pivot);
-          applySideCharacterLayout();
-        },
-        undefined,
-        () => {
-          // Side characters are decorative, so failed loads should not block the menu.
-        }
-      );
-    });
-  };
-
-  loadSideCharacters();
 
   gltfLoader.load(
     menuModelPath,
@@ -1349,35 +1260,40 @@ export function mountMenuScreen({
           child.castShadow = true;
           child.receiveShadow = true;
           if (isHeaven && child.material && !Array.isArray(child.material)) {
-            const n = String(child.name || "").toLowerCase();
+            const n = String(child.name || '').toLowerCase();
             child.material.roughness = Math.min(child.material.roughness ?? 1, 0.66);
             child.material.metalness = Math.max(child.material.metalness ?? 0, 0.06);
-            if (n.includes("cap") || n.includes("coin")) {
-              child.material.emissive = new THREE.Color("#80abeb");
+            if (n.includes('cap') || n.includes('coin')) {
+              child.material.emissive = new THREE.Color('#80abeb');
               child.material.emissiveIntensity = 0.12;
-            } else if (n.includes("wing")) {
-              child.material.emissive = new THREE.Color("#a9c6ef");
+            } else if (n.includes('wing')) {
+              child.material.emissive = new THREE.Color('#a9c6ef');
               child.material.emissiveIntensity = 0.09;
-            } else if (n.includes("cloud")) {
-              child.material.emissive = new THREE.Color("#c9ddf8");
+            } else if (n.includes('cloud')) {
+              child.material.emissive = new THREE.Color('#c9ddf8');
               child.material.emissiveIntensity = 0.06;
               child.material.roughness = Math.min(child.material.roughness ?? 1, 0.74);
             } else {
-              child.material.emissive = new THREE.Color("#86afe8");
+              child.material.emissive = new THREE.Color('#86afe8');
               child.material.emissiveIntensity = 0.07;
             }
+            child.material.needsUpdate = true;
+          }
+          if (isBankr && child.material && !Array.isArray(child.material)) {
+            child.material.roughness = Math.min(child.material.roughness ?? 1, 0.72);
+            child.material.metalness = Math.max(child.material.metalness ?? 0, 0.08);
             child.material.needsUpdate = true;
           }
           if (isHell && child.material && !Array.isArray(child.material)) {
             // Make the hand/cap integrate with the new lighting and boost cap readability.
             child.material.roughness = Math.min(child.material.roughness ?? 1, 0.78);
             child.material.metalness = Math.max(child.material.metalness ?? 0, 0.08);
-            const n = String(child.name || "").toLowerCase();
-            if (n.includes("cap") || n.includes("coin")) {
-              child.material.emissive = new THREE.Color("#5a180d");
+            const n = String(child.name || '').toLowerCase();
+            if (n.includes('cap') || n.includes('coin')) {
+              child.material.emissive = new THREE.Color('#5a180d');
               child.material.emissiveIntensity = 0.28;
             } else {
-              child.material.emissive = new THREE.Color("#0f0303");
+              child.material.emissive = new THREE.Color('#0f0303');
               child.material.emissiveIntensity = 0.11;
             }
             child.material.needsUpdate = true;
@@ -1387,16 +1303,16 @@ export function mountMenuScreen({
 
       const bbox = new THREE.Box3().setFromObject(demon);
       const center = new THREE.Vector3();
+      const size = new THREE.Vector3();
       bbox.getCenter(center);
+      bbox.getSize(size);
       demon.position.sub(center);
 
       demonPivot = new THREE.Group();
-      demonPivot.position.set(
-        0,
-        isJungle ? jungleMenuYDesktop : isBrainrot ? brainrotMenuYDesktop : 1.5,
-        -1
-      );
-      demonPivot.scale.setScalar(isBrainrot ? brainrotMenuScaleDesktop : 10);
+      demonPivot.position.set(0, isJungle ? jungleMenuYDesktop : 1.5, -1);
+      const bankrScale = 8.5 / Math.max(size.x, size.y, size.z, 0.001);
+      demonPivot.userData.desktopScale = isBankr ? bankrScale : 10;
+      demonPivot.scale.setScalar(demonPivot.userData.desktopScale);
       demonPivot.rotation.y = -Math.PI * 0.5;
       demonPivot.add(demon);
       scene.add(demonPivot);
@@ -1408,28 +1324,28 @@ export function mountMenuScreen({
     undefined,
     () => {
       revealMenu();
-    }
+    },
   );
 
-  const playButton = app.querySelector("#menuPlay");
-  const resumePvpButton = app.querySelector("#menuResumePvp");
-  const collectionButton = app.querySelector("#menuCollection");
-  const menuMuteToggleBtn = app.querySelector("#menuMuteToggle");
-  const themeSelectEl = app.querySelector("#menuThemeSelect");
-  const auraLoginContainer = app.querySelector("#aura-login");
-  const auraConnectedStatus = app.querySelector("#auraConnectedStatus");
-  const auraHintStatus = app.querySelector("#auraHintStatus");
-  const preloader = app.querySelector("#menuPreloader");
-  const menuButtons = app.querySelector(".menu-buttons");
+  const playButton = app.querySelector('#menuPlay');
+  const resumePvpButton = app.querySelector('#menuResumePvp');
+  const collectionButton = app.querySelector('#menuCollection');
+  const menuMuteToggleBtn = app.querySelector('#menuMuteToggle');
+  const themeSelectEl = app.querySelector('#menuThemeSelect');
+  const auraLoginContainer = app.querySelector('#aura-login');
+  const auraConnectedStatus = app.querySelector('#auraConnectedStatus');
+  const auraHintStatus = app.querySelector('#auraHintStatus');
+  const preloader = app.querySelector('#menuPreloader');
+  const menuButtons = app.querySelector('.menu-buttons');
   const updateSoundButton = (enabled) => {
-    menuMuteToggleBtn.classList.toggle("muted", !enabled);
-    menuMuteToggleBtn.textContent = enabled ? "mute: off" : "mute: on";
+    menuMuteToggleBtn.classList.toggle('muted', !enabled);
+    menuMuteToggleBtn.textContent = enabled ? 'mute: off' : 'mute: on';
   };
   const onSoundToggleClick = () => {
-    const enabled = onSoundToggle ? onSoundToggle() : menuMuteToggleBtn.classList.contains("muted");
+    const enabled = onSoundToggle ? onSoundToggle() : menuMuteToggleBtn.classList.contains('muted');
     updateSoundButton(Boolean(enabled));
   };
-  const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || "hell");
+  const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || 'hell');
   let auraApi = null;
   let connectedActionHandler = null;
   let signinHandler = null;
@@ -1441,12 +1357,10 @@ export function mountMenuScreen({
     const fromEnv = pickFirstString(import.meta.env?.VITE_AURA_CLIENT_ID);
     const fromWindow = pickFirstString(window.__AURA_CLIENT_ID__);
     const fromMeta = pickFirstString(
-      document.querySelector('meta[name="aura-client-id"]')?.getAttribute("content")
+      document.querySelector('meta[name="aura-client-id"]')?.getAttribute('content'),
     );
-    const fromStorageRaw = pickFirstString(
-      window.localStorage.getItem(AURA_CLIENT_ID_STORAGE_KEY)
-    );
-    const hostLabel = pickFirstString(window.location.hostname?.split(".")?.[0]);
+    const fromStorageRaw = pickFirstString(window.localStorage.getItem(AURA_CLIENT_ID_STORAGE_KEY));
+    const hostLabel = pickFirstString(window.location.hostname?.split('.')?.[0]);
     const candidates = [fromEnv, fromWindow, fromMeta, fromStorageRaw, hostLabel];
     const resolved = candidates.find((candidate) => isValidAuraClientId(candidate));
     if (fromStorageRaw && !isValidAuraClientId(fromStorageRaw)) {
@@ -1462,9 +1376,9 @@ export function mountMenuScreen({
     if (!auraHintStatus) {
       return;
     }
-    const hasMessage = Boolean(String(message || "").trim());
-    auraHintStatus.classList.toggle("visible", hasMessage);
-    auraHintStatus.textContent = hasMessage ? String(message) : "";
+    const hasMessage = Boolean(String(message || '').trim());
+    auraHintStatus.classList.toggle('visible', hasMessage);
+    auraHintStatus.textContent = hasMessage ? String(message) : '';
   };
 
   const extractLikelyPayloads = (input) => {
@@ -1473,7 +1387,7 @@ export function mountMenuScreen({
     const seen = new Set();
     while (queue.length > 0) {
       const item = queue.shift();
-      if (!item || typeof item !== "object" || seen.has(item)) {
+      if (!item || typeof item !== 'object' || seen.has(item)) {
         continue;
       }
       seen.add(item);
@@ -1484,10 +1398,10 @@ export function mountMenuScreen({
   };
 
   const normalizeAuraSession = (input) => {
-    auraDebugLog("normalizeAuraSession input", input);
+    auraDebugLog('normalizeAuraSession input', input);
     const payloads = extractLikelyPayloads(input);
     let user = null;
-    let walletAddress = "";
+    let walletAddress = '';
 
     for (const payload of payloads) {
       const candidateUser =
@@ -1499,7 +1413,7 @@ export function mountMenuScreen({
         payload?.result?.user ||
         payload?.result?.profile ||
         null;
-      if (!user && candidateUser && typeof candidateUser === "object") {
+      if (!user && candidateUser && typeof candidateUser === 'object') {
         user = candidateUser;
       }
 
@@ -1516,8 +1430,8 @@ export function mountMenuScreen({
         payload?.profile?.address,
         payload?.account?.walletAddress,
         payload?.account?.address,
-        Array.isArray(payload?.addresses) ? payload.addresses[0] : "",
-        Array.isArray(payload?.user?.addresses) ? payload.user.addresses[0] : ""
+        Array.isArray(payload?.addresses) ? payload.addresses[0] : '',
+        Array.isArray(payload?.user?.addresses) ? payload.user.addresses[0] : '',
       );
       if (!walletAddress && candidateWallet) {
         walletAddress = candidateWallet;
@@ -1529,7 +1443,7 @@ export function mountMenuScreen({
       Boolean(user) ||
       Boolean(input?.connected) ||
       Boolean(input?.isConnected);
-    auraDebugLog("normalizeAuraSession parsed", {
+    auraDebugLog('normalizeAuraSession parsed', {
       hasIdentity,
       walletAddress,
       hasUser: Boolean(user),
@@ -1546,14 +1460,14 @@ export function mountMenuScreen({
 
   const clearConnectedActionHandler = () => {
     if (connectedActionHandler) {
-      auraLoginContainer?.removeEventListener("click", connectedActionHandler);
+      auraLoginContainer?.removeEventListener('click', connectedActionHandler);
       connectedActionHandler = null;
     }
   };
 
   const clearSigninHandler = () => {
     if (signinHandler) {
-      auraLoginContainer?.removeEventListener("click", signinHandler);
+      auraLoginContainer?.removeEventListener('click', signinHandler);
       signinHandler = null;
     }
   };
@@ -1572,17 +1486,17 @@ export function mountMenuScreen({
     }
     clearConnectedActionHandler();
     clearSigninHandler();
-    auraLoginContainer.classList.remove("hidden");
+    auraLoginContainer.classList.remove('hidden');
     auraLoginContainer.innerHTML =
       '<button id="auraProfileBtn" class="theme-btn aura-disconnect-btn" type="button">profile</button>';
     connectedActionHandler = async (event) => {
       const target = event.target;
-      if (!(target instanceof Element) || !target.closest("#auraProfileBtn")) {
+      if (!(target instanceof Element) || !target.closest('#auraProfileBtn')) {
         return;
       }
       onProfile?.();
     };
-    auraLoginContainer.addEventListener("click", connectedActionHandler);
+    auraLoginContainer.addEventListener('click', connectedActionHandler);
   };
 
   const renderAuraSignin = () => {
@@ -1591,19 +1505,19 @@ export function mountMenuScreen({
     }
     clearConnectedActionHandler();
     clearSigninHandler();
-    auraLoginContainer.classList.remove("hidden");
-    auraLoginContainer.innerHTML = "";
+    auraLoginContainer.classList.remove('hidden');
+    auraLoginContainer.innerHTML = '';
     signinHandler = async () => {
       try {
         if (!auraApi) {
           auraApi = await loadAuraSdk();
-          auraDebugLog("Aura SDK loaded", Object.keys(auraApi || {}));
+          auraDebugLog('Aura SDK loaded', Object.keys(auraApi || {}));
         }
         const clientId = resolveAuraClientId();
-        auraDebugLog("sign-in requested", { clientId });
+        auraDebugLog('sign-in requested', { clientId });
         setAuraHint(`Aura login ready (${clientId})`);
         if (clientId === AURA_DEFAULT_CLIENT_ID) {
-          setAuraHint("Aura clientId is not configured. Set VITE_AURA_CLIENT_ID.");
+          setAuraHint('Aura clientId is not configured. Set VITE_AURA_CLIENT_ID.');
         }
         try {
           window.localStorage.setItem(AURA_CLIENT_ID_STORAGE_KEY, clientId);
@@ -1611,43 +1525,43 @@ export function mountMenuScreen({
           // Ignore storage errors.
         }
 
-        if (typeof auraApi?.SigninButton === "function") {
-          auraDebugLog("mounting Aura.SigninButton");
+        if (typeof auraApi?.SigninButton === 'function') {
+          auraDebugLog('mounting Aura.SigninButton');
           auraApi.SigninButton({
-            container: "#aura-login",
+            container: '#aura-login',
             clientId,
-            mode: "light",
-            text: "log in",
+            mode: 'light',
+            text: 'log in',
             onClose(error) {
-              auraDebugLog("Aura.SigninButton onClose", error);
-              setAuraHint(error?.message || "Aura login closed.");
+              auraDebugLog('Aura.SigninButton onClose', error);
+              setAuraHint(error?.message || 'Aura login closed.');
               readAuraSessionFromSdk().then((restoredFromSdk) => {
-                auraDebugLog("onClose restoredFromSdk", restoredFromSdk);
+                auraDebugLog('onClose restoredFromSdk', restoredFromSdk);
                 if (restoredFromSdk) {
                   applyConnectedSession(restoredFromSdk);
-                  setAuraHint("");
+                  setAuraHint('');
                   return;
                 }
                 startAuraSyncBurst();
               });
             },
             onError(error) {
-              auraDebugLog("Aura.SigninButton onError", error);
-              setAuraHint(error?.message || "Aura login failed.");
+              auraDebugLog('Aura.SigninButton onError', error);
+              setAuraHint(error?.message || 'Aura login failed.');
               startAuraSyncBurst();
             },
             onSuccess(result) {
-              auraDebugLog("Aura.SigninButton onSuccess", result);
+              auraDebugLog('Aura.SigninButton onSuccess', result);
               const normalized = applyConnectedSession(result);
               if (normalized) {
-                setAuraHint("");
+                setAuraHint('');
                 return;
               }
               readAuraSessionFromSdk().then((restoredFromSdk) => {
-                auraDebugLog("SigninButton fallback restoredFromSdk", restoredFromSdk);
+                auraDebugLog('SigninButton fallback restoredFromSdk', restoredFromSdk);
                 if (restoredFromSdk) {
                   applyConnectedSession(restoredFromSdk);
-                  setAuraHint("");
+                  setAuraHint('');
                 }
               });
             },
@@ -1658,26 +1572,26 @@ export function mountMenuScreen({
 
         auraLoginContainer.innerHTML =
           '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in</button>';
-        const fallbackBtn = auraLoginContainer.querySelector("#auraSigninBtn");
+        const fallbackBtn = auraLoginContainer.querySelector('#auraSigninBtn');
         fallbackBtn?.addEventListener(
-          "click",
+          'click',
           async () => {
-            if (typeof auraApi?.signIn !== "function") {
+            if (typeof auraApi?.signIn !== 'function') {
               return;
             }
             const result = await auraApi.signIn({
               auraOrigin: AURA_ORIGIN,
               clientId,
-              mode: "light",
+              mode: 'light',
             });
-            auraDebugLog("Aura.signIn fallback result", result);
+            auraDebugLog('Aura.signIn fallback result', result);
             applyConnectedSession(result);
           },
-          { once: true }
+          { once: true },
         );
       } catch {
-        auraDebugLog("sign-in failed, starting sync burst");
-        setAuraHint("Aura popup closed but no auth callback received.");
+        auraDebugLog('sign-in failed, starting sync burst');
+        setAuraHint('Aura popup closed but no auth callback received.');
         startAuraSyncBurst();
       }
     };
@@ -1685,9 +1599,7 @@ export function mountMenuScreen({
   };
 
   const clickAuraSigninControl = () => {
-    const clickable = auraLoginContainer?.querySelector(
-      "button, [role='button'], a, iframe"
-    );
+    const clickable = auraLoginContainer?.querySelector("button, [role='button'], a, iframe");
     if (clickable instanceof HTMLElement) {
       clickable.click();
     }
@@ -1704,36 +1616,36 @@ export function mountMenuScreen({
     }
 
     let normalized = null;
-    if (typeof auraApi.getSession === "function") {
+    if (typeof auraApi.getSession === 'function') {
       const session = await safeCall(auraApi.getSession, auraApi);
-      auraDebugLog("Aura.getSession()", session);
+      auraDebugLog('Aura.getSession()', session);
       normalized = normalizeAuraSession(session);
       if (normalized) {
         return normalized;
       }
     }
 
-    if (typeof auraApi.getCurrentUser === "function") {
+    if (typeof auraApi.getCurrentUser === 'function') {
       const user = await safeCall(auraApi.getCurrentUser, auraApi);
-      auraDebugLog("Aura.getCurrentUser()", user);
+      auraDebugLog('Aura.getCurrentUser()', user);
       normalized = normalizeAuraSession({ user });
       if (normalized) {
         return normalized;
       }
     }
 
-    if (typeof auraApi.getWalletAddress === "function") {
+    if (typeof auraApi.getWalletAddress === 'function') {
       const walletAddress = await safeCall(auraApi.getWalletAddress, auraApi);
-      auraDebugLog("Aura.getWalletAddress()", walletAddress);
+      auraDebugLog('Aura.getWalletAddress()', walletAddress);
       normalized = normalizeAuraSession({ walletAddress });
       if (normalized) {
         return normalized;
       }
     }
 
-    if (typeof auraApi.getUser === "function") {
+    if (typeof auraApi.getUser === 'function') {
       const user = await safeCall(auraApi.getUser, auraApi);
-      auraDebugLog("Aura.getUser()", user);
+      auraDebugLog('Aura.getUser()', user);
       normalized = normalizeAuraSession({ user });
       if (normalized) {
         return normalized;
@@ -1746,13 +1658,13 @@ export function mountMenuScreen({
   const applyConnectedSession = (sessionLike) => {
     const normalized = normalizeAuraSession(sessionLike);
     if (!normalized) {
-      auraDebugLog("applyConnectedSession skipped: no normalized session");
+      auraDebugLog('applyConnectedSession skipped: no normalized session');
       return null;
     }
-    auraDebugLog("applyConnectedSession success", normalized);
+    auraDebugLog('applyConnectedSession success', normalized);
     localAuraSession = normalized;
     setAuraConnectedStatus(normalized);
-    setAuraHint("");
+    setAuraHint('');
     onAuraSuccess?.(normalized);
     renderAuraConnectedAction();
     stopAuraSyncBurst();
@@ -1773,7 +1685,7 @@ export function mountMenuScreen({
         localAuraSession = null;
         onAuraDisconnect?.();
         setAuraConnectedStatus(null);
-        setAuraHint("Not connected. Use Login with Aura.");
+        setAuraHint('Not connected. Use Login with Aura.');
         renderAuraSignin();
       }
       return null;
@@ -1800,66 +1712,62 @@ export function mountMenuScreen({
     if (!auraConnectedStatus) {
       return;
     }
-    const connected = Boolean(sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected);
-    auraConnectedStatus.classList.toggle("visible", connected);
-    auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : "";
+    const connected = Boolean(
+      sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected,
+    );
+    auraConnectedStatus.classList.toggle('visible', connected);
+    auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : '';
   };
 
   const onAuraMessage = (event) => {
-    const origin = String(event.origin || "");
+    const origin = String(event.origin || '');
     const isAuraOrigin =
-      origin === AURA_ORIGIN ||
-      origin.endsWith(".auramaxx.gg") ||
-      origin.includes("auramaxx.gg");
+      origin === AURA_ORIGIN || origin.endsWith('.auramaxx.gg') || origin.includes('auramaxx.gg');
     if (!isAuraOrigin) {
       return;
     }
     const type = event.data?.type;
-    auraDebugLog("window message", { origin, type, data: event.data });
-    setAuraHint(`Aura message: ${type || "unknown"} from ${origin}`);
-    const payload =
-      event.data?.result ??
-      event.data?.data ??
-      event.data?.payload ??
-      event.data;
+    auraDebugLog('window message', { origin, type, data: event.data });
+    setAuraHint(`Aura message: ${type || 'unknown'} from ${origin}`);
+    const payload = event.data?.result ?? event.data?.data ?? event.data?.payload ?? event.data;
     const looksLikeAuraLogin =
-      type === "aura.login.result" ||
-      String(type || "").includes("aura") ||
+      type === 'aura.login.result' ||
+      String(type || '').includes('aura') ||
       Boolean(payload?.walletAddress || payload?.user || payload?.authenticated);
     if (!looksLikeAuraLogin) {
       return;
     }
     applyConnectedSession(payload);
   };
-  menuMuteToggleBtn.addEventListener("click", onSoundToggleClick);
-  playButton.addEventListener("click", onPlay);
-  resumePvpButton?.addEventListener("click", onResumePvp);
-  collectionButton.addEventListener("click", onCollection);
-  themeSelectEl?.addEventListener("change", onThemeSelect);
-  menuButtons.classList.add("disabled");
+  menuMuteToggleBtn.addEventListener('click', onSoundToggleClick);
+  playButton.addEventListener('click', onPlay);
+  resumePvpButton?.addEventListener('click', onResumePvp);
+  collectionButton.addEventListener('click', onCollection);
+  themeSelectEl?.addEventListener('change', onThemeSelect);
+  menuButtons.classList.add('disabled');
 
   if (!hasConnectedSession(auraSession)) {
-    auraDebugLog("initial state: disconnected");
+    auraDebugLog('initial state: disconnected');
     loadAuraSdk()
-    .then(async (Aura) => {
-      auraApi = Aura;
-      const restored = await syncAuraSessionFromSdk();
-      if (restored) {
-        setAuraHint("");
-        return;
-      }
-      setAuraHint("Not connected. Use Login with Aura.");
-      renderAuraSignin();
-    })
-    .catch(() => {
-      setAuraHint("Failed to load Aura SDK.");
-      renderAuraSignin();
-    });
+      .then(async (Aura) => {
+        auraApi = Aura;
+        const restored = await syncAuraSessionFromSdk();
+        if (restored) {
+          setAuraHint('');
+          return;
+        }
+        setAuraHint('Not connected. Use Login with Aura.');
+        renderAuraSignin();
+      })
+      .catch(() => {
+        setAuraHint('Failed to load Aura SDK.');
+        renderAuraSignin();
+      });
   } else {
-    auraDebugLog("initial state: connected from app session", auraSession);
+    auraDebugLog('initial state: connected from app session', auraSession);
     localAuraSession = auraSession;
     setAuraConnectedStatus(localAuraSession);
-    setAuraHint("");
+    setAuraHint('');
     loadAuraSdk()
       .then((Aura) => {
         auraApi = Aura;
@@ -1872,14 +1780,14 @@ export function mountMenuScreen({
   const onWindowFocus = () => {
     syncAuraSessionFromSdk();
   };
-  window.addEventListener("focus", onWindowFocus);
-  window.addEventListener("message", onAuraMessage);
-  window.addEventListener("aura-caps-open-login", onExternalAuraLoginRequest);
-  document.addEventListener("visibilitychange", onWindowFocus);
+  window.addEventListener('focus', onWindowFocus);
+  window.addEventListener('message', onAuraMessage);
+  window.addEventListener('aura-caps-open-login', onExternalAuraLoginRequest);
+  document.addEventListener('visibilitychange', onWindowFocus);
 
   const revealMenu = () => {
-    preloader.classList.add("hidden");
-    menuButtons.classList.remove("disabled");
+    preloader.classList.add('hidden');
+    menuButtons.classList.remove('disabled');
   };
 
   const onPointerMove = (event) => {
@@ -1915,7 +1823,7 @@ export function mountMenuScreen({
     }
   };
 
-  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener('pointermove', onPointerMove);
 
   let rafId = null;
   let running = true;
@@ -1930,7 +1838,7 @@ export function mountMenuScreen({
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       isHeaven ? HEAVEN_MENU_TUNING.bloomStrength : HELL_MENU_TUNING.bloomStrength,
       isHeaven ? HEAVEN_MENU_TUNING.bloomRadius : HELL_MENU_TUNING.bloomRadius,
-      isHeaven ? HEAVEN_MENU_TUNING.bloomThreshold : HELL_MENU_TUNING.bloomThreshold
+      isHeaven ? HEAVEN_MENU_TUNING.bloomThreshold : HELL_MENU_TUNING.bloomThreshold,
     );
     composer.addPass(bloomPass);
   }
@@ -1942,25 +1850,11 @@ export function mountMenuScreen({
     rafId = requestAnimationFrame(animate);
     const t = performance.now() * 0.001;
     titleUniforms.iTime.value = t;
-    titleUniforms.iHover.value = THREE.MathUtils.lerp(
-      titleUniforms.iHover.value,
-      hoverTarget,
-      0.2
-    );
+    titleUniforms.iHover.value = THREE.MathUtils.lerp(titleUniforms.iHover.value, hoverTarget, 0.2);
     if (titleMesh) {
       titleMesh.position.y = 8.3 + Math.sin(t * 1.8) * 0.2;
       titleMesh.rotation.y = Math.sin(t * 0.55) * 0.08;
     }
-    sideCharacterPivots.forEach((pivot, idx) => {
-      if (!pivot) {
-        return;
-      }
-      const phase = pivot.userData.floatPhase || 0;
-      pivot.position.y =
-        (pivot.userData.baseY ?? pivot.position.y) + Math.sin(t * 1.2 + phase) * 0.08;
-      pivot.rotation.y =
-        (pivot.userData.baseRotationY ?? 0) + Math.sin(t * 0.75 + idx) * 0.08;
-    });
     if (hellBackground) {
       hellBackground.uniforms.iTime.value = t;
     }
@@ -1981,10 +1875,6 @@ export function mountMenuScreen({
     }
     if (jungleGround) {
       jungleGround.waterRing.rotation.z = t * 0.12;
-    }
-    if (brainrotGround) {
-      brainrotGround.uniforms.iTime.value = t;
-      brainrotGround.ring.rotation.z = t * 0.55;
     }
     if (hellEmbers) {
       hellEmbers.uniforms.iTime.value = t;
@@ -2018,32 +1908,22 @@ export function mountMenuScreen({
       titleMesh.position.y = isMobile ? 9.25 : 8.3;
     }
     if (demonPivot) {
-      const scale = isBrainrot
-        ? isMobile
-          ? brainrotMenuScaleMobile
-          : brainrotMenuScaleDesktop
-        : isMobile
-          ? 8.2
-          : 10;
+      const desktopScale = demonPivot.userData.desktopScale || 10;
+      const scale = isMobile ? desktopScale * 0.82 : desktopScale;
       demonPivot.scale.setScalar(scale);
       const y = isJungle
         ? isMobile
           ? jungleMenuYMobile
           : jungleMenuYDesktop
-        : isBrainrot
-          ? isMobile
-            ? brainrotMenuYMobile + 0.08
-            : brainrotMenuYDesktop + 0.14
-          : isMobile
-            ? 1.05
-            : 1.5;
+        : isMobile
+        ? 1.05
+        : 1.5;
       demonPivot.position.set(0, y, -1);
     }
-    applySideCharacterLayout();
   };
 
   handleResize();
-  window.addEventListener("resize", handleResize);
+  window.addEventListener('resize', handleResize);
   animate();
 
   return () => {
@@ -2051,20 +1931,20 @@ export function mountMenuScreen({
     if (rafId !== null) {
       cancelAnimationFrame(rafId);
     }
-    window.removeEventListener("resize", handleResize);
-    window.removeEventListener("focus", onWindowFocus);
-    window.removeEventListener("message", onAuraMessage);
-    window.removeEventListener("aura-caps-open-login", onExternalAuraLoginRequest);
-    document.removeEventListener("visibilitychange", onWindowFocus);
-    playButton.removeEventListener("click", onPlay);
-    resumePvpButton?.removeEventListener("click", onResumePvp);
-    collectionButton.removeEventListener("click", onCollection);
-    menuMuteToggleBtn.removeEventListener("click", onSoundToggleClick);
-    themeSelectEl?.removeEventListener("change", onThemeSelect);
+    window.removeEventListener('resize', handleResize);
+    window.removeEventListener('focus', onWindowFocus);
+    window.removeEventListener('message', onAuraMessage);
+    window.removeEventListener('aura-caps-open-login', onExternalAuraLoginRequest);
+    document.removeEventListener('visibilitychange', onWindowFocus);
+    playButton.removeEventListener('click', onPlay);
+    resumePvpButton?.removeEventListener('click', onResumePvp);
+    collectionButton.removeEventListener('click', onCollection);
+    menuMuteToggleBtn.removeEventListener('click', onSoundToggleClick);
+    themeSelectEl?.removeEventListener('change', onThemeSelect);
     clearConnectedActionHandler();
     clearSigninHandler();
     stopAuraSyncBurst();
-    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener('pointermove', onPointerMove);
     controls.dispose();
     dracoLoader.dispose();
     ktx2Loader.dispose();
@@ -2093,14 +1973,9 @@ export function mountMenuScreen({
       child.geometry?.dispose?.();
       child.material?.dispose?.();
     }
-    for (const child of brainrotGround?.group.children ?? []) {
+    for (const child of bankrGround?.group.children ?? []) {
       child.geometry?.dispose?.();
       child.material?.dispose?.();
-    }
-    for (const pivot of sideCharacterPivots) {
-      if (!pivot) continue;
-      scene.remove(pivot);
-      disposeObject3D(pivot);
     }
     hellEmbers?.points.geometry.dispose();
     hellEmbers?.points.material.dispose();

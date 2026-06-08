@@ -4,7 +4,7 @@ AURA CAPS is a browser-based 3D cap-battle game built with Three.js, Rapier phys
 
 ## Features
 
-- 3D themed main menu with Hell, Heaven, Jungle Bay, and Brainrot themes
+- 3D themed main menu with Hell, Heaven, Jungle Bay, and Bankr themes
 - Classic cap duel and Slammer battle modes
 - Training, AI, and PvP match flows
 - Aura login, profile, and inventory-backed cap collection
