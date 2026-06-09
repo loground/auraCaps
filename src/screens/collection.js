@@ -3,33 +3,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DISC_HEIGHT, DISC_RADIUS } from "../game/constants.js";
 import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
-import { fetchAuraInventory } from "../aura/inventory.js";
 
-export function mountCollectionScreen({ app, onBack, auraSession = null }) {
-  const hasAuraSession = Boolean(
-    auraSession?.connected ||
-      auraSession?.walletAddress ||
-      auraSession?.user
-  );
-  const AURA_DEBUG_KEY = "aura_debug";
-  const auraDebugLog = (...args) => {
-    try {
-      const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === "1";
-      window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__)
-        ? window.__AURA_LOGS__
-        : [];
-      window.__AURA_LOGS__.push({
-        scope: "collection",
-        at: new Date().toISOString(),
-        args,
-      });
-      if (debugEnabled) {
-        console.log("[AURA][COLLECTION][DEBUG]", ...args);
-      }
-    } catch {
-      // Ignore diagnostic logging failures.
-    }
-  };
+export function mountCollectionScreen({ app, onBack }) {
   const resolveSpritePlayback = (image, hints) => {
     const maxFrames = 64;
     const naturalW = Math.max(1, image.naturalWidth || image.width || 1);
@@ -206,53 +181,8 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     },
   };
 
-  if (hasAuraSession) {
-    COLLECTIONS.aura = {
-      id: "aura",
-      label: "aura",
-      loading: true,
-      subcollections: {},
-    };
-  }
-  let activeCollectionKey = hasAuraSession ? "aura" : "f2p";
-  let activeSubKey = hasAuraSession ? "" : "caps";
-
-  const normalizeCollectionKey = (label, fallback) => {
-    const normalized = String(label || "")
-      .trim()
-      .toLowerCase()
-      .replace(/['’]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    return normalized || fallback;
-  };
-
-  const groupAuraItemsByCollection = (items) => {
-    const grouped = {};
-    const labelByKey = new Map();
-    items.forEach((item, index) => {
-      const label = String(
-        item.collectionName || item.subtitle || "aura collection"
-      ).trim();
-      const baseKey = normalizeCollectionKey(label, `aura-${index + 1}`);
-      let key = baseKey;
-      let suffix = 2;
-      while (labelByKey.has(key) && labelByKey.get(key) !== label) {
-        key = `${baseKey}-${suffix}`;
-        suffix += 1;
-      }
-      labelByKey.set(key, label);
-      if (!grouped[key]) {
-        grouped[key] = {
-          id: key,
-          label,
-          items: [],
-        };
-      }
-      grouped[key].items.push(item);
-    });
-    return grouped;
-  };
+  let activeCollectionKey = "f2p";
+  let activeSubKey = "caps";
 
   app.innerHTML = `
     <div class="collection-screen">
@@ -425,7 +355,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     let spriteCtx = null;
     let spriteImage = null;
     let spriteConfig = null;
-    if (item.isAuraSprite) {
+    if (item.isSpriteCap) {
       spriteCanvas = document.createElement("canvas");
       spriteCanvas.width = 1024;
       spriteCanvas.height = 1024;
@@ -467,7 +397,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     }
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
     backTexture.rotation = Math.PI * 0.5;
-    spriteAnimState = item.isAuraSprite
+    spriteAnimState = item.isSpriteCap
       ? {
           texture: frontTexture,
           canvas: spriteCanvas,
@@ -647,48 +577,21 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       return;
     }
 
-    if (topCollection.loading) {
-      const card = document.createElement("div");
-      card.className = "collection-card";
-      card.innerHTML = `
-      <div class="cap-slot">
-        <div class="disc-card" aria-label="Loading Aura items">
-          <div class="cap-loading">
-            <span class="cap-loading-spinner" aria-hidden="true"></span>
-            <span class="cap-loading-text">loading aura items</span>
-          </div>
-        </div>
-      </div>
-      <div class="cap-info">
-        <h3>AURA</h3>
-        <p>owned inventory</p>
-        <p>syncing metadata...</p>
-      </div>
-    `;
-      grid.appendChild(card);
-      return;
-    }
-
     if (!active || !Array.isArray(active.items) || active.items.length === 0) {
       const card = document.createElement("div");
       card.className = "collection-card";
-      const title = topCollection.id === "aura" ? "No AURA items" : "No items";
-      const description =
-        topCollection.id === "aura"
-          ? "go rip some packs on auramaxx to get to your collection and rip some asses in this epic battle!!"
-          : "this section is empty for now.";
       card.innerHTML = `
       <div class="cap-slot">
-        <div class="disc-card" aria-label="No Aura items">
+        <div class="disc-card" aria-label="No items">
           <div class="cap-loading loaded">
             <span class="cap-loading-text">empty</span>
           </div>
         </div>
       </div>
       <div class="cap-info">
-        <h3>${title}</h3>
+        <h3>No items</h3>
         <p>${topCollection.label}</p>
-        <p>${description}</p>
+        <p>this section is empty for now.</p>
       </div>
     `;
       grid.appendChild(card);
@@ -725,7 +628,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
       const img = card.querySelector("img");
       const discBtn = card.querySelector(".disc-card");
       const loadingEl = card.querySelector(".cap-loading");
-      if (item.isAuraSprite && img && discBtn) {
+      if (item.isSpriteCap && img && discBtn) {
         const canvas = document.createElement("canvas");
         canvas.className = "sprite-preview-canvas";
         discBtn.appendChild(canvas);
@@ -757,7 +660,7 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
         loadingEl?.classList.add("loaded");
         img?.classList.add("loaded");
       };
-      if (img && !item.isAuraSprite) {
+      if (img && !item.isSpriteCap) {
         if (img.complete) {
           markLoaded();
         } else {
@@ -770,77 +673,9 @@ export function mountCollectionScreen({ app, onBack, auraSession = null }) {
     startPreviewSpriteAnimation();
   };
 
-  const readStoredAuraSession = () => {
-    try {
-      const raw = window.localStorage.getItem("aura_session_v1");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      const walletAddress =
-        parsed?.walletAddress ||
-        parsed?.user?.walletAddress ||
-        parsed?.user?.address ||
-        "";
-      if (!walletAddress && !parsed?.user) return null;
-      return { connected: true, walletAddress, user: parsed?.user || null };
-    } catch {
-      return null;
-    }
-  };
-
-  const mapAuraCollectionItem = (item, index) => {
-    const detailsBits = [`Series ${item.series || "beta"}`];
-    if (item.rarity) {
-      detailsBits.push(`Rarity ${item.rarity}`);
-    }
-    detailsBits.push(`Weight ${Number(item.weightMultiplier || 1).toFixed(2)}x`);
-    return {
-      number: index + 1,
-      name: item.name,
-      imagePath: item.imagePath,
-      subtitle: item.collection || "aura collection",
-      collectionName: item.collection || "aura collection",
-      details: detailsBits.join(" • "),
-      rarity: item.rarity || "",
-      weightMultiplier: item.weightMultiplier || 1,
-      spriteHints: item.spriteHints || null,
-      isAuraSprite: Boolean(item.isAuraSprite),
-    };
-  };
-
-  const loadAuraCollection = async () => {
-    if (!COLLECTIONS.aura) return;
-
-    try {
-      const inventoryItems = await fetchAuraInventory({
-        sessionLike: auraSession || readStoredAuraSession(),
-        limit: 24,
-      });
-      const items = inventoryItems.map(mapAuraCollectionItem);
-      auraDebugLog("mapped Aura collection inventory items", items);
-      COLLECTIONS.aura.loading = false;
-      COLLECTIONS.aura.subcollections = groupAuraItemsByCollection(items);
-      if (activeCollectionKey === "aura") {
-        activeSubKey = Object.keys(COLLECTIONS.aura.subcollections)[0] || "";
-      }
-    } catch (error) {
-      auraDebugLog("failed to load Aura collection", error);
-      COLLECTIONS.aura.loading = false;
-      COLLECTIONS.aura.subcollections = {};
-    }
-
-    if (!unmounted) {
-      renderSwitcher();
-      renderSubSwitcher();
-      renderCards();
-    }
-  };
-
   renderSwitcher();
   renderSubSwitcher();
   renderCards();
-  if (COLLECTIONS.aura) {
-    loadAuraCollection();
-  }
 
   const backBtn = app.querySelector("#backBtn");
   backBtn.addEventListener("click", onBack);

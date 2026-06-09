@@ -55,63 +55,48 @@ export function getSupabasePvpClient() {
   return supabaseClient;
 }
 
-export function getAuraPlayerIdentity(auraSession) {
-  const user = auraSession?.user || {};
-  const walletAddress =
-    auraSession?.walletAddress ||
-    user.walletAddress ||
-    user.wallet ||
-    user.address ||
-    "";
-  const username =
-    user.username ||
-    user.name ||
-    user.displayName ||
-    (walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Aura Player");
-  const auraUserId = user.id || user._id || user.userId || "";
+export function getPlayerIdentity(identity) {
   return {
-    auraUserId,
-    walletAddress,
-    username,
-    avatarUrl: user.avatar || user.avatarUrl || user.image || "",
+    playerId: identity?.playerId || "",
+    username: identity?.username || "Player",
   };
 }
 
-export async function createPvpRoom({ auraSession, setup, capSelection }) {
+export async function createPvpRoom({ playerIdentity, setup, capSelection }) {
   return callPvpFunction("pvp-create-room", {
-    player: getAuraPlayerIdentity(auraSession),
+    player: getPlayerIdentity(playerIdentity),
     setup,
     cap: capSelection?.playerCapMeta || null,
     isPrivate: Boolean(setup?.isPrivate),
   });
 }
 
-export async function joinPvpRoom({ auraSession, roomCode, capSelection }) {
+export async function joinPvpRoom({ playerIdentity, roomCode, capSelection }) {
   return callPvpFunction("pvp-join-room", {
     roomCode: normalizeRoomCode(roomCode),
-    player: getAuraPlayerIdentity(auraSession),
+    player: getPlayerIdentity(playerIdentity),
     cap: capSelection?.playerCapMeta || null,
   });
 }
 
-export async function getPvpRoom({ auraSession, roomId, roomCode }) {
+export async function getPvpRoom({ playerIdentity, roomId, roomCode }) {
   return callPvpFunction("pvp-get-room", {
     roomId,
     roomCode: normalizeRoomCode(roomCode),
-    player: getAuraPlayerIdentity(auraSession),
+    player: getPlayerIdentity(playerIdentity),
   });
 }
 
-export async function listPvpRooms({ auraSession }) {
+export async function listPvpRooms({ playerIdentity }) {
   return callPvpFunction("pvp-list-rooms", {
-    player: getAuraPlayerIdentity(auraSession),
+    player: getPlayerIdentity(playerIdentity),
   });
 }
 
-export async function submitPvpTurnResult({ auraSession, roomId, turn }) {
+export async function submitPvpTurnResult({ playerIdentity, roomId, turn }) {
   return callPvpFunction("pvp-submit-turn", {
     roomId,
-    player: getAuraPlayerIdentity(auraSession),
+    player: getPlayerIdentity(playerIdentity),
     turn,
   });
 }

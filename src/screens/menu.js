@@ -9,11 +9,6 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-const AURA_ORIGIN = 'https://auramaxx.gg';
-const AURA_SDK_URL = `${AURA_ORIGIN}/login-with-aura/sdk.js`;
-const AURA_CLIENT_ID_STORAGE_KEY = 'aura_client_id';
-const AURA_DEBUG_KEY = 'aura_debug';
-const AURA_DEFAULT_CLIENT_ID = 'your-app';
 const HELL_MENU_TUNING = {
   backgroundDarkness: 1.0,
   haloIntensity: 0.22,
@@ -34,70 +29,6 @@ const HEAVEN_MENU_TUNING = {
   bloomRadius: 0.2,
   bloomThreshold: 0.95,
 };
-function loadAuraSdk() {
-  return new Promise((resolve, reject) => {
-    if (typeof window !== 'undefined' && window.Aura?.SigninButton) {
-      resolve(window.Aura);
-      return;
-    }
-
-    const existing = document.querySelector('script[data-aura-sdk="true"]');
-    if (existing) {
-      existing.addEventListener('load', () => resolve(window.Aura), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Failed to load Aura SDK')), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = AURA_SDK_URL;
-    script.async = true;
-    script.dataset.auraSdk = 'true';
-    script.dataset.auraOrigin = AURA_ORIGIN;
-    script.onload = () => resolve(window.Aura);
-    script.onerror = () => reject(new Error('Failed to load Aura SDK'));
-    document.head.appendChild(script);
-  });
-}
-
-function safeCall(fn, context) {
-  try {
-    const value = fn.call(context);
-    return Promise.resolve(value).catch(() => null);
-  } catch {
-    return Promise.resolve(null);
-  }
-}
-
-function pickFirstString(...values) {
-  for (const value of values) {
-    const s = String(value || '').trim();
-    if (s) {
-      return s;
-    }
-  }
-  return '';
-}
-
-function auraDebugLog(...args) {
-  try {
-    const debugEnabled = window.localStorage.getItem(AURA_DEBUG_KEY) === '1';
-    const entry = {
-      scope: 'menu',
-      at: new Date().toISOString(),
-      args,
-    };
-    window.__AURA_LOGS__ = Array.isArray(window.__AURA_LOGS__) ? window.__AURA_LOGS__ : [];
-    window.__AURA_LOGS__.push(entry);
-    if (debugEnabled) {
-      console.log('[AURA][MENU][DEBUG]', ...args);
-    }
-  } catch {
-    // Ignore logging failures.
-  }
-}
-
 // Heaven menu: soft skydome with subtle cloud depth and center halo.
 function createHeavenBackground() {
   const uniforms = {
@@ -662,28 +593,11 @@ export function mountMenuScreen({
   app,
   onPlay,
   onCollection,
-  onProfile,
   theme = 'hell',
   onThemeChange,
   soundEnabled = true,
   onSoundToggle,
-  auraSession = null,
-  onAuraSuccess,
-  onAuraDisconnect,
-  activePvpRoom = null,
-  onResumePvp,
 }) {
-  const formatAuraStatus = (sessionLike) => {
-    const wallet = sessionLike?.walletAddress || '';
-    if (wallet.length >= 10) {
-      return `connected with aura • ${wallet.slice(0, 6)}...${wallet.slice(-4)}`;
-    }
-    return 'connected with aura';
-  };
-  const hasConnectedSession = (sessionLike) =>
-    Boolean(sessionLike?.connected || sessionLike?.walletAddress || sessionLike?.user);
-  let localAuraSession = auraSession;
-
   app.innerHTML = `
     <div class="menu-overlay">
       <div class="menu-mute-switch" role="group" aria-label="Menu mute switcher">
@@ -692,9 +606,6 @@ export function mountMenuScreen({
         }" type="button">
           ${soundEnabled ? 'mute: off' : 'mute: on'}
         </button>
-      </div>
-      <div class="menu-top-right">
-        <div id="aura-login" class="aura-login-slot" aria-label="Aura login"></div>
       </div>
       <div class="menu-theme-picker" role="group" aria-label="Theme switcher">
         <select id="menuThemeSelect" class="menu-theme-select">
@@ -710,19 +621,8 @@ export function mountMenuScreen({
       </div>
       <div class="menu-buttons">
         <button id="menuPlay" class="menu-btn" type="button">play</button>
-        ${
-          activePvpRoom?.code
-            ? `<button id="menuResumePvp" class="menu-btn menu-resume-pvp" type="button">resume pvp</button>`
-            : ''
-        }
         <button id="menuCollection" class="menu-btn" type="button">collection</button>
       </div>
-      <div id="auraConnectedStatus" class="menu-aura-status ${
-        auraSession?.connected ? 'visible' : ''
-      }">
-        ${auraSession?.connected ? formatAuraStatus(auraSession) : ''}
-      </div>
-      <div id="auraHintStatus" class="menu-aura-status"></div>
     </div>
   `;
 
@@ -1328,13 +1228,9 @@ export function mountMenuScreen({
   );
 
   const playButton = app.querySelector('#menuPlay');
-  const resumePvpButton = app.querySelector('#menuResumePvp');
   const collectionButton = app.querySelector('#menuCollection');
   const menuMuteToggleBtn = app.querySelector('#menuMuteToggle');
   const themeSelectEl = app.querySelector('#menuThemeSelect');
-  const auraLoginContainer = app.querySelector('#aura-login');
-  const auraConnectedStatus = app.querySelector('#auraConnectedStatus');
-  const auraHintStatus = app.querySelector('#auraHintStatus');
   const preloader = app.querySelector('#menuPreloader');
   const menuButtons = app.querySelector('.menu-buttons');
   const updateSoundButton = (enabled) => {
@@ -1346,444 +1242,11 @@ export function mountMenuScreen({
     updateSoundButton(Boolean(enabled));
   };
   const onThemeSelect = () => onThemeChange?.(themeSelectEl?.value || 'hell');
-  let auraApi = null;
-  let connectedActionHandler = null;
-  let signinHandler = null;
-  let auraSyncInFlight = false;
-  let auraSyncBurstTimer = null;
-  let auraSyncBurstLeft = 0;
-  const isValidAuraClientId = (value) => /^[a-z0-9][a-z0-9_-]{1,63}$/i.test(value);
-  const resolveAuraClientId = () => {
-    const fromEnv = pickFirstString(import.meta.env?.VITE_AURA_CLIENT_ID);
-    const fromWindow = pickFirstString(window.__AURA_CLIENT_ID__);
-    const fromMeta = pickFirstString(
-      document.querySelector('meta[name="aura-client-id"]')?.getAttribute('content'),
-    );
-    const fromStorageRaw = pickFirstString(window.localStorage.getItem(AURA_CLIENT_ID_STORAGE_KEY));
-    const hostLabel = pickFirstString(window.location.hostname?.split('.')?.[0]);
-    const candidates = [fromEnv, fromWindow, fromMeta, fromStorageRaw, hostLabel];
-    const resolved = candidates.find((candidate) => isValidAuraClientId(candidate));
-    if (fromStorageRaw && !isValidAuraClientId(fromStorageRaw)) {
-      try {
-        window.localStorage.removeItem(AURA_CLIENT_ID_STORAGE_KEY);
-      } catch {
-        // Ignore storage errors.
-      }
-    }
-    return resolved || AURA_DEFAULT_CLIENT_ID;
-  };
-  const setAuraHint = (message) => {
-    if (!auraHintStatus) {
-      return;
-    }
-    const hasMessage = Boolean(String(message || '').trim());
-    auraHintStatus.classList.toggle('visible', hasMessage);
-    auraHintStatus.textContent = hasMessage ? String(message) : '';
-  };
-
-  const extractLikelyPayloads = (input) => {
-    const queue = [input];
-    const out = [];
-    const seen = new Set();
-    while (queue.length > 0) {
-      const item = queue.shift();
-      if (!item || typeof item !== 'object' || seen.has(item)) {
-        continue;
-      }
-      seen.add(item);
-      out.push(item);
-      queue.push(item.result, item.data, item.payload, item.session, item.user);
-    }
-    return out;
-  };
-
-  const normalizeAuraSession = (input) => {
-    auraDebugLog('normalizeAuraSession input', input);
-    const payloads = extractLikelyPayloads(input);
-    let user = null;
-    let walletAddress = '';
-
-    for (const payload of payloads) {
-      const candidateUser =
-        payload?.user ||
-        payload?.profile ||
-        payload?.account ||
-        payload?.data?.user ||
-        payload?.data?.profile ||
-        payload?.result?.user ||
-        payload?.result?.profile ||
-        null;
-      if (!user && candidateUser && typeof candidateUser === 'object') {
-        user = candidateUser;
-      }
-
-      const candidateWallet = pickFirstString(
-        payload?.walletAddress,
-        payload?.wallet,
-        payload?.address,
-        payload?.ethAddress,
-        payload?.user?.walletAddress,
-        payload?.user?.wallet,
-        payload?.user?.address,
-        payload?.profile?.walletAddress,
-        payload?.profile?.wallet,
-        payload?.profile?.address,
-        payload?.account?.walletAddress,
-        payload?.account?.address,
-        Array.isArray(payload?.addresses) ? payload.addresses[0] : '',
-        Array.isArray(payload?.user?.addresses) ? payload.user.addresses[0] : '',
-      );
-      if (!walletAddress && candidateWallet) {
-        walletAddress = candidateWallet;
-      }
-    }
-
-    const hasIdentity =
-      Boolean(walletAddress) ||
-      Boolean(user) ||
-      Boolean(input?.connected) ||
-      Boolean(input?.isConnected);
-    auraDebugLog('normalizeAuraSession parsed', {
-      hasIdentity,
-      walletAddress,
-      hasUser: Boolean(user),
-    });
-    if (!hasIdentity) {
-      return null;
-    }
-    return {
-      connected: true,
-      walletAddress,
-      user,
-    };
-  };
-
-  const clearConnectedActionHandler = () => {
-    if (connectedActionHandler) {
-      auraLoginContainer?.removeEventListener('click', connectedActionHandler);
-      connectedActionHandler = null;
-    }
-  };
-
-  const clearSigninHandler = () => {
-    if (signinHandler) {
-      auraLoginContainer?.removeEventListener('click', signinHandler);
-      signinHandler = null;
-    }
-  };
-
-  const stopAuraSyncBurst = () => {
-    if (auraSyncBurstTimer !== null) {
-      clearInterval(auraSyncBurstTimer);
-      auraSyncBurstTimer = null;
-    }
-    auraSyncBurstLeft = 0;
-  };
-
-  const renderAuraConnectedAction = () => {
-    if (!auraLoginContainer) {
-      return;
-    }
-    clearConnectedActionHandler();
-    clearSigninHandler();
-    auraLoginContainer.classList.remove('hidden');
-    auraLoginContainer.innerHTML =
-      '<button id="auraProfileBtn" class="theme-btn aura-disconnect-btn" type="button">profile</button>';
-    connectedActionHandler = async (event) => {
-      const target = event.target;
-      if (!(target instanceof Element) || !target.closest('#auraProfileBtn')) {
-        return;
-      }
-      onProfile?.();
-    };
-    auraLoginContainer.addEventListener('click', connectedActionHandler);
-  };
-
-  const renderAuraSignin = () => {
-    if (!auraLoginContainer) {
-      return;
-    }
-    clearConnectedActionHandler();
-    clearSigninHandler();
-    auraLoginContainer.classList.remove('hidden');
-    auraLoginContainer.innerHTML = '';
-    signinHandler = async () => {
-      try {
-        if (!auraApi) {
-          auraApi = await loadAuraSdk();
-          auraDebugLog('Aura SDK loaded', Object.keys(auraApi || {}));
-        }
-        const clientId = resolveAuraClientId();
-        auraDebugLog('sign-in requested', { clientId });
-        setAuraHint(`Aura login ready (${clientId})`);
-        if (clientId === AURA_DEFAULT_CLIENT_ID) {
-          setAuraHint('Aura clientId is not configured. Set VITE_AURA_CLIENT_ID.');
-        }
-        try {
-          window.localStorage.setItem(AURA_CLIENT_ID_STORAGE_KEY, clientId);
-        } catch {
-          // Ignore storage errors.
-        }
-
-        if (typeof auraApi?.SigninButton === 'function') {
-          auraDebugLog('mounting Aura.SigninButton');
-          auraApi.SigninButton({
-            container: '#aura-login',
-            clientId,
-            mode: 'light',
-            text: 'log in',
-            onClose(error) {
-              auraDebugLog('Aura.SigninButton onClose', error);
-              setAuraHint(error?.message || 'Aura login closed.');
-              readAuraSessionFromSdk().then((restoredFromSdk) => {
-                auraDebugLog('onClose restoredFromSdk', restoredFromSdk);
-                if (restoredFromSdk) {
-                  applyConnectedSession(restoredFromSdk);
-                  setAuraHint('');
-                  return;
-                }
-                startAuraSyncBurst();
-              });
-            },
-            onError(error) {
-              auraDebugLog('Aura.SigninButton onError', error);
-              setAuraHint(error?.message || 'Aura login failed.');
-              startAuraSyncBurst();
-            },
-            onSuccess(result) {
-              auraDebugLog('Aura.SigninButton onSuccess', result);
-              const normalized = applyConnectedSession(result);
-              if (normalized) {
-                setAuraHint('');
-                return;
-              }
-              readAuraSessionFromSdk().then((restoredFromSdk) => {
-                auraDebugLog('SigninButton fallback restoredFromSdk', restoredFromSdk);
-                if (restoredFromSdk) {
-                  applyConnectedSession(restoredFromSdk);
-                  setAuraHint('');
-                }
-              });
-            },
-          });
-          startAuraSyncBurst();
-          return;
-        }
-
-        auraLoginContainer.innerHTML =
-          '<button id="auraSigninBtn" class="theme-btn aura-login-fallback" type="button">log in</button>';
-        const fallbackBtn = auraLoginContainer.querySelector('#auraSigninBtn');
-        fallbackBtn?.addEventListener(
-          'click',
-          async () => {
-            if (typeof auraApi?.signIn !== 'function') {
-              return;
-            }
-            const result = await auraApi.signIn({
-              auraOrigin: AURA_ORIGIN,
-              clientId,
-              mode: 'light',
-            });
-            auraDebugLog('Aura.signIn fallback result', result);
-            applyConnectedSession(result);
-          },
-          { once: true },
-        );
-      } catch {
-        auraDebugLog('sign-in failed, starting sync burst');
-        setAuraHint('Aura popup closed but no auth callback received.');
-        startAuraSyncBurst();
-      }
-    };
-    signinHandler();
-  };
-
-  const clickAuraSigninControl = () => {
-    const clickable = auraLoginContainer?.querySelector("button, [role='button'], a, iframe");
-    if (clickable instanceof HTMLElement) {
-      clickable.click();
-    }
-  };
-
-  const onExternalAuraLoginRequest = () => {
-    renderAuraSignin();
-    window.setTimeout(clickAuraSigninControl, 80);
-  };
-
-  const readAuraSessionFromSdk = async () => {
-    if (!auraApi) {
-      return null;
-    }
-
-    let normalized = null;
-    if (typeof auraApi.getSession === 'function') {
-      const session = await safeCall(auraApi.getSession, auraApi);
-      auraDebugLog('Aura.getSession()', session);
-      normalized = normalizeAuraSession(session);
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    if (typeof auraApi.getCurrentUser === 'function') {
-      const user = await safeCall(auraApi.getCurrentUser, auraApi);
-      auraDebugLog('Aura.getCurrentUser()', user);
-      normalized = normalizeAuraSession({ user });
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    if (typeof auraApi.getWalletAddress === 'function') {
-      const walletAddress = await safeCall(auraApi.getWalletAddress, auraApi);
-      auraDebugLog('Aura.getWalletAddress()', walletAddress);
-      normalized = normalizeAuraSession({ walletAddress });
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    if (typeof auraApi.getUser === 'function') {
-      const user = await safeCall(auraApi.getUser, auraApi);
-      auraDebugLog('Aura.getUser()', user);
-      normalized = normalizeAuraSession({ user });
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    return null;
-  };
-
-  const applyConnectedSession = (sessionLike) => {
-    const normalized = normalizeAuraSession(sessionLike);
-    if (!normalized) {
-      auraDebugLog('applyConnectedSession skipped: no normalized session');
-      return null;
-    }
-    auraDebugLog('applyConnectedSession success', normalized);
-    localAuraSession = normalized;
-    setAuraConnectedStatus(normalized);
-    setAuraHint('');
-    onAuraSuccess?.(normalized);
-    renderAuraConnectedAction();
-    stopAuraSyncBurst();
-    return normalized;
-  };
-
-  const syncAuraSessionFromSdk = async () => {
-    if (!auraApi || auraSyncInFlight) {
-      return null;
-    }
-    auraSyncInFlight = true;
-    try {
-      const normalized = await readAuraSessionFromSdk();
-      if (normalized) {
-        return applyConnectedSession(normalized);
-      }
-      if (hasConnectedSession(localAuraSession)) {
-        localAuraSession = null;
-        onAuraDisconnect?.();
-        setAuraConnectedStatus(null);
-        setAuraHint('Not connected. Use Login with Aura.');
-        renderAuraSignin();
-      }
-      return null;
-    } catch {
-      return null;
-    } finally {
-      auraSyncInFlight = false;
-    }
-  };
-
-  const startAuraSyncBurst = () => {
-    stopAuraSyncBurst();
-    auraSyncBurstLeft = 50;
-    auraSyncBurstTimer = setInterval(async () => {
-      auraSyncBurstLeft -= 1;
-      const synced = await syncAuraSessionFromSdk();
-      if (synced || auraSyncBurstLeft <= 0) {
-        stopAuraSyncBurst();
-      }
-    }, 1500);
-  };
-
-  const setAuraConnectedStatus = (sessionLike) => {
-    if (!auraConnectedStatus) {
-      return;
-    }
-    const connected = Boolean(
-      sessionLike?.walletAddress || sessionLike?.user || sessionLike?.connected,
-    );
-    auraConnectedStatus.classList.toggle('visible', connected);
-    auraConnectedStatus.textContent = connected ? formatAuraStatus(sessionLike) : '';
-  };
-
-  const onAuraMessage = (event) => {
-    const origin = String(event.origin || '');
-    const isAuraOrigin =
-      origin === AURA_ORIGIN || origin.endsWith('.auramaxx.gg') || origin.includes('auramaxx.gg');
-    if (!isAuraOrigin) {
-      return;
-    }
-    const type = event.data?.type;
-    auraDebugLog('window message', { origin, type, data: event.data });
-    setAuraHint(`Aura message: ${type || 'unknown'} from ${origin}`);
-    const payload = event.data?.result ?? event.data?.data ?? event.data?.payload ?? event.data;
-    const looksLikeAuraLogin =
-      type === 'aura.login.result' ||
-      String(type || '').includes('aura') ||
-      Boolean(payload?.walletAddress || payload?.user || payload?.authenticated);
-    if (!looksLikeAuraLogin) {
-      return;
-    }
-    applyConnectedSession(payload);
-  };
   menuMuteToggleBtn.addEventListener('click', onSoundToggleClick);
   playButton.addEventListener('click', onPlay);
-  resumePvpButton?.addEventListener('click', onResumePvp);
   collectionButton.addEventListener('click', onCollection);
   themeSelectEl?.addEventListener('change', onThemeSelect);
   menuButtons.classList.add('disabled');
-
-  if (!hasConnectedSession(auraSession)) {
-    auraDebugLog('initial state: disconnected');
-    loadAuraSdk()
-      .then(async (Aura) => {
-        auraApi = Aura;
-        const restored = await syncAuraSessionFromSdk();
-        if (restored) {
-          setAuraHint('');
-          return;
-        }
-        setAuraHint('Not connected. Use Login with Aura.');
-        renderAuraSignin();
-      })
-      .catch(() => {
-        setAuraHint('Failed to load Aura SDK.');
-        renderAuraSignin();
-      });
-  } else {
-    auraDebugLog('initial state: connected from app session', auraSession);
-    localAuraSession = auraSession;
-    setAuraConnectedStatus(localAuraSession);
-    setAuraHint('');
-    loadAuraSdk()
-      .then((Aura) => {
-        auraApi = Aura;
-        syncAuraSessionFromSdk();
-      })
-      .catch(() => {});
-    renderAuraConnectedAction();
-  }
-
-  const onWindowFocus = () => {
-    syncAuraSessionFromSdk();
-  };
-  window.addEventListener('focus', onWindowFocus);
-  window.addEventListener('message', onAuraMessage);
-  window.addEventListener('aura-caps-open-login', onExternalAuraLoginRequest);
-  document.addEventListener('visibilitychange', onWindowFocus);
 
   const revealMenu = () => {
     preloader.classList.add('hidden');
@@ -1932,18 +1395,10 @@ export function mountMenuScreen({
       cancelAnimationFrame(rafId);
     }
     window.removeEventListener('resize', handleResize);
-    window.removeEventListener('focus', onWindowFocus);
-    window.removeEventListener('message', onAuraMessage);
-    window.removeEventListener('aura-caps-open-login', onExternalAuraLoginRequest);
-    document.removeEventListener('visibilitychange', onWindowFocus);
     playButton.removeEventListener('click', onPlay);
-    resumePvpButton?.removeEventListener('click', onResumePvp);
     collectionButton.removeEventListener('click', onCollection);
     menuMuteToggleBtn.removeEventListener('click', onSoundToggleClick);
     themeSelectEl?.removeEventListener('change', onThemeSelect);
-    clearConnectedActionHandler();
-    clearSigninHandler();
-    stopAuraSyncBurst();
     window.removeEventListener('pointermove', onPointerMove);
     controls.dispose();
     dracoLoader.dispose();

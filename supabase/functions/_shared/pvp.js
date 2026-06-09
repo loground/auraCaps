@@ -51,16 +51,13 @@ export async function rest(path, { method = "GET", body } = {}) {
 }
 
 export function requirePlayer(player) {
-  const wallet = String(player?.walletAddress || "").trim();
-  const auraUserId = String(player?.auraUserId || "").trim();
-  const playerId = auraUserId || wallet;
+  const playerId = String(player?.playerId || "").trim();
   if (!playerId) {
-    throw new Error("Aura login is required for PvP.");
+    throw new Error("A local player identity is required for PvP.");
   }
   return {
     playerId,
-    wallet,
-    username: String(player?.username || "Aura Player").trim(),
+    username: String(player?.username || "Player").trim(),
   };
 }
 

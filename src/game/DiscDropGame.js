@@ -992,7 +992,7 @@ export class DiscDropGame {
   }
 
   applySpriteMetaToTexture(texture, capMeta) {
-    if (!texture || !capMeta?.isAuraSprite) {
+    if (!texture || !capMeta?.isSpriteCap) {
       return texture;
     }
     const existing = this.animatedSpriteTextures.find(
@@ -2903,6 +2903,36 @@ export class DiscDropGame {
     }
   }
 
+  recoverSlammerBodyBelowFloor(body) {
+    if (!body || this.gameMode !== "slammer" || this.useArenaMeshFloor) {
+      return;
+    }
+
+    const pos = body.translation();
+    if (pos.y >= TABLE_TOP_Y - 0.02) {
+      return;
+    }
+
+    const halfHeight =
+      body === this.upperDiscBody
+        ? (DISC_HEIGHT * SLAMMER_HEIGHT_MULT) * 0.5
+        : DISC_HALF_HEIGHT;
+    body.setTranslation(
+      {
+        x: pos.x,
+        y: TABLE_TOP_Y + halfHeight + 0.002,
+        z: pos.z,
+      },
+      true
+    );
+
+    const lin = body.linvel();
+    if (lin.y < 0) {
+      body.setLinvel({ x: lin.x, y: 0, z: lin.z }, true);
+    }
+    body.wakeUp();
+  }
+
   syncMesh(body, mesh) {
     const position = body.translation();
     const rotation = body.rotation();
@@ -3176,6 +3206,12 @@ export class DiscDropGame {
 
     this.world.timestep = FIXED_STEP;
     this.world.step(this.eventQueue);
+    if (this.gameMode === "slammer") {
+      this.recoverSlammerBodyBelowFloor(this.upperDiscBody);
+      for (const body of this.floorDiscBodies) {
+        this.recoverSlammerBodyBelowFloor(body);
+      }
+    }
     this.consumeCollisionSfxEvents();
     this.capturePvpTrajectoryFrame();
 

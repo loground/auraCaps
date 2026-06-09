@@ -62,9 +62,7 @@ textarea,
 .cap-pick-card,
 .mode-btn,
 .play-setup-close,
-.inspector-close,
-.aura-login-slot,
-.aura-login-slot * {
+.inspector-close {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
@@ -116,128 +114,6 @@ canvas {
   pointer-events: none;
 }
 
-.entry-login-gate {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
-  display: grid;
-  place-items: center;
-  padding: 1.4rem;
-  background:
-    radial-gradient(circle at 50% 38%, rgba(255, 92, 45, 0.16), transparent 34%),
-    rgba(4, 1, 3, 0.72);
-  backdrop-filter: blur(8px);
-  pointer-events: auto;
-}
-
-.entry-login-card {
-  width: min(440px, calc(100vw - 2rem));
-  border: 1px solid rgba(255, 119, 74, 0.46);
-  border-radius: 22px;
-  padding: 1.45rem;
-  text-align: center;
-  color: #ffe2d2;
-  background:
-    linear-gradient(180deg, rgba(75, 13, 11, 0.9), rgba(15, 3, 5, 0.94)),
-    radial-gradient(circle at 50% 0%, rgba(255, 103, 49, 0.2), transparent 44%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 210, 180, 0.12),
-    0 24px 70px rgba(0, 0, 0, 0.62),
-    0 0 28px rgba(205, 66, 32, 0.16);
-}
-
-.entry-login-kicker {
-  margin: 0 0 0.25rem;
-  font: 800 0.78rem/1 "Sora", "Avenir Next", sans-serif;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgba(255, 199, 169, 0.72);
-}
-
-.entry-login-card h2 {
-  margin: 0;
-  font-family: "Hell", "Teko", sans-serif;
-  font-size: clamp(2.5rem, 8vw, 4.4rem);
-  letter-spacing: 0.06em;
-  color: #ffd2bc;
-  text-shadow: 0 0 18px rgba(226, 77, 35, 0.28);
-}
-
-.entry-login-copy {
-  margin: 0.8rem auto 1.2rem;
-  max-width: 32ch;
-  font-size: 1.05rem;
-  line-height: 1.35;
-  color: rgba(255, 221, 204, 0.84);
-}
-
-.entry-login-actions {
-  display: grid;
-  gap: 0.7rem;
-}
-
-.entry-login-actions button {
-  min-height: 3.1rem;
-  border-radius: 14px;
-  font: 900 0.95rem/1 "Sora", "Avenir Next", sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.entry-login-primary {
-  border: 1px solid rgba(229, 255, 96, 0.78);
-  color: #1c2108;
-  background: linear-gradient(180deg, #f3ff65, #9dde22);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 0 18px rgba(209, 255, 66, 0.24);
-}
-
-.entry-login-secondary {
-  border: 1px solid rgba(255, 122, 82, 0.46);
-  color: #ffe2d2;
-  background:
-    linear-gradient(180deg, rgba(81, 15, 13, 0.95), rgba(31, 6, 7, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-.theme-heaven .entry-login-gate {
-  background:
-    radial-gradient(circle at 50% 38%, rgba(134, 190, 255, 0.22), transparent 34%),
-    rgba(218, 239, 255, 0.7);
-}
-
-.theme-heaven .entry-login-card {
-  border-color: rgba(92, 151, 213, 0.46);
-  color: #203852;
-  background: linear-gradient(180deg, rgba(235, 247, 255, 0.92), rgba(180, 218, 250, 0.92));
-}
-
-.theme-heaven .entry-login-card h2,
-.theme-heaven .entry-login-copy,
-.theme-heaven .entry-login-kicker {
-  color: #1f3c59;
-}
-
-.theme-jungle-bay .entry-login-gate {
-  background:
-    radial-gradient(circle at 50% 38%, rgba(247, 221, 97, 0.18), transparent 34%),
-    rgba(50, 91, 63, 0.58);
-}
-
-.theme-jungle-bay .entry-login-card {
-  border-color: rgba(98, 150, 86, 0.58);
-  color: #29563c;
-  background: linear-gradient(180deg, rgba(236, 247, 203, 0.94), rgba(168, 214, 143, 0.92));
-}
-
-.theme-jungle-bay .entry-login-card h2,
-.theme-jungle-bay .entry-login-copy,
-.theme-jungle-bay .entry-login-kicker {
-  color: #29563c;
-}
-
 .theme-switch {
   position: absolute;
   top: 1rem;
@@ -246,41 +122,6 @@ canvas {
   display: flex;
   gap: 0.4rem;
   pointer-events: auto;
-}
-
-.menu-top-right {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 7;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.42rem;
-  pointer-events: none;
-}
-
-.aura-login-slot {
-  min-width: 190px;
-  pointer-events: auto;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.aura-login-slot.hidden {
-  display: none;
-}
-
-.aura-login-fallback {
-  min-width: 190px;
-  font-size: 0.88rem;
-  padding: 0.5rem 0.72rem;
-}
-
-.aura-disconnect-btn {
-  min-width: 190px;
-  font-size: 0.88rem;
-  padding: 0.5rem 0.72rem;
 }
 
 .menu-theme-picker {
@@ -412,28 +253,6 @@ canvas {
   flex-direction: column;
   gap: 0.8rem;
   pointer-events: auto;
-}
-
-.menu-aura-status {
-  position: absolute;
-  left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
-  transform: translateX(-50%);
-  z-index: 6;
-  pointer-events: none;
-  opacity: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: #ffd8c6;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.8rem;
-  transition: opacity 180ms ease;
-}
-
-.menu-aura-status.visible {
-  opacity: 1;
 }
 
 .menu-buttons.disabled {
@@ -1544,190 +1363,11 @@ button:disabled {
   overflow: auto;
 }
 
-.profile-screen {
-  width: 100%;
-  height: 100%;
-  padding: 2.2rem 1.2rem 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  overflow: auto;
-}
-
-.profile-screen h2 {
-  margin: 0 0 0.7rem;
-  font-family: "Hell", "Teko", sans-serif;
-  font-weight: 400;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: clamp(1.8rem, 4vw, 2.8rem);
-  color: #ffb08a;
-}
-
-.profile-card {
-  width: min(900px, 96vw);
-  border: 1px solid rgba(255, 126, 87, 0.42);
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(55, 14, 12, 0.78), rgba(22, 6, 5, 0.78));
-  box-shadow: inset 0 0 22px rgba(255, 90, 45, 0.12);
-  padding: 1rem;
-  display: grid;
-  gap: 0.8rem;
-}
-
-.profile-status {
-  margin: 0;
-  color: #f4b694;
-}
-
-.profile-lookup-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.aura-connector-btn {
-  min-width: 230px;
-  padding: 0.72rem 1rem;
-  border-color: rgba(255, 216, 126, 0.9);
-  color: #fff4d0;
-  background:
-    linear-gradient(180deg, rgba(143, 42, 21, 0.96), rgba(69, 14, 11, 0.98)),
-    radial-gradient(circle at 50% -15%, rgba(255, 224, 135, 0.24), transparent 58%);
-  box-shadow:
-    0 0 0 1px rgba(255, 218, 135, 0.24),
-    0 0 18px rgba(255, 102, 45, 0.28),
-    0 12px 24px rgba(0, 0, 0, 0.38),
-    inset 0 1px 0 rgba(255, 234, 194, 0.18);
-}
-
-.aura-connector-btn:hover {
-  border-color: rgba(255, 238, 170, 0.98);
-  box-shadow:
-    0 0 0 1px rgba(255, 232, 160, 0.34),
-    0 0 24px rgba(255, 128, 53, 0.42),
-    0 14px 28px rgba(0, 0, 0, 0.44),
-    inset 0 1px 0 rgba(255, 240, 210, 0.25);
-}
-
-.profile-lookup-input {
-  flex: 1;
-  min-width: 220px;
-  padding: 0.62rem 0.75rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 168, 128, 0.35);
-  background: rgba(24, 7, 6, 0.55);
-  color: #ffe8dc;
-  outline: none;
-}
-
-.profile-lookup-input::placeholder {
-  color: rgba(255, 214, 193, 0.62);
-}
-
-.profile-lookup-input:focus {
-  border-color: rgba(255, 190, 153, 0.72);
-  box-shadow: 0 0 0 2px rgba(255, 135, 82, 0.22);
-}
-
-.profile-header {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  gap: 0.8rem;
-}
-
-.profile-avatar {
-  width: 92px;
-  height: 92px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255, 170, 132, 0.7);
-}
-
-.profile-avatar.placeholder {
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at 35% 30%, #5b1f18, #180607);
-  color: #ffe7d7;
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-}
-
-.profile-title-block h3 {
-  margin: 0;
-  color: #ffd0bb;
-  font-size: clamp(1.2rem, 2vw, 1.6rem);
-}
-
-.profile-username {
-  margin: 0.2rem 0 0;
-  color: #f4b694;
-  font-size: 0.95rem;
-}
-
-.profile-bio {
-  margin: 0;
-  color: #ffdccc;
-  line-height: 1.4;
-}
-
-.profile-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.58rem;
-}
-
-.profile-meta-item {
-  border: 1px solid rgba(255, 151, 112, 0.32);
-  border-radius: 10px;
-  padding: 0.45rem 0.55rem;
-  background: rgba(66, 17, 14, 0.4);
-  display: grid;
-  gap: 0.14rem;
-}
-
-.profile-meta-item span {
-  color: #f4b694;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.profile-meta-item strong {
-  color: #ffe6d9;
-  font-size: 0.86rem;
-  word-break: break-word;
-}
-
 .mode-play {
   background:
     radial-gradient(circle at 16% 12%, #5f1812 0%, transparent 34%),
     radial-gradient(circle at 86% 18%, #320b08 0%, transparent 36%),
     linear-gradient(180deg, #150403 0%, #080202 100%);
-}
-
-#app.theme-hell.mode-profile {
-  background:
-    radial-gradient(circle at 16% 12%, #5f1812 0%, transparent 34%),
-    radial-gradient(circle at 86% 18%, #320b08 0%, transparent 36%),
-    linear-gradient(180deg, #150403 0%, #080202 100%);
-}
-
-#app.theme-heaven.mode-profile {
-  background:
-    radial-gradient(circle at 18% 14%, #e5f4ff 0%, transparent 36%),
-    radial-gradient(circle at 82% 18%, #cbe8ff 0%, transparent 34%),
-    linear-gradient(180deg, #c4e3ff 0%, #9bccf4 100%);
-}
-
-#app.theme-jungle-bay.mode-profile {
-  background:
-    radial-gradient(circle at 18% 14%, #edf8c8 0%, transparent 36%),
-    radial-gradient(circle at 82% 18%, #bde3a8 0%, transparent 34%),
-    linear-gradient(180deg, #83d6ba 0%, #5ab08f 100%);
 }
 
 .theme-heaven {
@@ -1783,126 +1423,6 @@ button:disabled {
 .theme-jungle-bay .sound-btn.active {
   border-color: rgba(90, 138, 75, 0.95);
   box-shadow: 0 0 0 1px rgba(114, 174, 96, 0.35), 0 0 12px rgba(170, 210, 105, 0.35);
-}
-
-.theme-heaven .aura-login-fallback {
-  color: #1f3c59;
-}
-
-.theme-jungle-bay .aura-login-fallback {
-  color: #29563c;
-}
-
-.theme-heaven .menu-aura-status {
-  color: #1f3f5d;
-}
-
-.theme-jungle-bay .menu-aura-status {
-  color: #29563c;
-}
-
-.theme-heaven .profile-screen h2,
-.theme-heaven .profile-title-block h3 {
-  color: #214d79;
-}
-
-.theme-heaven .profile-card {
-  border: 1px solid rgba(107, 164, 225, 0.55);
-  background: linear-gradient(180deg, rgba(217, 237, 255, 0.86), rgba(182, 217, 247, 0.83));
-  box-shadow: inset 0 0 18px rgba(91, 157, 222, 0.12);
-}
-
-.theme-heaven .profile-status,
-.theme-heaven .profile-username,
-.theme-heaven .profile-bio,
-.theme-heaven .profile-meta-item span,
-.theme-heaven .profile-meta-item strong {
-  color: #234d75;
-}
-
-.theme-heaven .profile-meta-item {
-  border: 1px solid rgba(102, 162, 224, 0.34);
-  background: rgba(230, 244, 255, 0.64);
-}
-
-.theme-heaven .profile-lookup-input {
-  border-color: rgba(86, 142, 206, 0.45);
-  background: rgba(235, 246, 255, 0.82);
-  color: #1f3c59;
-}
-
-.theme-heaven .profile-lookup-input::placeholder {
-  color: rgba(42, 87, 127, 0.62);
-}
-
-.theme-heaven .profile-lookup-input:focus {
-  border-color: rgba(44, 112, 181, 0.8);
-  box-shadow: 0 0 0 2px rgba(95, 164, 227, 0.28);
-}
-
-.theme-heaven .aura-connector-btn {
-  border-color: rgba(74, 139, 205, 0.9);
-  color: #163756;
-  background:
-    linear-gradient(180deg, rgba(239, 248, 255, 0.98), rgba(169, 211, 247, 0.96)),
-    radial-gradient(circle at 50% -12%, rgba(255, 255, 255, 0.5), transparent 56%);
-  box-shadow:
-    0 0 0 1px rgba(126, 181, 232, 0.3),
-    0 0 18px rgba(99, 166, 232, 0.34),
-    0 12px 24px rgba(39, 89, 135, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.62);
-}
-
-.theme-jungle-bay .profile-screen h2,
-.theme-jungle-bay .profile-title-block h3 {
-  color: #28553b;
-}
-
-.theme-jungle-bay .profile-card {
-  border: 1px solid rgba(98, 150, 86, 0.58);
-  background: linear-gradient(180deg, rgba(227, 246, 212, 0.86), rgba(188, 225, 165, 0.84));
-  box-shadow: inset 0 0 18px rgba(118, 176, 104, 0.14);
-}
-
-.theme-jungle-bay .profile-status,
-.theme-jungle-bay .profile-username,
-.theme-jungle-bay .profile-bio,
-.theme-jungle-bay .profile-meta-item span,
-.theme-jungle-bay .profile-meta-item strong {
-  color: #29563c;
-}
-
-.theme-jungle-bay .profile-meta-item {
-  border: 1px solid rgba(98, 150, 86, 0.34);
-  background: rgba(235, 248, 224, 0.64);
-}
-
-.theme-jungle-bay .profile-lookup-input {
-  border-color: rgba(98, 150, 86, 0.46);
-  background: rgba(236, 247, 203, 0.82);
-  color: #29563c;
-}
-
-.theme-jungle-bay .profile-lookup-input::placeholder {
-  color: rgba(51, 93, 64, 0.62);
-}
-
-.theme-jungle-bay .profile-lookup-input:focus {
-  border-color: rgba(90, 138, 75, 0.82);
-  box-shadow: 0 0 0 2px rgba(114, 174, 96, 0.28);
-}
-
-.theme-jungle-bay .aura-connector-btn {
-  border-color: rgba(77, 139, 78, 0.95);
-  color: #214c34;
-  background:
-    linear-gradient(180deg, rgba(245, 252, 204, 0.98), rgba(161, 216, 131, 0.96)),
-    radial-gradient(circle at 50% -12%, rgba(255, 242, 161, 0.5), transparent 58%);
-  box-shadow:
-    0 0 0 1px rgba(132, 181, 92, 0.32),
-    0 0 18px rgba(109, 170, 74, 0.34),
-    0 12px 24px rgba(42, 93, 55, 0.22),
-    inset 0 1px 0 rgba(255, 255, 221, 0.58);
 }
 
 .theme-heaven .menu-theme-select {
@@ -2815,15 +2335,12 @@ button:disabled {
   background: #d6d4c8;
 }
 
-.theme-bankr .entry-login-gate,
 .theme-bankr .play-setup-backdrop,
 .theme-bankr .inspector-backdrop {
   background: rgba(52, 42, 88, 0.42);
 }
 
-.theme-bankr .entry-login-card,
 .theme-bankr .play-setup-panel,
-.theme-bankr .profile-card,
 .theme-bankr .inspector-panel,
 .theme-bankr .collection-card,
 .theme-bankr.mode-play .panel,
@@ -2872,8 +2389,7 @@ button:disabled {
 .theme-bankr .menu-theme-select,
 .theme-bankr .play-setup-panel select,
 .theme-bankr .panel select,
-.theme-bankr .arena-panel select,
-.theme-bankr .profile-lookup-input {
+.theme-bankr .arena-panel select {
   border: 1px solid rgba(122, 94, 230, 0.56);
   color: #372969;
 }
@@ -2885,18 +2401,10 @@ button:disabled {
 }
 
 .theme-bankr .menu-theme-picker::after,
-.theme-bankr .menu-aura-status,
 .theme-bankr .play-setup-panel h2,
 .theme-bankr .play-setup-panel p,
 .theme-bankr .play-setup-panel label,
 .theme-bankr .mode-label,
-.theme-bankr .profile-screen h2,
-.theme-bankr .profile-title-block h3,
-.theme-bankr .profile-status,
-.theme-bankr .profile-username,
-.theme-bankr .profile-bio,
-.theme-bankr .profile-meta-item span,
-.theme-bankr .profile-meta-item strong,
 .theme-bankr.mode-play .panel h1,
 .theme-bankr.mode-play .panel p,
 .theme-bankr.mode-play .panel label,
@@ -2906,7 +2414,6 @@ button:disabled {
   color: #372969;
 }
 
-.theme-bankr .profile-meta-item,
 .theme-bankr .cap-info {
   border-color: rgba(122, 94, 230, 0.34);
   background: rgba(231, 228, 217, 0.84);
@@ -2994,7 +2501,6 @@ button:disabled {
 }
 
 #app.theme-bankr.mode-collection,
-#app.theme-bankr.mode-profile,
 .theme-bankr.mode-play {
   background:
     radial-gradient(circle at 18% 16%, rgba(122, 94, 230, 0.24), transparent 34%),
@@ -3003,8 +2509,7 @@ button:disabled {
 }
 
 @media (min-width: 641px) {
-  .mode-collection .global-mute-btn,
-  .mode-profile .global-mute-btn {
+  .mode-collection .global-mute-btn {
     left: calc(env(safe-area-inset-left, 0px) + 0.8rem);
     bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
     right: auto;
@@ -3147,8 +2652,7 @@ button:disabled {
     bottom: auto;
   }
 
-  .mode-collection .global-mute-btn,
-  .mode-profile .global-mute-btn {
+  .mode-collection .global-mute-btn {
     left: calc(env(safe-area-inset-left, 0px) + 0.7rem);
     top: calc(env(safe-area-inset-top, 0px) + 0.7rem);
     right: auto;
@@ -3169,34 +2673,6 @@ button:disabled {
     padding: 0.42rem 0.52rem;
   }
 
-  .aura-login-slot {
-    min-width: 148px;
-  }
-
-  .aura-login-fallback {
-    min-width: 148px;
-    font-size: 0.72rem;
-    padding: 0.42rem 0.5rem;
-  }
-
-  .aura-disconnect-btn {
-    min-width: 148px;
-    font-size: 0.72rem;
-    padding: 0.42rem 0.5rem;
-  }
-
-  .menu-aura-status {
-    top: auto;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 7rem);
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(86vw, 360px);
-    font-size: 0.66rem;
-    padding: 0;
-    text-align: center;
-    line-height: 1.15;
-  }
-
   .collection-grid {
     width: min(440px, 100%);
     height: auto;
@@ -3204,21 +2680,6 @@ button:disabled {
     flex-direction: column;
     gap: 0.75rem;
     padding-bottom: 0.75rem;
-  }
-
-  .profile-card {
-    width: min(440px, 100%);
-    padding: 0.75rem;
-  }
-
-  .profile-header {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
-  }
-
-  .profile-meta-grid {
-    grid-template-columns: 1fr;
   }
 
   .collection-screen {

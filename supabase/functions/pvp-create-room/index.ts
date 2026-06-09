@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
         room_id: room.id,
         player_id: player.playerId,
         player_name: player.username,
-        wallet: player.wallet,
+        wallet: null,
         slot: 1,
         selected_cap: payload.cap || null,
       },

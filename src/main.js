@@ -1,11 +1,10 @@
 import "./style.css";
-import { fetchAuraInventory } from "./aura/inventory.js";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
 import { playSound, preloadSounds, unlockSounds } from "./sound.js";
 
 const app = document.querySelector("#app");
-const THEME_STORAGE_KEY = "aura_caps_last_theme_v1";
+const THEME_STORAGE_KEY = "caps_last_theme_v1";
 const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "bankr"];
 const DEFAULT_THEME = "jungle-bay";
 const SOUND_PATHS = [
@@ -25,87 +24,43 @@ const hoverTargetsSelector = "button";
 const collectionHoverTargetsSelector = ".disc-card, .inspect-btn";
 let lastHoverSfxAt = 0;
 let soundEnabled = true;
-const AURA_SESSION_KEY = "aura_session_v1";
-const LOGIN_GATE_KEY = "aura_login_gate_v1";
-const ACTIVE_PVP_ROOM_KEY = "aura_active_pvp_room_v1";
-let auraSession = loadAuraSession();
-let pendingPvpInviteCode =
-  new URLSearchParams(window.location.search).get("pvp") || "";
+const PLAYER_IDENTITY_KEY = "caps_player_identity_v1";
+const ACTIVE_PVP_ROOM_KEY = "caps_active_pvp_room_v1";
+const PVP_ENABLED = false;
+const ROUTES = {
+  menu: "/",
+  battles: "/battles",
+  collection: "/collection",
+};
+const playerIdentity = loadPlayerIdentity();
+let pendingPvpInviteCode = PVP_ENABLED
+  ? new URLSearchParams(window.location.search).get("pvp") || ""
+  : "";
 let pendingPvpInviteStarted = false;
 
 window.addEventListener("pointerdown", unlockSounds, { once: true, passive: true });
 window.addEventListener("touchstart", unlockSounds, { once: true, passive: true });
 
-function loadAuraSession() {
+function loadPlayerIdentity() {
   try {
-    const raw = window.localStorage.getItem(AURA_SESSION_KEY);
-    if (!raw) {
-      return null;
+    const stored = JSON.parse(window.localStorage.getItem(PLAYER_IDENTITY_KEY) || "null");
+    if (stored?.playerId) {
+      return stored;
     }
-    const parsed = JSON.parse(raw);
-    const walletAddress =
-      parsed?.walletAddress ||
-      parsed?.user?.walletAddress ||
-      parsed?.user?.address ||
-      "";
-    const hasUserIdentity = Boolean(
-      parsed?.connected || parsed?.authenticated || walletAddress || parsed?.user
-    );
-    if (!parsed || !hasUserIdentity) {
-      return null;
-    }
-    return {
-      connected: true,
-      walletAddress,
-      user: parsed.user || null,
-    };
   } catch {
-    return null;
+    // Create a fresh local identity below.
   }
-}
-
-function saveAuraSession(session) {
+  const id = crypto.randomUUID();
+  const identity = {
+    playerId: id,
+    username: `Player ${id.slice(0, 4).toUpperCase()}`,
+  };
   try {
-    if (session?.connected) {
-      window.localStorage.setItem(AURA_SESSION_KEY, JSON.stringify(session));
-      return;
-    }
-    window.localStorage.removeItem(AURA_SESSION_KEY);
+    window.localStorage.setItem(PLAYER_IDENTITY_KEY, JSON.stringify(identity));
   } catch {
     // Ignore storage failures.
   }
-}
-
-function hasAuraSession(sessionLike) {
-  return Boolean(
-    sessionLike?.connected ||
-      sessionLike?.walletAddress ||
-      sessionLike?.user
-  );
-}
-
-function hasChosenGuestMode() {
-  try {
-    return window.localStorage.getItem(LOGIN_GATE_KEY) === "guest";
-  } catch {
-    return false;
-  }
-}
-
-function setGuestMode() {
-  try {
-    window.localStorage.setItem(LOGIN_GATE_KEY, "guest");
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function clearGuestMode() {
-  try {
-    window.localStorage.removeItem(LOGIN_GATE_KEY);
-  } catch {
-    // Ignore storage failures.
-  }
+  return identity;
 }
 
 function loadActivePvpRoom() {
@@ -167,77 +122,6 @@ function composeCleanups(...cleanups) {
         cleanup();
       }
     }
-  };
-}
-
-function closeLoginGate() {
-  if (loginGateCleanup) {
-    loginGateCleanup();
-    loginGateCleanup = null;
-  }
-}
-
-function triggerAuraLoginFromGate() {
-  const auraSlot = app.querySelector("#aura-login");
-  const clickable = auraSlot?.querySelector(
-    "button, [role='button'], a, iframe"
-  );
-  if (clickable instanceof HTMLElement) {
-    clickable.click();
-    return;
-  }
-  window.dispatchEvent(new CustomEvent("aura-caps-open-login"));
-}
-
-function showLoginGateIfNeeded({ forceAura = false, inviteCode = "" } = {}) {
-  closeLoginGate();
-  if (hasAuraSession(auraSession) || (!forceAura && hasChosenGuestMode())) {
-    return;
-  }
-
-  const isPvpInvite = Boolean(inviteCode);
-  const overlay = document.createElement("div");
-  overlay.className = "entry-login-gate";
-  overlay.innerHTML = `
-    <div class="entry-login-card">
-      <p class="entry-login-kicker">welcome to</p>
-      <h2>AURA CAPS</h2>
-      <p class="entry-login-copy">
-        ${
-          isPvpInvite
-            ? `Aura login is required to join PvP room ${inviteCode}.`
-            : "Connect Aura to unlock your owned collection, or jump in as a guest with free caps."
-        }
-      </p>
-      <div class="entry-login-actions">
-        <button id="entryAuraLoginBtn" class="entry-login-primary" type="button">log in with aura</button>
-        ${
-          isPvpInvite
-            ? ""
-            : '<button id="entryGuestBtn" class="entry-login-secondary" type="button">play as guest</button>'
-        }
-      </div>
-    </div>
-  `;
-  app.appendChild(overlay);
-
-  const loginBtn = overlay.querySelector("#entryAuraLoginBtn");
-  const guestBtn = overlay.querySelector("#entryGuestBtn");
-  const onLogin = () => {
-    triggerAuraLoginFromGate();
-    closeLoginGate();
-  };
-  const onGuest = () => {
-    setGuestMode();
-    closeLoginGate();
-  };
-  loginBtn?.addEventListener("click", onLogin);
-  guestBtn?.addEventListener("click", onGuest);
-
-  loginGateCleanup = () => {
-    loginBtn?.removeEventListener("click", onLogin);
-    guestBtn?.removeEventListener("click", onGuest);
-    overlay.remove();
   };
 }
 
@@ -327,15 +211,69 @@ app.addEventListener("mouseover", (event) => {
 
 let cleanupScreen = null;
 let cleanupPvpController = null;
-let loginGateCleanup = null;
 let game = null;
 let viewVersion = 0;
 let currentTheme = pickRefreshTheme();
 let menuModulePromise = null;
 let collectionModulePromise = null;
-let profileModulePromise = null;
 let gameModulePromise = null;
 let pvpModulePromise = null;
+
+function getCurrentRoute() {
+  const path = window.location.pathname.replace(/\/+$/, "") || ROUTES.menu;
+  return Object.values(ROUTES).includes(path) ? path : ROUTES.menu;
+}
+
+function setRoute(path, { replace = false } = {}) {
+  const url = new URL(window.location.href);
+  url.pathname = path;
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  if (nextUrl === `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+    return;
+  }
+  if (replace) {
+    window.history.replaceState({}, "", nextUrl);
+    return;
+  }
+  window.history.pushState({}, "", nextUrl);
+}
+
+function navigateToMenu({ replace = false } = {}) {
+  setRoute(ROUTES.menu, { replace });
+  showMenu();
+}
+
+function navigateToCollection() {
+  setRoute(ROUTES.collection);
+  showCollection();
+}
+
+function navigateToBattles({ pvpRoomCode = "" } = {}) {
+  setRoute(ROUTES.battles);
+  showPlay({ pvpRoomCode });
+}
+
+function returnToMenuFromCancelledBattle() {
+  if (getCurrentRoute() === ROUTES.battles) {
+    navigateToMenu({ replace: true });
+  }
+}
+
+async function renderCurrentRoute() {
+  const route = getCurrentRoute();
+  if (route === ROUTES.collection) {
+    await showCollection();
+    return;
+  }
+  if (route === ROUTES.battles) {
+    await showMenu({ startPendingPvpInvite: false });
+    if (getCurrentRoute() === ROUTES.battles) {
+      await showPlay({ pvpRoomCode: pendingPvpInviteCode });
+    }
+    return;
+  }
+  await showMenu();
+}
 
 function pickRefreshTheme() {
   try {
@@ -354,8 +292,6 @@ function showPlaySetupModal({ theme }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "play-setup-modal";
-    const canSelectPvp = hasAuraSession(auraSession || loadAuraSession());
-
     overlay.innerHTML = `
       <div class="play-setup-backdrop"></div>
       <div class="play-setup-panel">
@@ -383,9 +319,7 @@ function showPlaySetupModal({ theme }) {
           <div class="mode-buttons">
             <button id="setupBattleTrainingBtn" class="mode-btn" type="button">Training</button>
             <button id="setupBattleVsAiBtn" class="mode-btn active" type="button">Vs AI</button>
-            <button id="setupBattlePvpBtn" class="mode-btn" type="button" ${
-              canSelectPvp ? "" : 'disabled title="Log in with Aura to play PvP"'
-            }>PvP</button>
+            ${PVP_ENABLED ? '<button id="setupBattlePvpBtn" class="mode-btn" type="button">PvP</button>' : ""}
           </div>
           <p id="setupBattleHint" class="setup-hint">
             Vs AI: 4 rounds against computer. Best score wins the match.
@@ -495,7 +429,7 @@ function showPlaySetupModal({ theme }) {
       updateBattleModeUI();
     };
     const onBattlePvp = () => {
-      if (!canSelectPvp) {
+      if (!PVP_ENABLED) {
         return;
       }
       selectedBattleMode = "pvp";
@@ -644,10 +578,6 @@ function drawSpriteFrameToCanvas({ canvas, ctx, image, config, frame }) {
   ctx.drawImage(image, sx, sy, frameW, frameH, dx, dy, dw, dh);
 }
 
-async function fetchAuraCapOptions(sessionLike) {
-  return fetchAuraInventory({ sessionLike, limit: 48 });
-}
-
 async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
@@ -713,12 +643,9 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         ? cap.id.startsWith("slammer-")
         : !cap.id.startsWith("slammer-")
     );
-    const capSelectSession = auraSession || loadAuraSession();
-    const canUseAuraFilter = gameMode !== "slammer" && hasAuraSession(capSelectSession);
-    let auraCaps = [];
     let activeCapFilter = "all";
     let selectableCaps = [...baseCaps];
-    let capsLoading = canUseAuraFilter;
+    let capsLoading = false;
     let isClosed = false;
     let renderGridRequestId = 0;
     let spritePreviewNodes = [];
@@ -729,9 +656,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         : baseCaps.filter((cap) => cap.filterGroup === activeCapFilter);
     const byId = (id) =>
       selectableCaps.find((cap) => cap.id === id) ||
-      auraCaps.find((cap) => cap.id === id) ||
-      selectableCaps[0] ||
-      auraCaps[0];
+      selectableCaps[0];
     const playerDefaultCandidate = gameMode === "slammer" ? "slammer-1" : "classic-1";
     const cpuDefaultCandidate =
       gameMode === "slammer" ? "slammer-3" : "classic-8";
@@ -860,7 +785,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         const capId = button.getAttribute("data-cap-id");
         if (!capId) return;
         const cap = byId(capId);
-        if (!cap?.isAuraSprite) {
+        if (!cap?.isSpriteCap) {
           const img = button.querySelector("img");
           const markLoaded = () => button.classList.remove("is-loading");
           if (img?.complete) {
@@ -949,7 +874,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           imagePath: playerCap.imagePath,
           weightMultiplier: playerCap.weightMultiplier ?? null,
           rarity: playerCap.rarity || "",
-          isAuraSprite: Boolean(playerCap.isAuraSprite),
+          isSpriteCap: Boolean(playerCap.isSpriteCap),
           spriteHints: playerCap.spriteHints || null,
         },
         cpuCapMeta: showsCpuPick
@@ -959,7 +884,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
               imagePath: cpuCap.imagePath,
               weightMultiplier: cpuCap.weightMultiplier ?? null,
               rarity: cpuCap.rarity || "",
-              isAuraSprite: Boolean(cpuCap.isAuraSprite),
+              isSpriteCap: Boolean(cpuCap.isSpriteCap),
               spriteHints: cpuCap.spriteHints || null,
             }
           : null,
@@ -983,31 +908,10 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     launchBtn?.addEventListener("click", onLaunch);
     backdrop?.addEventListener("click", onCancel);
 
-    if (canUseAuraFilter) {
-      fetchAuraCapOptions(capSelectSession)
-        .then((loadedAuraCaps) => {
-          if (isClosed) {
-            return;
-          }
-          if (Array.isArray(loadedAuraCaps) && loadedAuraCaps.length > 0) {
-            auraCaps = loadedAuraCaps;
-            selectableCaps = [...baseCaps, ...auraCaps];
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (isClosed) {
-            return;
-          }
-          capsLoading = false;
-          updateHints();
-          renderGrid();
-        });
-    }
   });
 }
 
-async function showPvpRoomModal({ setup, capSelection, auraSession }) {
+async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
   const {
     createPvpRoom,
     getPvpRoom,
@@ -1026,7 +930,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       <div class="play-setup-panel pvp-room-panel">
         <button id="pvpCloseBtn" class="play-setup-close" type="button" aria-label="Close PvP rooms">×</button>
         <h2>PvP Room</h2>
-        <p class="setup-hint">Logged-in only. ${modeLabel} room.</p>
+        <p class="setup-hint">${modeLabel} room.</p>
         <div class="pvp-room-actions">
           <button id="pvpCreateBtn" class="mode-btn active" type="button">Create Room</button>
           <button id="pvpJoinBtn" class="mode-btn" type="button">Join Room</button>
@@ -1109,7 +1013,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       }
       publicRoomsEl.innerHTML = `<p>loading public rooms...</p>`;
       try {
-        const payload = await listPvpRooms({ auraSession });
+        const payload = await listPvpRooms({ playerIdentity });
         const rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
         if (rooms.length === 0) {
           publicRoomsEl.innerHTML = `<p>No public rooms yet. Create one and invite another player.</p>`;
@@ -1137,7 +1041,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
       const roomCode = room?.room_code || room?.code || room?.id || "";
       const roomId = room?.id || "";
       const inviteUrl = roomCode
-        ? `${window.location.origin}${window.location.pathname}?pvp=${encodeURIComponent(roomCode)}`
+        ? `${window.location.origin}${ROUTES.battles}?pvp=${encodeURIComponent(roomCode)}`
         : "";
       resultEl.innerHTML = `
         <strong>${mode === "join" ? "Joined room" : "Room created"}</strong>
@@ -1207,7 +1111,7 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
           return;
         }
         try {
-          const state = await getPvpRoom({ auraSession, roomId, roomCode });
+          const state = await getPvpRoom({ playerIdentity, roomId, roomCode });
           const players = Array.isArray(state?.players) ? state.players : [];
           if (players.length >= 2) {
             hasResolvedRoom = true;
@@ -1287,12 +1191,12 @@ async function showPvpRoomModal({ setup, capSelection, auraSession }) {
         const payload =
           mode === "join"
             ? await joinPvpRoom({
-                auraSession,
+                playerIdentity,
                 roomCode: codeInput?.value || "",
                 capSelection,
               })
             : await createPvpRoom({
-                auraSession,
+                playerIdentity,
                 setup: {
                   ...setup,
                   theme: currentTheme,
@@ -1344,11 +1248,6 @@ function loadCollectionModule() {
   return collectionModulePromise;
 }
 
-function loadProfileModule() {
-  profileModulePromise ??= import("./screens/profile.js");
-  return profileModulePromise;
-}
-
 function loadGameModule() {
   gameModulePromise ??= import("./game/DiscDropGame.js");
   return gameModulePromise;
@@ -1365,7 +1264,7 @@ function normalizePvpIdentity(value) {
 
 function getPvpIdentityKeys(identity = {}) {
   return new Set(
-    [identity.auraUserId, identity.walletAddress]
+    [identity.playerId]
       .map(normalizePvpIdentity)
       .filter(Boolean)
   );
@@ -1398,7 +1297,7 @@ function splitPvpRoomPlayers(players = [], localPlayer = {}) {
 
 function startPvpMatchController({
   gameInstance,
-  auraSession,
+  playerIdentity,
   roomState,
   localPlayer,
   opponentPlayer,
@@ -1416,7 +1315,7 @@ function startPvpMatchController({
   const locallyResolvedRounds = new Set();
   const submittedScoreNotices = new Set();
   const localIdentityIds = getPvpIdentityKeys(localPlayer);
-  let localId = localPlayer.auraUserId || localPlayer.walletAddress;
+  let localId = localPlayer.playerId;
   let opponentId = opponentPlayer?.player_id || "";
   let opponentName = opponentPlayer?.player_name || "opponent";
   const localName = localPlayer.username || "you";
@@ -1613,10 +1512,10 @@ function startPvpMatchController({
     }
     refreshInFlight = true;
     try {
-      const state = await getPvpRoom({ auraSession, roomId });
+      const state = await getPvpRoom({ playerIdentity, roomId });
       applyState(state);
     } catch (error) {
-      console.warn("[AURA PvP] room poll failed", error);
+      console.warn("[PvP] room poll failed", error);
     } finally {
       refreshInFlight = false;
     }
@@ -1704,7 +1603,6 @@ function startPvpMatchController({
 }
 
 function clearCurrentScreen() {
-  closeLoginGate();
   if (cleanupPvpController) {
     cleanupPvpController();
     cleanupPvpController = null;
@@ -1736,7 +1634,7 @@ function addBackButton(onClick) {
 
 function leavePvpToMenu() {
   clearPvpResumeTarget();
-  showMenu();
+  navigateToMenu();
 }
 
 function setViewMode(mode) {
@@ -1757,27 +1655,17 @@ function setTheme(nextTheme) {
 }
 
 function maybeStartPendingPvpInvite() {
-  if (!pendingPvpInviteCode || pendingPvpInviteStarted) {
-    return;
-  }
-  if (!hasAuraSession(auraSession)) {
-    clearGuestMode();
-    showLoginGateIfNeeded({
-      forceAura: true,
-      inviteCode: pendingPvpInviteCode,
-    });
+  if (!PVP_ENABLED || !pendingPvpInviteCode || pendingPvpInviteStarted) {
     return;
   }
   pendingPvpInviteStarted = true;
   setTimeout(() => {
-    showPlay({ pvpRoomCode: pendingPvpInviteCode });
+    navigateToBattles({ pvpRoomCode: pendingPvpInviteCode });
   }, 100);
 }
 
-async function showMenu() {
+async function showMenu({ startPendingPvpInvite = true } = {}) {
   const localVersion = ++viewVersion;
-  auraSession = loadAuraSession();
-  const activePvpRoom = loadActivePvpRoom();
   clearCurrentScreen();
   setViewMode("menu");
   const { mountMenuScreen } = await loadMenuModule();
@@ -1788,27 +1676,10 @@ async function showMenu() {
     app,
     theme: currentTheme,
     soundEnabled,
-    auraSession,
     onSoundToggle: () => {
       soundEnabled = !soundEnabled;
       syncSoundButtonsUI();
       return soundEnabled;
-    },
-    onAuraSuccess: (result) => {
-      auraSession = {
-        connected: true,
-        walletAddress: result?.walletAddress || "",
-        user: result?.user || null,
-      };
-      clearGuestMode();
-      saveAuraSession(auraSession);
-      closeLoginGate();
-      maybeStartPendingPvpInvite();
-    },
-    onAuraDisconnect: () => {
-      auraSession = null;
-      saveAuraSession(null);
-      clearActivePvpRoom();
     },
     onThemeChange: (nextTheme) => {
       if (nextTheme !== currentTheme) {
@@ -1816,45 +1687,31 @@ async function showMenu() {
         showMenu();
       }
     },
-    activePvpRoom,
-    onResumePvp: () => {
-      const room = loadActivePvpRoom();
-      if (room?.code) {
-        showPlay({ pvpRoomCode: room.code });
-      }
-    },
-    onPlay: showPlay,
-    onCollection: showCollection,
-    onProfile: showProfile,
+    onPlay: navigateToBattles,
+    onCollection: navigateToCollection,
   });
-  showLoginGateIfNeeded();
-  maybeStartPendingPvpInvite();
+  if (startPendingPvpInvite) {
+    maybeStartPendingPvpInvite();
+  }
 }
 
 async function showPlay({ pvpRoomCode = "" } = {}) {
+  if (!PVP_ENABLED && pvpRoomCode) {
+    clearPvpResumeTarget();
+    navigateToMenu({ replace: true });
+    return;
+  }
   const localVersion = ++viewVersion;
   let setup = null;
   let resumePvpRoomState = null;
   if (pvpRoomCode) {
-    if (!hasAuraSession(auraSession)) {
-      pendingPvpInviteCode = pvpRoomCode;
-      pendingPvpInviteStarted = false;
-      clearGuestMode();
-      showLoginGateIfNeeded({
-        forceAura: true,
-        inviteCode: pvpRoomCode,
-      });
-      return;
-    }
-    const { getAuraPlayerIdentity, getPvpRoom } = await loadPvpModule();
+    const { getPlayerIdentity, getPvpRoom } = await loadPvpModule();
     try {
-      const preview = await getPvpRoom({ auraSession, roomCode: pvpRoomCode });
-      const localPlayer = getAuraPlayerIdentity(auraSession);
+      const preview = await getPvpRoom({ playerIdentity, roomCode: pvpRoomCode });
+      const localPlayer = getPlayerIdentity(playerIdentity);
       const players = Array.isArray(preview?.players) ? preview.players : [];
       const isAlreadyInRoom = players.some(
-        (player) =>
-          player.player_id === localPlayer.auraUserId ||
-          player.player_id === localPlayer.walletAddress
+        (player) => player.player_id === localPlayer.playerId
       );
       setup = {
         arenaKey: preview?.room?.map_id || DEFAULT_ARENA_KEY,
@@ -1884,11 +1741,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
     return;
   }
   if (!setup) {
-    return;
-  }
-  auraSession = loadAuraSession();
-  if (setup.battleMode === "pvp" && !hasAuraSession(auraSession)) {
-    showLoginGateIfNeeded();
+    returnToMenuFromCancelledBattle();
     return;
   }
   let capSelection = null;
@@ -1902,6 +1755,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       return;
     }
     if (!capSelection) {
+      returnToMenuFromCancelledBattle();
       return;
     }
   }
@@ -1909,19 +1763,22 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
   if (setup.battleMode === "pvp") {
     const roomState =
       resumePvpRoomState ||
-      (await showPvpRoomModal({ setup, capSelection, auraSession }));
+      (await showPvpRoomModal({ setup, capSelection, playerIdentity }));
     if (localVersion !== viewVersion || !roomState?.room) {
+      if (localVersion === viewVersion) {
+        returnToMenuFromCancelledBattle();
+      }
       return;
     }
     const {
-      getAuraPlayerIdentity,
+      getPlayerIdentity,
       getPvpRoom,
       sendPvpAim,
       sendPvpTurnSubmitted,
       subscribePvpRoom,
       submitPvpTurnResult,
     } = await loadPvpModule();
-    const localPlayer = getAuraPlayerIdentity(auraSession);
+    const localPlayer = getPlayerIdentity(playerIdentity);
     const players = Array.isArray(roomState.players) ? roomState.players : [];
     const { ownPlayer, opponentPlayer } = splitPvpRoomPlayers(
       players,
@@ -1957,7 +1814,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
       cpuCapMeta: opponentPlayer?.selected_cap || null,
       onPvpTurnResult: (turn) =>
         submitPvpTurnResult({
-          auraSession,
+          playerIdentity,
           roomId: roomState.room.id,
           turn,
         }),
@@ -1965,7 +1822,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
     await game.init();
     cleanupPvpController = startPvpMatchController({
       gameInstance: game,
-      auraSession,
+      playerIdentity,
       roomState,
       localPlayer,
       opponentPlayer,
@@ -2000,12 +1857,11 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
   if (localVersion !== viewVersion) {
     return;
   }
-  cleanupScreen = composeCleanups(addBackButton(showMenu), addGlobalMuteButton());
+  cleanupScreen = composeCleanups(addBackButton(navigateToMenu), addGlobalMuteButton());
 }
 
 async function showCollection() {
   const localVersion = ++viewVersion;
-  auraSession = loadAuraSession();
   clearCurrentScreen();
   setViewMode("collection");
   const { mountCollectionScreen } = await loadCollectionModule();
@@ -2013,24 +1869,21 @@ async function showCollection() {
     return;
   }
   cleanupScreen = composeCleanups(
-    mountCollectionScreen({ app, onBack: showMenu, auraSession }),
+    mountCollectionScreen({ app, onBack: navigateToMenu }),
     addGlobalMuteButton()
   );
 }
 
-async function showProfile() {
-  const localVersion = ++viewVersion;
-  auraSession = loadAuraSession();
-  clearCurrentScreen();
-  setViewMode("profile");
-  const { mountProfileScreen } = await loadProfileModule();
-  if (localVersion !== viewVersion) {
-    return;
-  }
-  cleanupScreen = composeCleanups(
-    mountProfileScreen({ app, onBack: showMenu, auraSession }),
-    addGlobalMuteButton()
-  );
+window.addEventListener("popstate", renderCurrentRoute);
+
+if (!PVP_ENABLED) {
+  clearPvpResumeTarget();
 }
 
-showMenu();
+if (PVP_ENABLED && pendingPvpInviteCode && getCurrentRoute() === ROUTES.menu) {
+  setRoute(ROUTES.battles, { replace: true });
+} else if (getCurrentRoute() !== window.location.pathname) {
+  setRoute(getCurrentRoute(), { replace: true });
+}
+
+renderCurrentRoute();
