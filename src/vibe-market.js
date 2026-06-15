@@ -56,6 +56,31 @@ const DROP_ABI = [
   },
   {
     type: "function",
+    name: "mintWithToken",
+    stateMutability: "payable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "tokensPerMint",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "sellForEth",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "tokenId", type: "uint256" },
+      { name: "recipient", type: "address" },
+      { name: "minPayoutSize", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "open",
     stateMutability: "payable",
     inputs: [{ name: "tokenIds", type: "uint256[]" }],
@@ -110,6 +135,20 @@ const ERC20_ABI = [
     inputs: [],
     outputs: [{ name: "", type: "uint8" }],
   },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getTokenSellQuote",
+    stateMutability: "view",
+    inputs: [{ name: "tokenAmount", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ];
 const publicClient = createPublicClient({
   chain: base,
@@ -127,6 +166,8 @@ let state = {
   items: [],
   unopenedPacks: [],
   packInfo: DEFAULT_PACK_INFO,
+  tokenBalance: null,
+  tokenBalanceFormatted: "",
   error: "",
 };
 let activeRequest = null;
@@ -395,7 +436,23 @@ async function loadSellOffers(game) {
         abi: DROP_ABI,
         functionName,
       });
-      return [functionName, { raw, formatted: formatUnits(raw, decimals) }];
+      const ethQuote = await publicClient
+        .readContract({
+          address: tokenAddress,
+          abi: ERC20_ABI,
+          functionName: "getTokenSellQuote",
+          args: [raw],
+        })
+        .catch(() => null);
+      return [
+        functionName,
+        {
+          raw,
+          formatted: formatUnits(raw, decimals),
+          ethQuote,
+          ethFormatted: ethQuote === null ? "" : formatEther(ethQuote),
+        },
+      ];
     })
   );
   const byFunction = Object.fromEntries(results);
@@ -408,7 +465,8 @@ async function loadSellOffers(game) {
 }
 
 async function loadPackInfo(game) {
-  const [mintPrice, entropyFee] = await Promise.all([
+  const tokenAddress = game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS;
+  const [mintPrice, entropyFee, tokensPerMint, tokenDecimals] = await Promise.all([
     publicClient.readContract({
       address: VIBE_MARKET_COLLECTION_ADDRESS,
       abi: DROP_ABI,
@@ -420,16 +478,62 @@ async function loadPackInfo(game) {
       abi: DROP_ABI,
       functionName: "getEntropyFee",
     }),
+    publicClient.readContract({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName: "tokensPerMint",
+    }),
+    publicClient.readContract({
+      address: tokenAddress,
+      abi: ERC20_ABI,
+      functionName: "decimals",
+    }),
   ]);
+  const sellPriceEth = await publicClient
+    .readContract({
+      address: tokenAddress,
+      abi: ERC20_ABI,
+      functionName: "getTokenSellQuote",
+      args: [tokensPerMint],
+    })
+    .catch(() => null);
   return {
     imagePath: normalizeImageUrl(
       game?.packImage || game?.featuredImageUrl || game?.imageUrl || NAUGHTY_ROBOTS_PACK_IMAGE
     ),
     mintPrice,
     mintPriceEth: formatEther(mintPrice),
+    tokensPerMint,
+    tokensPerMintFormatted: formatUnits(tokensPerMint, tokenDecimals),
+    tokenDecimals,
+    tokenAddress,
+    sellPriceEth,
+    sellPriceEthFormatted: sellPriceEth === null ? "" : formatEther(sellPriceEth),
     entropyFee,
     entropyFeeEth: formatEther(entropyFee),
   };
+}
+
+async function refreshTokenBalance(walletAddress) {
+  if (!walletAddress) return;
+  const decimals = state.packInfo?.tokenDecimals ?? 18;
+  const tokenAddress = state.packInfo?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS;
+  let balance = null;
+  for (let attempt = 0; attempt < 3 && balance === null; attempt += 1) {
+    balance = await publicClient
+      .readContract({
+        address: tokenAddress,
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [walletAddress],
+      })
+      .catch(() => null);
+  }
+  if (balance === null) return;
+  setState({
+    tokenBalance: balance,
+    tokenBalanceFormatted: formatUnits(balance, decimals),
+  });
 }
 
 function requireWalletSession(action) {
@@ -457,7 +561,7 @@ async function sendDropTransaction(session, functionName, args, value = 0n) {
   return { hash, receipt };
 }
 
-export async function buyVibeMarketPack() {
+export async function buyVibeMarketPack(currency = "eth") {
   const session = requireWalletSession("buying a pack");
   const mintPrice =
     state.packInfo?.mintPrice ??
@@ -467,8 +571,22 @@ export async function buyVibeMarketPack() {
       functionName: "getMintPrice",
       args: [1n],
     }));
+  const payWithToken = currency === "nr";
+  if (
+    payWithToken &&
+    state.tokenBalance !== null &&
+    state.packInfo?.tokensPerMint &&
+    state.tokenBalance < state.packInfo.tokensPerMint
+  ) {
+    throw new Error("Your wallet does not have enough NR to buy this pack.");
+  }
   const bufferedMintPrice = (mintPrice * 102n) / 100n;
-  const { hash, receipt } = await sendDropTransaction(session, "mint", [1n], bufferedMintPrice);
+  const { hash, receipt } = await sendDropTransaction(
+    session,
+    payWithToken ? "mintWithToken" : "mint",
+    [1n],
+    payWithToken ? 0n : bufferedMintPrice
+  );
   const mintedLog = receipt.logs
     .map((log) => {
       try {
@@ -504,6 +622,7 @@ export async function buyVibeMarketPack() {
       optimisticRemovedTokenIds.delete(pack.tokenId);
     }
   }
+  await refreshTokenBalance(session.address).catch(() => {});
   return hash;
 }
 
@@ -627,15 +746,20 @@ export async function openVibeMarketPack(pack) {
   };
 }
 
-export async function sellVibeMarketCap(item) {
+export async function sellVibeMarketCap(item, currency = "nr", minEthPayout = 0n) {
   const session = requireWalletSession("selling a cap");
   if (!item?.tokenId) {
     throw new Error("This cap does not have a valid vibe.market token ID.");
   }
 
-  const { hash } = await sendDropTransaction(session, "sellAndClaimOffer", [
-    BigInt(item.tokenId),
-  ]);
+  const { hash } =
+    currency === "eth"
+      ? await sendDropTransaction(session, "sellForEth", [
+          BigInt(item.tokenId),
+          session.address,
+          minEthPayout,
+        ])
+      : await sendDropTransaction(session, "sellAndClaimOffer", [BigInt(item.tokenId)]);
   setState({
     items: state.items.filter((ownedItem) => ownedItem.tokenId !== String(item.tokenId)),
     unopenedPacks: state.unopenedPacks.filter(
@@ -645,11 +769,16 @@ export async function sellVibeMarketCap(item) {
   optimisticRemovedTokenIds.add(String(item.tokenId));
   optimisticUnopenedPacks.delete(String(item.tokenId));
   optimisticOpenedItems.delete(String(item.tokenId));
+  await refreshTokenBalance(session.address).catch(() => {});
   return hash;
 }
 
-export async function sellVibeMarketPack(item) {
-  return sellVibeMarketCap(item);
+export async function sellVibeMarketPack(item, currency = "nr") {
+  const minEthPayout =
+    currency === "eth" && state.packInfo?.sellPriceEth
+      ? (state.packInfo.sellPriceEth * 95n) / 100n
+      : 0n;
+  return sellVibeMarketCap(item, currency, minEthPayout);
 }
 
 export function getVibeMarketState() {
@@ -674,6 +803,8 @@ export async function loadVibeMarketCollectionForWallet(walletAddress, { force =
       items: [],
       unopenedPacks: [],
       packInfo: DEFAULT_PACK_INFO,
+      tokenBalance: null,
+      tokenBalanceFormatted: "",
       error: "",
     });
     return state;
@@ -739,6 +870,17 @@ export async function loadVibeMarketCollectionForWallet(walletAddress, { force =
           return DEFAULT_PACK_INFO;
         }),
       ]);
+      let tokenBalance = null;
+      for (let attempt = 0; attempt < 3 && tokenBalance === null; attempt += 1) {
+        tokenBalance = await publicClient
+          .readContract({
+            address: game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "balanceOf",
+            args: [normalizedAddress],
+          })
+          .catch(() => null);
+      }
       const items = boxes
         .map((box, index) => normalizeBox(box, game, offers, index))
         .filter((item) => item.imagePath);
@@ -753,6 +895,11 @@ export async function loadVibeMarketCollectionForWallet(walletAddress, { force =
         items: optimisticState.items,
         unopenedPacks: optimisticState.unopenedPacks,
         packInfo,
+        tokenBalance,
+        tokenBalanceFormatted:
+          tokenBalance === null
+            ? ""
+            : formatUnits(tokenBalance, packInfo?.tokenDecimals ?? 18),
         error: "",
       };
       console.log("Vibe Market wallet collection", {

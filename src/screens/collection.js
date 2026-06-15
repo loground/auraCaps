@@ -27,6 +27,15 @@ export function mountCollectionScreen({ app, onBack }) {
     const amount = Number(value);
     return Number.isFinite(amount) ? amount.toFixed(6) : "";
   };
+  const formatNr = (value) => {
+    const amount = Number(value);
+    return Number.isFinite(amount)
+      ? amount.toLocaleString(undefined, {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        })
+      : "";
+  };
   const renderAttributes = (attributes, limit = Infinity) =>
     (attributes || [])
       .slice(0, limit)
@@ -238,16 +247,17 @@ export function mountCollectionScreen({ app, onBack }) {
 
   app.innerHTML = `
     <div class="collection-screen">
-      <button id="backBtn" class="back-btn" type="button">back</button>
+      <button id="backBtn" class="back-btn" type="button">Back</button>
       <h2>Collection</h2>
       <div class="collection-switcher" id="collectionSwitcher" role="tablist" aria-label="Collection tabs"></div>
       <div class="collection-switcher collection-sub-switcher" id="collectionSubSwitcher" role="tablist" aria-label="Collection sub tabs"></div>
+      <div class="collection-token-balance" id="collectionTokenBalance"></div>
       <div class="collection-market-action" id="collectionMarketAction"></div>
       <div class="collection-grid" id="collectionGrid"></div>
       <div id="inspectorModal" class="inspector-modal hidden" aria-hidden="true">
         <div class="inspector-backdrop" id="inspectorBackdrop"></div>
         <div class="inspector-panel">
-          <button id="inspectorClose" class="inspector-close" type="button">close</button>
+          <button id="inspectorClose" class="inspector-close" type="button">Close</button>
           <div class="inspector-canvas-wrap" id="inspectorCanvasWrap"></div>
           <aside class="inspector-metadata" id="inspectorMetadata"></aside>
         </div>
@@ -262,7 +272,7 @@ export function mountCollectionScreen({ app, onBack }) {
           </div>
           <h3 id="packRevealTitle">Your cap is revealed</h3>
           <p id="packRevealRarity"></p>
-          <button id="packRevealClose" type="button">continue</button>
+          <button id="packRevealClose" type="button">Continue</button>
         </div>
       </div>
     </div>
@@ -270,6 +280,7 @@ export function mountCollectionScreen({ app, onBack }) {
 
   const grid = app.querySelector("#collectionGrid");
   const marketAction = app.querySelector("#collectionMarketAction");
+  const tokenBalance = app.querySelector("#collectionTokenBalance");
   const modal = app.querySelector("#inspectorModal");
   const modalBackdrop = app.querySelector("#inspectorBackdrop");
   const modalClose = app.querySelector("#inspectorClose");
@@ -400,7 +411,7 @@ export function mountCollectionScreen({ app, onBack }) {
   const showReveal = ({ item, rarity, tokenId }) => {
     revealModal.classList.remove("is-revealing", "has-error");
     revealClose.disabled = false;
-    revealClose.textContent = "continue";
+    revealClose.textContent = "Continue";
     revealImage.src = item?.imagePath || "";
     revealImage.alt = item?.name || `Revealed cap #${tokenId}`;
     revealTitle.textContent = item?.name || `Cap #${tokenId}`;
@@ -417,7 +428,7 @@ export function mountCollectionScreen({ app, onBack }) {
     revealTitle.textContent = "Revealing your cap";
     revealRarity.textContent = "Waiting for onchain randomness and artwork";
     revealClose.disabled = true;
-    revealClose.textContent = "revealing...";
+    revealClose.textContent = "Revealing...";
     revealModal.classList.remove("hidden");
     revealModal.setAttribute("aria-hidden", "false");
   };
@@ -428,7 +439,7 @@ export function mountCollectionScreen({ app, onBack }) {
     }
     openingPackTokenId = item.tokenId;
     button.disabled = true;
-    button.textContent = "revealing...";
+    button.textContent = "Revealing...";
     closeInspector();
     showRevealProgress(item);
     if (status) {
@@ -440,14 +451,14 @@ export function mountCollectionScreen({ app, onBack }) {
       showReveal(revealed);
     } catch (error) {
       button.disabled = false;
-      button.textContent = "open pack";
+      button.textContent = "Open Pack";
       revealModal.classList.remove("is-revealing");
       revealModal.classList.add("has-error");
       revealTitle.textContent = "Reveal is still processing";
       revealRarity.textContent =
         error?.shortMessage || error?.message || "Could not open this pack.";
       revealClose.disabled = false;
-      revealClose.textContent = "continue";
+      revealClose.textContent = "Continue";
       if (status) {
         status.classList.add("error");
         status.textContent =
@@ -460,25 +471,26 @@ export function mountCollectionScreen({ app, onBack }) {
     }
   };
 
-  const sellPack = async (item, button, status = null) => {
-    if (pendingSellTokenId !== item.tokenId) {
-      pendingSellTokenId = item.tokenId;
-      button.textContent = "confirm sell pack";
+  const sellPack = async (item, currency, button, status = null) => {
+    const sellKey = `${item.tokenId}:${currency}`;
+    if (pendingSellTokenId !== sellKey) {
+      pendingSellTokenId = sellKey;
+      button.textContent = "Confirm Sell Pack";
       button.classList.add("confirming");
       if (status) {
-        status.textContent = "Selling is irreversible. Click again to confirm.";
+        status.textContent = `Selling for ${currency.toUpperCase()} is irreversible. Click again to confirm.`;
       }
       return;
     }
     pendingSellTokenId = "";
     button.disabled = true;
-    button.textContent = "selling...";
+    button.textContent = "Selling...";
     try {
-      await sellVibeMarketPack(item);
+      await sellVibeMarketPack(item, currency);
       closeInspector();
     } catch (error) {
       button.disabled = false;
-      button.textContent = "sell pack";
+      button.textContent = "Sell Pack";
       button.classList.remove("confirming");
       if (status) {
         status.classList.add("error");
@@ -518,8 +530,23 @@ export function mountCollectionScreen({ app, onBack }) {
                     : "Loaded from contract"
                 )}</strong>
               </p>
-              <button class="open-pack-btn" type="button">open pack</button>
-              <button class="sell-pack-btn" type="button">sell pack</button>
+              <label class="pack-currency-field">
+                Receive
+                <select class="sell-pack-currency">
+                  <option value="nr">${escapeHtml(
+                    getVibeMarketState().packInfo?.tokensPerMintFormatted
+                      ? `${formatNr(getVibeMarketState().packInfo.tokensPerMintFormatted)} NR`
+                      : "NR"
+                  )}</option>
+                  <option value="eth">${escapeHtml(
+                    getVibeMarketState().packInfo?.sellPriceEthFormatted
+                      ? `${formatEth(getVibeMarketState().packInfo.sellPriceEthFormatted)} ETH`
+                      : "ETH"
+                  )}</option>
+                </select>
+              </label>
+              <button class="open-pack-btn" type="button">Open Pack</button>
+              <button class="sell-pack-btn" type="button">Sell Pack</button>
               <p class="open-pack-status" aria-live="polite">
                 Open to reveal a cap, or sell the unopened pack back to vibe.market.
               </p>
@@ -532,11 +559,24 @@ export function mountCollectionScreen({ app, onBack }) {
                 vibe.market offer:
                 <strong>${escapeHtml(
                   item.offer?.formatted
-                    ? `${item.offer.formatted} NR`
+                    ? `${formatNr(item.offer.formatted)} NR`
                     : "Check in wallet"
                 )}</strong>
               </p>
-              <button class="sell-cap-btn" type="button">sell this cap</button>
+              <label class="pack-currency-field">
+                Receive
+                <select class="sell-cap-currency">
+                  <option value="nr">${escapeHtml(
+                    item.offer?.formatted ? `${formatNr(item.offer.formatted)} NR` : "NR"
+                  )}</option>
+                  <option value="eth">${escapeHtml(
+                    item.offer?.ethFormatted
+                      ? `${formatEth(item.offer.ethFormatted)} ETH`
+                      : "ETH"
+                  )}</option>
+                </select>
+              </label>
+              <button class="sell-cap-btn" type="button">Sell This Cap</button>
               <p class="sell-cap-status" aria-live="polite">
                 Selling is irreversible and exchanges this cap for the displayed token offer.
               </p>
@@ -547,34 +587,44 @@ export function mountCollectionScreen({ app, onBack }) {
     `;
     const openButton = inspectorMetadata.querySelector(".open-pack-btn");
     const sellPackButton = inspectorMetadata.querySelector(".sell-pack-btn");
+    const sellPackCurrency = inspectorMetadata.querySelector(".sell-pack-currency");
     const openStatus = inspectorMetadata.querySelector(".open-pack-status");
     openButton?.addEventListener("click", () => openPack(item, openButton, openStatus));
-    sellPackButton?.addEventListener("click", () => sellPack(item, sellPackButton, openStatus));
+    sellPackButton?.addEventListener("click", () =>
+      sellPack(item, sellPackCurrency?.value || "nr", sellPackButton, openStatus)
+    );
     const sellButton = inspectorMetadata.querySelector(".sell-cap-btn");
+    const sellCurrency = inspectorMetadata.querySelector(".sell-cap-currency");
     const sellStatus = inspectorMetadata.querySelector(".sell-cap-status");
     sellButton?.addEventListener("click", async () => {
-      if (pendingSellTokenId !== item.tokenId) {
-        pendingSellTokenId = item.tokenId;
-        sellButton.textContent = "confirm sell";
+      const currency = sellCurrency?.value || "nr";
+      const sellKey = `${item.tokenId}:${currency}`;
+      if (pendingSellTokenId !== sellKey) {
+        pendingSellTokenId = sellKey;
+        sellButton.textContent = "Confirm Sell";
         sellButton.classList.add("confirming");
         sellStatus.textContent =
-          "Click confirm sell to submit the irreversible transaction in your wallet.";
+          `Click Confirm Sell to exchange this cap for ${currency.toUpperCase()}.`;
         return;
       }
 
       pendingSellTokenId = "";
       sellButton.disabled = true;
-      sellButton.textContent = "selling...";
+      sellButton.textContent = "Selling...";
       sellStatus.classList.remove("error", "success");
       sellStatus.textContent = "Approve the transaction in your wallet.";
       try {
-        await sellVibeMarketCap(item);
+        const minEthPayout =
+          currency === "eth" && item.offer?.ethQuote
+            ? (item.offer.ethQuote * 95n) / 100n
+            : 0n;
+        await sellVibeMarketCap(item, currency, minEthPayout);
         sellStatus.classList.add("success");
         sellStatus.textContent = "Cap sold successfully. Your collection is refreshing.";
         window.setTimeout(closeInspector, 1200);
       } catch (error) {
         sellButton.disabled = false;
-        sellButton.textContent = "sell this cap";
+        sellButton.textContent = "Sell This Cap";
         sellButton.classList.remove("confirming");
         sellStatus.classList.add("error");
         sellStatus.textContent =
@@ -800,6 +850,7 @@ export function mountCollectionScreen({ app, onBack }) {
         renderSwitcher();
         renderSubSwitcher();
         renderMarketAction();
+        renderTokenBalance();
         renderCards();
       });
       switcher.appendChild(btn);
@@ -816,7 +867,7 @@ export function mountCollectionScreen({ app, onBack }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "collection-tab active";
-      btn.textContent = "loading";
+      btn.textContent = "Loading";
       btn.disabled = true;
       subSwitcher.appendChild(btn);
       return;
@@ -826,7 +877,7 @@ export function mountCollectionScreen({ app, onBack }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "collection-tab active";
-      btn.textContent = "empty";
+      btn.textContent = "Empty";
       btn.disabled = true;
       subSwitcher.appendChild(btn);
       return;
@@ -852,6 +903,7 @@ export function mountCollectionScreen({ app, onBack }) {
         activeSubKey = subcollection.id;
         renderSubSwitcher();
         renderMarketAction();
+        renderTokenBalance();
         renderCards();
       });
       subSwitcher.appendChild(btn);
@@ -860,6 +912,16 @@ export function mountCollectionScreen({ app, onBack }) {
 
   const renderMarketAction = () => {
     marketAction.innerHTML = "";
+  };
+
+  const renderTokenBalance = () => {
+    const vibeState = getVibeMarketState();
+    tokenBalance.textContent =
+      activeCollectionKey === "vibe" && vibeState.walletAddress
+        ? vibeState.tokenBalance === null
+          ? "NR balance: Loading..."
+          : `NR balance: ${formatNr(vibeState.tokenBalanceFormatted)} NR`
+        : "";
   };
 
   const renderPackShopCard = () => {
@@ -877,29 +939,40 @@ export function mountCollectionScreen({ app, onBack }) {
       <div class="cap-info">
         <span class="pack-shop-name">Naughty Robots</span>
         <p>Mint an unopened pack, then reveal it here.</p>
-        <span class="pack-shop-price">${escapeHtml(
-          vibeState.packInfo?.mintPriceEth
-            ? `${formatEth(vibeState.packInfo.mintPriceEth)} ETH`
-            : "Price loads from contract"
-        )}</span>
-        <button class="buy-pack-btn" type="button">buy pack</button>
+        <label class="pack-currency-field">
+          Pay with
+          <select class="buy-pack-currency">
+            <option value="eth">${escapeHtml(
+              vibeState.packInfo?.mintPriceEth
+                ? `${formatEth(vibeState.packInfo.mintPriceEth)} ETH`
+                : "ETH"
+            )}</option>
+            <option value="nr">${escapeHtml(
+              vibeState.packInfo?.tokensPerMintFormatted
+                ? `${formatNr(vibeState.packInfo.tokensPerMintFormatted)} NR`
+                : "NR"
+            )}</option>
+          </select>
+        </label>
+        <button class="buy-pack-btn" type="button">Buy Pack</button>
         <p class="buy-pack-status" aria-live="polite"></p>
       </div>
     `;
     const button = card.querySelector(".buy-pack-btn");
+    const currency = card.querySelector(".buy-pack-currency");
     const status = card.querySelector(".buy-pack-status");
     button.addEventListener("click", async () => {
       button.disabled = true;
-      button.textContent = "buying...";
-      status.textContent = "Approve the pack purchase in your wallet.";
+      button.textContent = "Buying...";
+      status.textContent = `Confirm the ${currency.value.toUpperCase()} pack purchase in your wallet.`;
       status.classList.remove("error", "success");
       try {
-        await buyVibeMarketPack();
+        await buyVibeMarketPack(currency.value);
         status.classList.add("success");
         status.textContent = "Pack purchased. It is now ready to open.";
       } catch (error) {
         button.disabled = false;
-        button.textContent = "buy pack";
+        button.textContent = "Buy Pack";
         status.classList.add("error");
         status.textContent = error?.shortMessage || error?.message || "Could not buy this pack.";
       }
@@ -1010,9 +1083,28 @@ export function mountCollectionScreen({ app, onBack }) {
         }
         ${cardAttributes ? `<div class="cap-attributes">${cardAttributes}</div>` : ""}
         <div class="collection-card-actions">
-          <button class="inspect-btn" type="button">${isPack ? "open pack" : "inspect"}</button>
-          ${isPack ? '<button class="sell-pack-card-btn" type="button">sell pack</button>' : ""}
+          <button class="inspect-btn" type="button">${isPack ? "Open Pack" : "Inspect"}</button>
+          ${isPack ? '<button class="sell-pack-card-btn" type="button">Sell Pack</button>' : ""}
         </div>
+        ${
+          isPack
+            ? `<label class="pack-currency-field compact">
+                Receive
+                <select class="sell-pack-card-currency">
+                  <option value="nr">${escapeHtml(
+                    getVibeMarketState().packInfo?.tokensPerMintFormatted
+                      ? `${formatNr(getVibeMarketState().packInfo.tokensPerMintFormatted)} NR`
+                      : "NR"
+                  )}</option>
+                  <option value="eth">${escapeHtml(
+                    getVibeMarketState().packInfo?.sellPriceEthFormatted
+                      ? `${formatEth(getVibeMarketState().packInfo.sellPriceEthFormatted)} ETH`
+                      : "ETH"
+                  )}</option>
+                </select>
+              </label>`
+            : ""
+        }
       </div>
     `;
       card.querySelector(".disc-card").addEventListener("click", () => openInspector(item));
@@ -1025,7 +1117,10 @@ export function mountCollectionScreen({ app, onBack }) {
         }
       });
       const sellPackCardButton = card.querySelector(".sell-pack-card-btn");
-      sellPackCardButton?.addEventListener("click", () => sellPack(item, sellPackCardButton));
+      const sellPackCardCurrency = card.querySelector(".sell-pack-card-currency");
+      sellPackCardButton?.addEventListener("click", () =>
+        sellPack(item, sellPackCardCurrency?.value || "nr", sellPackCardButton)
+      );
 
       const img = card.querySelector("img");
       const discBtn = card.querySelector(".disc-card");
@@ -1078,6 +1173,7 @@ export function mountCollectionScreen({ app, onBack }) {
   renderSwitcher();
   renderSubSwitcher();
   renderMarketAction();
+  renderTokenBalance();
   renderCards();
 
   const unsubscribeVibeMarket = subscribeVibeMarketState((vibeState) => {
@@ -1092,6 +1188,7 @@ export function mountCollectionScreen({ app, onBack }) {
       renderSwitcher();
       renderSubSwitcher();
       renderMarketAction();
+      renderTokenBalance();
       renderCards();
     }
   });

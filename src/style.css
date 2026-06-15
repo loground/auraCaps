@@ -2323,6 +2323,19 @@ button:disabled {
   display: none;
 }
 
+.collection-token-balance {
+  min-height: 1.4rem;
+  margin: 0.15rem 0 0.55rem;
+  color: #ffd0bb;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.collection-token-balance:empty {
+  display: none;
+}
+
 .buy-pack-panel {
   width: min(980px, calc(100% - 2rem));
   margin: 0 auto 1rem;
@@ -2429,6 +2442,31 @@ button:disabled {
   font-size: 0.82rem;
 }
 
+.pack-currency-field {
+  display: grid;
+  gap: 0.22rem;
+  color: #f4b694;
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pack-currency-field select {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid rgba(255, 151, 112, 0.55);
+  border-radius: 7px;
+  padding: 0.25rem 0.45rem;
+  background: rgba(35, 8, 7, 0.86);
+  color: #ffd0bb;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pack-currency-field.compact {
+  margin-top: 0.12rem;
+}
+
 .collection-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2471,7 +2509,15 @@ button:disabled {
 }
 
 .theme-heaven .pack-shop-name,
-.theme-heaven .pack-shop-price {
+.theme-heaven .pack-shop-price,
+.theme-heaven .collection-token-balance,
+.theme-heaven .pack-currency-field {
+  color: #204b75;
+}
+
+.theme-heaven .pack-currency-field select {
+  border-color: rgba(95, 148, 205, 0.58);
+  background: rgba(225, 242, 255, 0.92);
   color: #204b75;
 }
 
@@ -2487,7 +2533,15 @@ button:disabled {
 }
 
 .theme-jungle-bay .pack-shop-name,
-.theme-jungle-bay .pack-shop-price {
+.theme-jungle-bay .pack-shop-price,
+.theme-jungle-bay .collection-token-balance,
+.theme-jungle-bay .pack-currency-field {
+  color: #2f603f;
+}
+
+.theme-jungle-bay .pack-currency-field select {
+  border-color: rgba(79, 126, 70, 0.58);
+  background: rgba(235, 248, 205, 0.92);
   color: #2f603f;
 }
 
@@ -2503,7 +2557,15 @@ button:disabled {
 }
 
 .theme-bankr .pack-shop-name,
-.theme-bankr .pack-shop-price {
+.theme-bankr .pack-shop-price,
+.theme-bankr .collection-token-balance,
+.theme-bankr .pack-currency-field {
+  color: #3b2b78;
+}
+
+.theme-bankr .pack-currency-field select {
+  border-color: rgba(79, 58, 166, 0.56);
+  background: rgba(248, 247, 240, 0.94);
   color: #3b2b78;
 }
 
