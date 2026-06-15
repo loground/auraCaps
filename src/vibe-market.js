@@ -184,7 +184,11 @@ function normalizeAttributes(attributes) {
     .filter((attribute) => attribute?.trait_type && attribute?.value !== undefined)
     .map((attribute) => ({
       traitType: String(attribute.trait_type),
-      value: String(attribute.value),
+      value:
+        String(attribute.trait_type).toLowerCase() === "wear" &&
+        Number.isFinite(Number(attribute.value))
+          ? Number(attribute.value).toFixed(1)
+          : String(attribute.value),
       displayType: attribute.display_type ? String(attribute.display_type) : "",
     }));
 }
@@ -216,16 +220,20 @@ function getBoxAttributes(box, rarity) {
   const metadataAttributes = normalizeAttributes(box.metadata?.attributes).filter(
     (attribute) =>
       attribute.traitType.toLowerCase() !== "rarity" &&
-      attribute.traitType.toLowerCase() !== "status"
+      attribute.traitType.toLowerCase() !== "status" &&
+      attribute.traitType.toLowerCase() !== "wear" &&
+      attribute.traitType.toLowerCase() !== "foil"
   );
+  const wear = box.metadata?.wear ?? getAttribute(box.metadata?.attributes, "wear");
+  const foil = box.metadata?.foil ?? getAttribute(box.metadata?.attributes, "foil");
   return [
     { traitType: "Rarity", value: rarity },
     ...metadataAttributes,
-    ...(box.metadata?.wear
-      ? [{ traitType: "Wear", value: String(box.metadata.wear) }]
+    ...(wear !== undefined && wear !== null && Number.isFinite(Number(wear))
+      ? [{ traitType: "Wear", value: Number(wear).toFixed(1) }]
       : []),
-    ...(box.metadata?.foil
-      ? [{ traitType: "Foil", value: String(box.metadata.foil) }]
+    ...(foil !== undefined && foil !== null
+      ? [{ traitType: "Foil", value: String(foil) }]
       : []),
   ];
 }

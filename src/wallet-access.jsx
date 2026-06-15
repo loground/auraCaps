@@ -21,6 +21,7 @@ import { base } from "wagmi/chains";
 import { useAccount, useConnectorClient } from "wagmi";
 
 const BASE_RPC_URL = "https://mainnet.base.org";
+const WALLET_DISCONNECTED_KEY = "aura-caps:wallet-disconnected";
 const ACCESS_THEMES = ["hell", "heaven", "jungle-bay", "bankr"];
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID?.trim();
 
@@ -66,6 +67,36 @@ function announceWalletSession() {
     new CustomEvent("caps:wallet-session", { detail: walletSession })
   );
 }
+
+function setWalletDisconnected(disconnected) {
+  if (disconnected) {
+    window.localStorage.setItem(WALLET_DISCONNECTED_KEY, "true");
+  } else {
+    window.localStorage.removeItem(WALLET_DISCONNECTED_KEY);
+  }
+}
+
+function shouldReconnectWalletOnMount() {
+  return window.localStorage.getItem(WALLET_DISCONNECTED_KEY) !== "true";
+}
+
+wagmiConfig.subscribe(
+  (configState) => configState.status,
+  (status, previousStatus) => {
+    if (status === "connected") {
+      setWalletDisconnected(false);
+      return;
+    }
+    if (
+      status === "disconnected" &&
+      (previousStatus === "connected" || walletSession?.mode === "wallet")
+    ) {
+      setWalletDisconnected(true);
+      walletSession = { mode: "guest", address: null, chainId: null, provider: null };
+      announceWalletSession();
+    }
+  }
+);
 
 function getRainbowTheme() {
   if (document.body.classList.contains("theme-heaven")) {
@@ -189,7 +220,7 @@ function WalletBridge({ showControl }) {
 
 function WalletApp({ showControl }) {
   return (
-    <WagmiProvider config={wagmiConfig}>
+    <WagmiProvider config={wagmiConfig} reconnectOnMount={shouldReconnectWalletOnMount()}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={getRainbowTheme()} initialChain={base}>
           <WalletBridge showControl={showControl} />

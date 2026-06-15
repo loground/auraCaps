@@ -2415,9 +2415,12 @@ button:disabled {
   justify-content: center;
 }
 
-.pack-shop-card .cap-info strong {
-  color: #ffd0bb;
-  font-size: 1.1rem;
+.pack-shop-name {
+  color: #ff9676;
+  font-family: "Hell", "Teko", sans-serif;
+  font-size: clamp(1.15rem, 1.6vw, 1.55rem);
+  line-height: 1;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
@@ -2432,17 +2435,22 @@ button:disabled {
   gap: 0.35rem;
 }
 
+.collection-card-actions > button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .sell-pack-card-btn,
 .sell-pack-btn {
+  border-color: rgba(255, 132, 89, 0.86);
+  background: linear-gradient(180deg, rgba(151, 44, 27, 0.96), rgba(67, 15, 13, 0.96));
+  color: #ffe2d3;
   text-transform: uppercase;
 }
 
 .sell-pack-btn {
   width: 100%;
-  margin-top: 0.4rem;
-  border-color: rgba(255, 132, 89, 0.86);
-  background: linear-gradient(180deg, rgba(151, 44, 27, 0.96), rgba(67, 15, 13, 0.96));
-  color: #ffe2d3;
+  margin-top: 0.35rem;
 }
 
 .sell-pack-card-btn.confirming,
@@ -2462,7 +2470,7 @@ button:disabled {
   color: #204b75;
 }
 
-.theme-heaven .pack-shop-card .cap-info strong,
+.theme-heaven .pack-shop-name,
 .theme-heaven .pack-shop-price {
   color: #204b75;
 }
@@ -2478,7 +2486,7 @@ button:disabled {
   color: #2f603f;
 }
 
-.theme-jungle-bay .pack-shop-card .cap-info strong,
+.theme-jungle-bay .pack-shop-name,
 .theme-jungle-bay .pack-shop-price {
   color: #2f603f;
 }
@@ -2494,7 +2502,7 @@ button:disabled {
   color: #3b2b78;
 }
 
-.theme-bankr .pack-shop-card .cap-info strong,
+.theme-bankr .pack-shop-name,
 .theme-bankr .pack-shop-price {
   color: #3b2b78;
 }
@@ -2512,27 +2520,6 @@ button:disabled {
 }
 
 .theme-bankr .buy-pack-btn {
-  border-color: rgba(79, 58, 166, 0.72);
-  background: linear-gradient(180deg, #8c73ed, #7a5ee6);
-  color: #f8f7f0;
-}
-
-.theme-heaven .sell-pack-btn,
-.theme-heaven .sell-pack-card-btn {
-  border-color: rgba(95, 148, 205, 0.72);
-  background: linear-gradient(180deg, #5e9bd1, #3975aa);
-  color: #f5fbff;
-}
-
-.theme-jungle-bay .sell-pack-btn,
-.theme-jungle-bay .sell-pack-card-btn {
-  border-color: rgba(79, 126, 70, 0.76);
-  background: linear-gradient(180deg, #689e58, #3d713f);
-  color: #f5ffe9;
-}
-
-.theme-bankr .sell-pack-btn,
-.theme-bankr .sell-pack-card-btn {
   border-color: rgba(79, 58, 166, 0.72);
   background: linear-gradient(180deg, #8c73ed, #7a5ee6);
   color: #f8f7f0;
@@ -3077,6 +3064,11 @@ button:disabled {
 .open-pack-btn {
   width: 100%;
   text-transform: uppercase;
+}
+
+.open-pack-btn,
+.sell-pack-btn {
+  min-height: 38px;
 }
 
 .open-pack-panel .open-pack-status {

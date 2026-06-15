@@ -209,7 +209,7 @@ export function mountCollectionScreen({ app, onBack }) {
         },
         packs: {
           id: "packs",
-          label: "unopened packs",
+          label: "packs",
           items: getVibeMarketState().unopenedPacks,
         },
       },
@@ -875,8 +875,7 @@ export function mountCollectionScreen({ app, onBack }) {
         }
       </div>
       <div class="cap-info">
-        <span class="buy-pack-kicker">naughty robots booster</span>
-        <strong>Buy a pack</strong>
+        <span class="pack-shop-name">Naughty Robots</span>
         <p>Mint an unopened pack, then reveal it here.</p>
         <span class="pack-shop-price">${escapeHtml(
           vibeState.packInfo?.mintPriceEth
@@ -930,14 +929,32 @@ export function mountCollectionScreen({ app, onBack }) {
     }
 
     if (!active || !Array.isArray(active.items) || active.items.length === 0) {
+      const isVibeCollection = topCollection.id === "vibe";
+      if (isVibeCollection && topCollection.loading) {
+        const card = document.createElement("div");
+        card.className = "collection-card collection-loading-card";
+        card.innerHTML = `
+          <div class="cap-slot">
+            <div class="disc-card" aria-label="Loading vibe.market collection">
+              <div class="cap-loading">
+                <span class="cap-loading-spinner" aria-hidden="true"></span>
+                <span class="cap-loading-text">loading</span>
+              </div>
+            </div>
+          </div>
+          <div class="cap-info">
+            <h3>Loading vibe.market collection</h3>
+            <p>Fetching your caps and packs from Base.</p>
+          </div>
+        `;
+        grid.appendChild(card);
+        return;
+      }
       if (isPackCollection) {
         return;
       }
-      const isVibeCollection = topCollection.id === "vibe";
       const emptyTitle =
-        isVibeCollection && topCollection.loading
-          ? "Loading vibe.market collection"
-          : isVibeCollection && topCollection.status === "error"
+        isVibeCollection && topCollection.status === "error"
             ? "Could not load vibe.market collection"
             : isVibeCollection
               ? "no caps from vibe market found"
