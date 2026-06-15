@@ -3,6 +3,7 @@ import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
 import { playSound, preloadSounds, unlockSounds } from "./sound.js";
 import {
+  getWalletSession,
   mountWalletConnectButton,
   setWalletAccessTheme,
   showInitialAccessModal,
@@ -10,6 +11,7 @@ import {
 import {
   getVibeMarketState,
   loadVibeMarketCollectionForWallet,
+  subscribeVibeMarketState,
 } from "./vibe-market.js";
 
 const app = document.querySelector("#app");
@@ -589,6 +591,7 @@ function drawSpriteFrameToCanvas({ canvas, ctx, image, config, frame }) {
 
 async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "classic" }) {
   return new Promise((resolve) => {
+    const isWalletPlayer = getWalletSession()?.mode === "wallet";
     const overlay = document.createElement("div");
     overlay.className = "play-setup-modal";
     const isTraining = battleMode === "training";
@@ -607,15 +610,20 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
               : "Pick your cap from the grid."
         }</p>
         <div id="capFilterButtons" class="cap-pick-filters">
-          <button class="mode-btn active" type="button" data-cap-filter="all">All</button>
           ${
-            gameMode === "slammer"
-              ? ""
+            isWalletPlayer
+              ? '<button class="mode-btn active" type="button" data-cap-filter="vibe-market">Vibe Market</button>'
               : `
-                <button class="mode-btn" type="button" data-cap-filter="classics">Classics</button>
-                <button class="mode-btn" type="button" data-cap-filter="jungle-bay">Jungle Bay</button>
-                <button class="mode-btn" type="button" data-cap-filter="bankr">Bankr</button>
-                <button class="mode-btn" type="button" data-cap-filter="vibe-market">Vibe Market</button>
+                <button class="mode-btn active" type="button" data-cap-filter="all">All</button>
+                ${
+                  gameMode === "slammer"
+                    ? ""
+                    : `
+                      <button class="mode-btn" type="button" data-cap-filter="classics">Classics</button>
+                      <button class="mode-btn" type="button" data-cap-filter="jungle-bay">Jungle Bay</button>
+                      <button class="mode-btn" type="button" data-cap-filter="bankr">Bankr</button>
+                    `
+                }
               `
           }
         </div>
@@ -648,14 +656,17 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     const launchBtn = overlay.querySelector("#capsLaunchBtn");
     const backdrop = overlay.querySelector(".play-setup-backdrop");
 
-    const baseCaps = [...CAP_OPTIONS, ...getVibeMarketState().items].filter((cap) =>
+    const guestCaps = CAP_OPTIONS.filter((cap) =>
       gameMode === "slammer"
         ? cap.id.startsWith("slammer-")
         : !cap.id.startsWith("slammer-")
     );
-    let activeCapFilter = "all";
+    let baseCaps = isWalletPlayer
+      ? getVibeMarketState().items.filter((cap) => cap.filterGroup === "vibe-market")
+      : guestCaps;
+    let activeCapFilter = isWalletPlayer ? "vibe-market" : "all";
     let selectableCaps = [...baseCaps];
-    let capsLoading = false;
+    let capsLoading = isWalletPlayer && getVibeMarketState().status === "loading";
     let isClosed = false;
     let renderGridRequestId = 0;
     let spritePreviewNodes = [];
@@ -664,23 +675,24 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
       activeCapFilter === "all"
         ? selectableCaps
         : baseCaps.filter((cap) => cap.filterGroup === activeCapFilter);
-    const byId = (id) =>
-      selectableCaps.find((cap) => cap.id === id) ||
-      selectableCaps[0];
+    const byId = (id) => selectableCaps.find((cap) => cap.id === id) || selectableCaps[0];
+    const cpuById = (id) => guestCaps.find((cap) => cap.id === id) || guestCaps[0];
     const playerDefaultCandidate = gameMode === "slammer" ? "slammer-1" : "classic-1";
     const cpuDefaultCandidate =
       gameMode === "slammer" ? "slammer-3" : "classic-8";
     const playerDefault = byId(playerDefaultCandidate)?.id;
-    const cpuDefault = byId(cpuDefaultCandidate)?.id;
+    const cpuDefault = cpuById(cpuDefaultCandidate)?.id;
     let selectedPlayerCapId = playerDefault;
     let selectedCpuCapId = cpuDefault;
 
     const capWeightText = (cap) =>
       `${(cap.weightMultiplier ?? getCapWeightMultiplier(cap.imagePath)).toFixed(2)}x`;
     const renderHint = (label, cap) =>
-      `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}${
-        cap.rarity ? ` • Rarity ${cap.rarity}` : ""
-      }`;
+      cap
+        ? `${label}: ${cap.name} • ${capWeightText(cap)} • ${cap.collection} • Series ${cap.series}${
+            cap.rarity ? ` • Rarity ${cap.rarity}` : ""
+          }`
+        : `${label}: No cap selected`;
 
     const stopSpritePreviewAnimation = () => {
       if (spritePreviewRafId !== null) {
@@ -742,12 +754,16 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         return;
       }
       if (launchBtn) {
-        launchBtn.disabled = false;
+        launchBtn.disabled = visibleCaps.length === 0;
       }
       if (visibleCaps.length === 0) {
         capsGrid.innerHTML = `
           <div class="cap-pick-loading loaded">
-            <span class="cap-loading-text">No caps in this filter yet</span>
+            <span class="cap-loading-text">${
+              isWalletPlayer
+                ? "No vibe.market caps found in this wallet"
+                : "No caps in this filter yet"
+            }</span>
           </div>
         `;
         return;
@@ -851,16 +867,30 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
         playerHint.textContent = renderHint("You", byId(selectedPlayerCapId));
       }
       if (cpuHint && showsCpuPick) {
-        cpuHint.textContent = renderHint("CPU", byId(selectedCpuCapId));
+        cpuHint.textContent = renderHint("CPU", cpuById(selectedCpuCapId));
       }
     };
     updateHints();
     updateFilterButtons();
     renderGrid();
 
+    const unsubscribeVibeMarket = isWalletPlayer
+      ? subscribeVibeMarketState((vibeState) => {
+          baseCaps = vibeState.items.filter((cap) => cap.filterGroup === "vibe-market");
+          selectableCaps = [...baseCaps];
+          capsLoading = vibeState.status === "loading";
+          if (!byId(selectedPlayerCapId)) {
+            selectedPlayerCapId = selectableCaps[0]?.id;
+          }
+          updateHints();
+          renderGrid();
+        })
+      : null;
+
     const cleanup = () => {
       isClosed = true;
       stopSpritePreviewAnimation();
+      unsubscribeVibeMarket?.();
       capFilterButtons?.removeEventListener("click", onFilterClick);
       closeBtn?.removeEventListener("click", onCancel);
       launchBtn?.removeEventListener("click", onLaunch);
@@ -873,7 +903,10 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     };
     const onLaunch = () => {
       const playerCap = byId(selectedPlayerCapId || playerDefault);
-      const cpuCap = byId(selectedCpuCapId || cpuDefault);
+      const cpuCap = cpuById(selectedCpuCapId || cpuDefault);
+      if (!playerCap) {
+        return;
+      }
       cleanup();
       resolve({
         playerCapPath: playerCap.imagePath,

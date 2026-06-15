@@ -1,3 +1,13 @@
+import {
+  createPublicClient,
+  encodeFunctionData,
+  formatEther,
+  formatUnits,
+  http,
+} from "viem";
+import { base } from "viem/chains";
+import { getWalletSession } from "./wallet-access.jsx";
+
 export const VIBE_MARKET_COLLECTION_ADDRESS =
   "0x9a978dc37923f4eb0796531d30c1e0602d966161";
 export const VIBE_MARKET_TOKEN_ADDRESS =
@@ -5,7 +15,92 @@ export const VIBE_MARKET_TOKEN_ADDRESS =
 
 const VIBE_MARKET_API_URL = "https://build.vibechain.com/vibe/boosterbox";
 const BASE_CHAIN_ID = 8453;
-const RARITY_NAMES = ["Common", "Uncommon", "Rare", "Super Rare", "Legendary"];
+const RARITY_NAMES = ["Unknown", "Common", "Rare", "Epic", "Legendary", "Mythic"];
+const OFFER_FUNCTIONS = {
+  common: "COMMON_OFFER",
+  uncommon: "COMMON_OFFER",
+  rare: "RARE_OFFER",
+  epic: "EPIC_OFFER",
+  "super rare": "EPIC_OFFER",
+  legendary: "LEGENDARY_OFFER",
+  mythic: "MYTHIC_OFFER",
+};
+const DROP_ABI = [
+  {
+    type: "function",
+    name: "sellAndClaimOffer",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "mint",
+    stateMutability: "payable",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "open",
+    stateMutability: "payable",
+    inputs: [{ name: "tokenIds", type: "uint256[]" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "getMintPrice",
+    stateMutability: "view",
+    inputs: [{ name: "amount", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getEntropyFee",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getTokenRarity",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [
+      {
+        name: "rarityInfo",
+        type: "tuple",
+        components: [
+          { name: "rarity", type: "uint8" },
+          { name: "randomValue", type: "uint256" },
+          { name: "tokenSpecificRandomness", type: "bytes32" },
+        ],
+      },
+    ],
+  },
+  ...["COMMON_OFFER", "RARE_OFFER", "EPIC_OFFER", "LEGENDARY_OFFER", "MYTHIC_OFFER"].map(
+    (name) => ({
+      type: "function",
+      name,
+      stateMutability: "view",
+      inputs: [],
+      outputs: [{ name: "", type: "uint256" }],
+    })
+  ),
+];
+const ERC20_ABI = [
+  {
+    type: "function",
+    name: "decimals",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+];
+const publicClient = createPublicClient({
+  chain: base,
+  transport: http("https://mainnet.base.org"),
+});
 const listeners = new Set();
 
 let state = {
@@ -13,6 +108,8 @@ let state = {
   walletAddress: "",
   collectionName: "vibe.market",
   items: [],
+  unopenedPacks: [],
+  packInfo: null,
   error: "",
 };
 let activeRequest = null;
@@ -54,7 +151,7 @@ function normalizeAttributes(attributes) {
     }));
 }
 
-function formatValue(box, game) {
+function formatValue(box, game, offer) {
   const directValue =
     box.value ??
     box.estimatedValue ??
@@ -70,20 +167,32 @@ function formatValue(box, game) {
   if (metadataValue !== undefined && metadataValue !== null && metadataValue !== "") {
     return String(metadataValue);
   }
+  if (offer?.formatted) {
+    return `${offer.formatted} ${game?.tokenSymbol || ""}`.trim();
+  }
   return "Not available";
 }
 
-function normalizeBox(box, game, index) {
+function normalizeBox(box, game, offers, index) {
   const rawRarity = Number(box.rarity);
   const rarity =
     getAttribute(box.metadata?.attributes, "rarity") ||
     RARITY_NAMES[rawRarity] ||
     "Unknown";
   const collectionName =
-    game?.nftName || game?.tokenName || box.contractDetails?.nftName || "vibe.market";
-  const value = formatValue(box, game);
+    game?.nftName ||
+    game?.tokenName ||
+    box.contract?.nftName ||
+    box.contractDetails?.nftName ||
+    "vibe.market";
+  const offer = offers?.[String(rarity).toLowerCase()] || null;
+  const value = formatValue(box, game, offer);
   const imagePath = normalizeImageUrl(
-    box.metadata?.image || game?.imageUrl || game?.packImage || ""
+    box.metadata?.image ||
+      box.metadata?.imageUrl ||
+      game?.imageUrl ||
+      game?.packImage ||
+      ""
   );
   const tokenId = String(box.tokenId ?? index + 1);
 
@@ -97,6 +206,7 @@ function normalizeBox(box, game, index) {
     subtitle: collectionName,
     rarity: String(rarity),
     value,
+    offer,
     details: `Rarity ${rarity} • Value ${value}`,
     description: box.metadata?.description || game?.description || "",
     attributes: normalizeAttributes(box.metadata?.attributes),
@@ -105,6 +215,29 @@ function normalizeBox(box, game, index) {
     filterGroup: "vibe-market",
     series: "vibe.market",
     centerCrop: true,
+    contractAddress: VIBE_MARKET_COLLECTION_ADDRESS,
+    tokenAddress: game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS,
+  };
+}
+
+function normalizeUnopenedPack(box, game, index) {
+  const tokenId = String(box.tokenId ?? index + 1);
+  const collectionName = game?.nftName || game?.tokenName || "vibe.market";
+  return {
+    id: `vibe-pack-${VIBE_MARKET_COLLECTION_ADDRESS}-${tokenId}`,
+    number: tokenId,
+    tokenId,
+    name: `${collectionName} Pack #${tokenId}`,
+    imagePath: normalizeImageUrl(game?.packImage || game?.featuredImageUrl || game?.imageUrl || ""),
+    collection: collectionName,
+    subtitle: "Unopened pack",
+    details: "Open this pack to reveal its cap.",
+    description: game?.description || "",
+    attributes: [{ traitType: "Status", value: "Unopened" }],
+    filterGroup: "vibe-market",
+    series: "vibe.market",
+    centerCrop: false,
+    itemType: "unopened-pack",
     contractAddress: VIBE_MARKET_COLLECTION_ADDRESS,
     tokenAddress: game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS,
   };
@@ -153,6 +286,174 @@ async function enrichBoxesWithMetadata(boxes, slug) {
   return enriched;
 }
 
+async function loadSellOffers(game) {
+  const tokenAddress = game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS;
+  const decimals = await publicClient
+    .readContract({
+      address: tokenAddress,
+      abi: ERC20_ABI,
+      functionName: "decimals",
+    })
+    .catch(() => 18);
+  const uniqueFunctions = [...new Set(Object.values(OFFER_FUNCTIONS))];
+  const results = await Promise.all(
+    uniqueFunctions.map(async (functionName) => {
+      const raw = await publicClient.readContract({
+        address: VIBE_MARKET_COLLECTION_ADDRESS,
+        abi: DROP_ABI,
+        functionName,
+      });
+      return [functionName, { raw, formatted: formatUnits(raw, decimals) }];
+    })
+  );
+  const byFunction = Object.fromEntries(results);
+  return Object.fromEntries(
+    Object.entries(OFFER_FUNCTIONS).map(([rarity, functionName]) => [
+      rarity,
+      byFunction[functionName],
+    ])
+  );
+}
+
+async function loadPackInfo(game) {
+  const [mintPrice, entropyFee] = await Promise.all([
+    publicClient.readContract({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName: "getMintPrice",
+      args: [1n],
+    }),
+    publicClient.readContract({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName: "getEntropyFee",
+    }),
+  ]);
+  return {
+    imagePath: normalizeImageUrl(game?.packImage || game?.featuredImageUrl || game?.imageUrl || ""),
+    mintPrice,
+    mintPriceEth: formatEther(mintPrice),
+    entropyFee,
+    entropyFeeEth: formatEther(entropyFee),
+  };
+}
+
+function requireWalletSession(action) {
+  const session = getWalletSession();
+  if (session?.mode !== "wallet" || !session.address || !session.provider?.request) {
+    throw new Error(`Connect your wallet on Base before ${action}.`);
+  }
+  return session;
+}
+
+async function sendDropTransaction(session, functionName, args, value = 0n) {
+  const transaction = {
+    from: session.address,
+    to: VIBE_MARKET_COLLECTION_ADDRESS,
+    data: encodeFunctionData({ abi: DROP_ABI, functionName, args }),
+  };
+  if (value > 0n) {
+    transaction.value = `0x${value.toString(16)}`;
+  }
+  const hash = await session.provider.request({
+    method: "eth_sendTransaction",
+    params: [transaction],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  return hash;
+}
+
+export async function buyVibeMarketPack() {
+  const session = requireWalletSession("buying a pack");
+  const mintPrice =
+    state.packInfo?.mintPrice ??
+    (await publicClient.readContract({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName: "getMintPrice",
+      args: [1n],
+    }));
+  const bufferedMintPrice = (mintPrice * 102n) / 100n;
+  const hash = await sendDropTransaction(session, "mint", [1n], bufferedMintPrice);
+  await loadVibeMarketCollectionForWallet(session.address, { force: true });
+  return hash;
+}
+
+export async function openVibeMarketPack(pack) {
+  const session = requireWalletSession("opening a pack");
+  if (!pack?.tokenId) {
+    throw new Error("This pack does not have a valid token ID.");
+  }
+  const tokenId = BigInt(pack.tokenId);
+  const entropyFee =
+    state.packInfo?.entropyFee ??
+    (await publicClient.readContract({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName: "getEntropyFee",
+    }));
+  const hash = await sendDropTransaction(session, "open", [[tokenId]], entropyFee);
+
+  let rarityInfo = null;
+  for (let attempt = 0; attempt < 45; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    try {
+      rarityInfo = await publicClient.readContract({
+        address: VIBE_MARKET_COLLECTION_ADDRESS,
+        abi: DROP_ABI,
+        functionName: "getTokenRarity",
+        args: [tokenId],
+      });
+      break;
+    } catch {
+      // Pyth entropy fulfills asynchronously.
+    }
+  }
+  if (!rarityInfo) {
+    throw new Error("The pack was opened, but its rarity is still being revealed. Refresh shortly.");
+  }
+  let revealedItem = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await loadVibeMarketCollectionForWallet(session.address, { force: true });
+    revealedItem = state.items.find((item) => item.tokenId === String(pack.tokenId)) || null;
+    if (revealedItem) {
+      break;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 1500));
+  }
+  return {
+    hash,
+    tokenId: String(pack.tokenId),
+    rarity: RARITY_NAMES[Number(rarityInfo.rarity)] || "Unknown",
+    item: revealedItem,
+  };
+}
+
+export async function sellVibeMarketCap(item) {
+  const session = requireWalletSession("selling a cap");
+  if (!item?.tokenId) {
+    throw new Error("This cap does not have a valid vibe.market token ID.");
+  }
+
+  const hash = await session.provider.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from: session.address,
+        to: item.contractAddress || VIBE_MARKET_COLLECTION_ADDRESS,
+        data: encodeFunctionData({
+          abi: DROP_ABI,
+          functionName: "sellAndClaimOffer",
+          args: [BigInt(item.tokenId)],
+        }),
+      },
+    ],
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  await loadVibeMarketCollectionForWallet(session.address, { force: true });
+  return hash;
+}
+
 export function getVibeMarketState() {
   return state;
 }
@@ -162,7 +463,7 @@ export function subscribeVibeMarketState(listener) {
   return () => listeners.delete(listener);
 }
 
-export async function loadVibeMarketCollectionForWallet(walletAddress) {
+export async function loadVibeMarketCollectionForWallet(walletAddress, { force = false } = {}) {
   const normalizedAddress = walletAddress?.toLowerCase() || "";
   if (!normalizedAddress) {
     setState({
@@ -170,12 +471,14 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
       walletAddress: "",
       collectionName: "vibe.market",
       items: [],
+      unopenedPacks: [],
+      packInfo: null,
       error: "",
     });
     return state;
   }
 
-  if (state.walletAddress === normalizedAddress && state.status === "loaded") {
+  if (!force && state.walletAddress === normalizedAddress && state.status === "loaded") {
     return state;
   }
   if (activeRequest?.walletAddress === normalizedAddress) {
@@ -186,6 +489,7 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
     status: "loading",
     walletAddress: normalizedAddress,
     items: [],
+    unopenedPacks: [],
     error: "",
   });
 
@@ -205,6 +509,7 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
       const game =
         contractResponse?.contractInfo ||
         contractResponse?.game ||
+        ownerResponse?.boxes?.[0]?.contract ||
         ownerResponse?.boosterBoxes?.[0]?.contractDetails ||
         {};
       const returnedTokenAddress = game?.tokenAddress?.toLowerCase();
@@ -214,18 +519,41 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
           received: returnedTokenAddress,
         });
       }
-      const ownedBoxes = Array.isArray(ownerResponse?.boosterBoxes)
-        ? ownerResponse.boosterBoxes
-        : [];
-      const boxes = await enrichBoxesWithMetadata(ownedBoxes, game?.slug || "naughty-robots");
+      const ownedBoxes = Array.isArray(ownerResponse?.boxes)
+        ? ownerResponse.boxes
+        : Array.isArray(ownerResponse?.boosterBoxes)
+          ? ownerResponse.boosterBoxes
+          : [];
+      const unopenedBoxes = ownedBoxes.filter(
+        (box) => String(box.status || "").toLowerCase() === "minted"
+      );
+      const openedBoxes = ownedBoxes.filter(
+        (box) => String(box.status || "").toLowerCase() !== "minted"
+      );
+      const [boxes, offers, packInfo] = await Promise.all([
+        enrichBoxesWithMetadata(openedBoxes, game?.slug || "naughty-robots"),
+        loadSellOffers(game).catch((error) => {
+          console.warn("Could not load vibe.market sell offers", error);
+          return {};
+        }),
+        loadPackInfo(game).catch((error) => {
+          console.warn("Could not load vibe.market pack pricing", error);
+          return null;
+        }),
+      ]);
       const items = boxes
-        .map((box, index) => normalizeBox(box, game, index))
+        .map((box, index) => normalizeBox(box, game, offers, index))
+        .filter((item) => item.imagePath);
+      const unopenedPacks = unopenedBoxes
+        .map((box, index) => normalizeUnopenedPack(box, game, index))
         .filter((item) => item.imagePath);
       const nextState = {
         status: "loaded",
         walletAddress: normalizedAddress,
         collectionName: game?.nftName || game?.tokenName || "vibe.market",
         items,
+        unopenedPacks,
+        packInfo,
         error: "",
       };
       console.log("Vibe Market wallet collection", {
@@ -242,6 +570,7 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
         status: "error",
         walletAddress: normalizedAddress,
         items: [],
+        unopenedPacks: [],
         error: error?.message || "Could not load Vibe Market collection.",
       });
       return state;

@@ -2319,6 +2319,258 @@ button:disabled {
   padding-bottom: 1rem;
 }
 
+.collection-market-action:empty {
+  display: none;
+}
+
+.buy-pack-panel {
+  width: min(980px, calc(100% - 2rem));
+  margin: 0 auto 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 151, 112, 0.42);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(67, 18, 14, 0.92), rgba(25, 7, 7, 0.92));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem 1rem;
+}
+
+.buy-pack-panel strong,
+.buy-pack-panel p,
+.buy-pack-panel span {
+  display: block;
+  margin: 0;
+}
+
+.buy-pack-panel strong {
+  color: #ffd0bb;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+}
+
+.buy-pack-panel p,
+.buy-pack-kicker,
+.buy-pack-cta span {
+  color: #f4b694;
+  font-size: 0.72rem;
+}
+
+.buy-pack-kicker {
+  margin-bottom: 0.22rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.buy-pack-cta {
+  min-width: 180px;
+  text-align: right;
+}
+
+.buy-pack-btn {
+  width: 100%;
+  margin-top: 0.3rem;
+  text-transform: uppercase;
+}
+
+.buy-pack-status {
+  grid-column: 1 / -1;
+  min-height: 1em;
+}
+
+.buy-pack-status.error {
+  color: #ff9d88;
+}
+
+.buy-pack-status.success {
+  color: #7ee2a6;
+}
+
+.theme-heaven .buy-pack-panel {
+  border-color: rgba(94, 151, 210, 0.45);
+  background: linear-gradient(135deg, rgba(225, 242, 255, 0.94), rgba(177, 209, 239, 0.94));
+}
+
+.theme-heaven .buy-pack-panel strong,
+.theme-heaven .buy-pack-panel p,
+.theme-heaven .buy-pack-panel span {
+  color: #204b75;
+}
+
+.theme-jungle-bay .buy-pack-panel {
+  border-color: rgba(106, 154, 92, 0.48);
+  background: linear-gradient(135deg, rgba(235, 248, 205, 0.94), rgba(188, 222, 165, 0.94));
+}
+
+.theme-jungle-bay .buy-pack-panel strong,
+.theme-jungle-bay .buy-pack-panel p,
+.theme-jungle-bay .buy-pack-panel span {
+  color: #2f603f;
+}
+
+.theme-bankr .buy-pack-panel {
+  border-color: rgba(122, 94, 230, 0.45);
+  background: linear-gradient(135deg, rgba(248, 247, 240, 0.96), rgba(222, 219, 238, 0.95));
+}
+
+.theme-bankr .buy-pack-panel strong,
+.theme-bankr .buy-pack-panel p,
+.theme-bankr .buy-pack-panel span {
+  color: #3b2b78;
+}
+
+.theme-heaven .buy-pack-btn {
+  border-color: rgba(95, 148, 205, 0.72);
+  background: linear-gradient(180deg, #5e9bd1, #3975aa);
+  color: #f5fbff;
+}
+
+.theme-jungle-bay .buy-pack-btn {
+  border-color: rgba(79, 126, 70, 0.76);
+  background: linear-gradient(180deg, #689e58, #3d713f);
+  color: #f5ffe9;
+}
+
+.theme-bankr .buy-pack-btn {
+  border-color: rgba(79, 58, 166, 0.72);
+  background: linear-gradient(180deg, #8c73ed, #7a5ee6);
+  color: #f8f7f0;
+}
+
+.unopened-pack-card .disc-card,
+.unopened-pack-card .disc-card img {
+  border-radius: 14px;
+}
+
+.unopened-pack-card .disc-card {
+  transform: perspective(500px) rotateY(-7deg) rotateX(3deg);
+  box-shadow: 12px 12px 24px rgba(0, 0, 0, 0.24);
+}
+
+.pack-reveal-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+}
+
+.pack-reveal-modal.hidden {
+  display: none;
+}
+
+.pack-reveal-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle, rgba(255, 218, 113, 0.18), transparent 48%),
+    rgba(5, 2, 10, 0.88);
+  backdrop-filter: blur(8px);
+}
+
+.pack-reveal-stage {
+  position: relative;
+  z-index: 1;
+  width: min(520px, calc(100vw - 2rem));
+  text-align: center;
+  color: #fff4dc;
+}
+
+.pack-reveal-kicker {
+  margin: 0 0 0.7rem;
+  color: #ffd278;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  animation: reveal-copy-in 500ms ease-out both;
+}
+
+.pack-reveal-card {
+  position: relative;
+  width: min(350px, 72vw);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  animation: pack-cap-reveal 1.15s cubic-bezier(0.2, 0.85, 0.25, 1.15) both;
+  transform-style: preserve-3d;
+}
+
+.pack-reveal-card img {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  filter: drop-shadow(0 28px 24px rgba(0, 0, 0, 0.42));
+}
+
+.pack-reveal-glow {
+  position: absolute;
+  inset: -28%;
+  z-index: 1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(255, 208, 99, 0.55) 0deg 7deg,
+    transparent 7deg 18deg
+  );
+  filter: blur(6px);
+  animation: reveal-rays 8s linear infinite;
+}
+
+.pack-reveal-stage h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 1.7rem;
+  text-transform: uppercase;
+  animation: reveal-copy-in 600ms 650ms ease-out both;
+}
+
+.pack-reveal-stage > p:not(.pack-reveal-kicker) {
+  margin: 0 0 0.9rem;
+  color: #ffd278;
+  text-transform: uppercase;
+  animation: reveal-copy-in 600ms 760ms ease-out both;
+}
+
+.pack-reveal-stage button {
+  min-width: 180px;
+  animation: reveal-copy-in 600ms 880ms ease-out both;
+}
+
+@keyframes pack-cap-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(80px) rotateY(-160deg) scale(0.15);
+    filter: brightness(5) blur(10px);
+  }
+  58% {
+    opacity: 1;
+    transform: translateY(-18px) rotateY(18deg) scale(1.12);
+    filter: brightness(1.8) blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotateY(0) scale(1);
+    filter: brightness(1) blur(0);
+  }
+}
+
+@keyframes reveal-rays {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes reveal-copy-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .collection-card {
   position: relative;
   border: 1px solid rgba(255, 126, 87, 0.42);
@@ -2592,6 +2844,47 @@ button:disabled {
   padding: 0.42rem 0.5rem;
 }
 
+.sell-cap-panel {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 151, 112, 0.35);
+}
+
+.sell-cap-panel .sell-cap-offer {
+  margin-bottom: 0.55rem;
+}
+
+.sell-cap-offer strong {
+  color: #ffd0bb;
+}
+
+.sell-cap-btn {
+  width: 100%;
+  border-color: rgba(255, 132, 89, 0.86);
+  background: linear-gradient(180deg, rgba(151, 44, 27, 0.96), rgba(67, 15, 13, 0.96));
+  color: #ffe2d3;
+  text-transform: uppercase;
+}
+
+.sell-cap-btn.confirming {
+  border-color: #ffb24d;
+  background: linear-gradient(180deg, #c86f21, #71350f);
+}
+
+.sell-cap-panel .sell-cap-status {
+  min-height: 2.4em;
+  margin: 0.55rem 0 0;
+  font-size: 0.68rem;
+}
+
+.sell-cap-status.error {
+  color: #ff9d88;
+}
+
+.sell-cap-status.success {
+  color: #7ee2a6;
+}
+
 .inspector-close {
   position: absolute;
   top: 0.75rem;
@@ -2610,10 +2903,29 @@ button:disabled {
   background: linear-gradient(180deg, rgba(211, 232, 250, 0.95), rgba(177, 209, 239, 0.95));
 }
 
+.theme-heaven .inspector-metadata {
+  border-color: rgba(94, 151, 210, 0.38);
+  background: rgba(229, 243, 255, 0.82);
+}
+
 .theme-heaven .inspector-close {
   border: 1px solid rgba(95, 148, 205, 0.72);
   background: linear-gradient(180deg, rgba(224, 241, 255, 0.95), rgba(176, 212, 242, 0.95));
   color: #1e4263;
+}
+
+.theme-heaven .sell-cap-panel {
+  border-top-color: rgba(94, 151, 210, 0.4);
+}
+
+.theme-heaven .sell-cap-offer strong {
+  color: #204b75;
+}
+
+.theme-heaven .sell-cap-btn {
+  border-color: rgba(95, 148, 205, 0.72);
+  background: linear-gradient(180deg, #5e9bd1, #3975aa);
+  color: #f5fbff;
 }
 
 .theme-heaven .collection-card {
@@ -2681,10 +2993,29 @@ button:disabled {
   background: linear-gradient(180deg, rgba(229, 243, 194, 0.95), rgba(188, 222, 165, 0.95));
 }
 
+.theme-jungle-bay .inspector-metadata {
+  border-color: rgba(106, 154, 92, 0.4);
+  background: rgba(239, 248, 215, 0.82);
+}
+
 .theme-jungle-bay .inspector-close {
   border: 1px solid rgba(98, 150, 86, 0.76);
   background: linear-gradient(180deg, rgba(236, 247, 203, 0.95), rgba(182, 220, 151, 0.94));
   color: #29563c;
+}
+
+.theme-jungle-bay .sell-cap-panel {
+  border-top-color: rgba(106, 154, 92, 0.42);
+}
+
+.theme-jungle-bay .sell-cap-offer strong {
+  color: #2f603f;
+}
+
+.theme-jungle-bay .sell-cap-btn {
+  border-color: rgba(79, 126, 70, 0.76);
+  background: linear-gradient(180deg, #689e58, #3d713f);
+  color: #f5ffe9;
 }
 
 .theme-jungle-bay .collection-card {
@@ -2777,12 +3108,20 @@ button:disabled {
   box-shadow: 0 12px 30px rgba(44, 31, 92, 0.18);
 }
 
+.theme-bankr .inspector-metadata {
+  border-color: rgba(122, 94, 230, 0.34);
+  background: rgba(248, 247, 240, 0.9);
+  box-shadow: inset 18px 0 30px rgba(82, 62, 156, 0.05);
+}
+
 .theme-bankr .menu-btn,
 .theme-bankr .theme-btn,
 .theme-bankr .menu-mute-btn,
 .theme-bankr .global-mute-btn,
 .theme-bankr .back-btn,
+.theme-bankr .inspector-close,
 .theme-bankr .inspect-btn,
+.theme-bankr .sell-cap-btn,
 .theme-bankr .collection-tab,
 .theme-bankr .play-setup-panel button,
 .theme-bankr .play-setup-actions button,
@@ -2793,6 +3132,28 @@ button:disabled {
   color: #f8f7f0;
   text-shadow: 0 1px 1px rgba(31, 21, 70, 0.35);
   box-shadow: 0 7px 18px rgba(74, 51, 163, 0.22);
+}
+
+.theme-bankr .sell-cap-panel {
+  border-top-color: rgba(122, 94, 230, 0.3);
+}
+
+.theme-bankr .sell-cap-offer strong {
+  color: #3b2b78;
+}
+
+.theme-bankr .sell-cap-status.error {
+  color: #a62f50;
+}
+
+.theme-bankr .sell-cap-status.success {
+  color: #24744b;
+}
+
+.theme-bankr .sell-cap-btn.confirming {
+  border-color: #b27824;
+  background: linear-gradient(180deg, #d39a38, #ad7124);
+  color: #fffaf0;
 }
 
 .theme-bankr .menu-btn:hover,

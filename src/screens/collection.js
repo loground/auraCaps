@@ -7,7 +7,10 @@ import {
 } from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
 import {
+  buyVibeMarketPack,
   getVibeMarketState,
+  openVibeMarketPack,
+  sellVibeMarketCap,
   subscribeVibeMarketState,
 } from "../vibe-market.js";
 
@@ -199,6 +202,11 @@ export function mountCollectionScreen({ app, onBack }) {
           label: "caps",
           items: getVibeMarketState().items,
         },
+        packs: {
+          id: "packs",
+          label: "unopened packs",
+          items: getVibeMarketState().unopenedPacks,
+        },
       },
     },
     f2p: {
@@ -229,6 +237,7 @@ export function mountCollectionScreen({ app, onBack }) {
       <h2>Collection</h2>
       <div class="collection-switcher" id="collectionSwitcher" role="tablist" aria-label="Collection tabs"></div>
       <div class="collection-switcher collection-sub-switcher" id="collectionSubSwitcher" role="tablist" aria-label="Collection sub tabs"></div>
+      <div class="collection-market-action" id="collectionMarketAction"></div>
       <div class="collection-grid" id="collectionGrid"></div>
       <div id="inspectorModal" class="inspector-modal hidden" aria-hidden="true">
         <div class="inspector-backdrop" id="inspectorBackdrop"></div>
@@ -238,15 +247,34 @@ export function mountCollectionScreen({ app, onBack }) {
           <aside class="inspector-metadata" id="inspectorMetadata"></aside>
         </div>
       </div>
+      <div id="packRevealModal" class="pack-reveal-modal hidden" aria-hidden="true">
+        <div class="pack-reveal-backdrop"></div>
+        <div class="pack-reveal-stage">
+          <p class="pack-reveal-kicker">pack opened</p>
+          <div class="pack-reveal-card">
+            <div class="pack-reveal-glow"></div>
+            <img id="packRevealImage" alt="" />
+          </div>
+          <h3 id="packRevealTitle">Your cap is revealed</h3>
+          <p id="packRevealRarity"></p>
+          <button id="packRevealClose" type="button">continue</button>
+        </div>
+      </div>
     </div>
   `;
 
   const grid = app.querySelector("#collectionGrid");
+  const marketAction = app.querySelector("#collectionMarketAction");
   const modal = app.querySelector("#inspectorModal");
   const modalBackdrop = app.querySelector("#inspectorBackdrop");
   const modalClose = app.querySelector("#inspectorClose");
   const canvasWrap = app.querySelector("#inspectorCanvasWrap");
   const inspectorMetadata = app.querySelector("#inspectorMetadata");
+  const revealModal = app.querySelector("#packRevealModal");
+  const revealClose = app.querySelector("#packRevealClose");
+  const revealImage = app.querySelector("#packRevealImage");
+  const revealTitle = app.querySelector("#packRevealTitle");
+  const revealRarity = app.querySelector("#packRevealRarity");
 
   let inspectorRenderer = null;
   let inspectorScene = null;
@@ -261,6 +289,8 @@ export function mountCollectionScreen({ app, onBack }) {
   let previewSpriteNodes = [];
   let previewSpriteRafId = null;
   let unmounted = false;
+  let pendingSellTokenId = "";
+  let openingPackTokenId = "";
 
   const disposeInspector = () => {
     if (rafId !== null) {
@@ -351,12 +381,28 @@ export function mountCollectionScreen({ app, onBack }) {
   };
 
   const closeInspector = () => {
+    pendingSellTokenId = "";
     modal.classList.add("hidden");
     modal.setAttribute("aria-hidden", "true");
     disposeInspector();
   };
 
+  const closeReveal = () => {
+    revealModal.classList.add("hidden");
+    revealModal.setAttribute("aria-hidden", "true");
+  };
+
+  const showReveal = ({ item, rarity, tokenId }) => {
+    revealImage.src = item?.imagePath || getVibeMarketState().packInfo?.imagePath || "";
+    revealImage.alt = item?.name || `Revealed cap #${tokenId}`;
+    revealTitle.textContent = item?.name || `Cap #${tokenId}`;
+    revealRarity.textContent = `${rarity} rarity`;
+    revealModal.classList.remove("hidden");
+    revealModal.setAttribute("aria-hidden", "false");
+  };
+
   const openInspector = (item) => {
+    pendingSellTokenId = "";
     disposeInspector();
 
     modal.classList.remove("hidden");
@@ -370,7 +416,58 @@ export function mountCollectionScreen({ app, onBack }) {
           ? `<div class="inspector-attributes">${renderAttributes(item.attributes)}</div>`
           : `<p>${escapeHtml(item.details)}</p>`
       }
+      ${
+        item.filterGroup === "vibe-market"
+          ? `
+            <div class="sell-cap-panel">
+              <p class="sell-cap-offer">
+                vibe.market offer:
+                <strong>${escapeHtml(
+                  item.offer?.formatted
+                    ? `${item.offer.formatted} NR`
+                    : "Check in wallet"
+                )}</strong>
+              </p>
+              <button class="sell-cap-btn" type="button">sell this cap</button>
+              <p class="sell-cap-status" aria-live="polite">
+                Selling is irreversible and exchanges this cap for the displayed token offer.
+              </p>
+            </div>
+          `
+          : ""
+      }
     `;
+    const sellButton = inspectorMetadata.querySelector(".sell-cap-btn");
+    const sellStatus = inspectorMetadata.querySelector(".sell-cap-status");
+    sellButton?.addEventListener("click", async () => {
+      if (pendingSellTokenId !== item.tokenId) {
+        pendingSellTokenId = item.tokenId;
+        sellButton.textContent = "confirm sell";
+        sellButton.classList.add("confirming");
+        sellStatus.textContent =
+          "Click confirm sell to submit the irreversible transaction in your wallet.";
+        return;
+      }
+
+      pendingSellTokenId = "";
+      sellButton.disabled = true;
+      sellButton.textContent = "selling...";
+      sellStatus.classList.remove("error", "success");
+      sellStatus.textContent = "Approve the transaction in your wallet.";
+      try {
+        await sellVibeMarketCap(item);
+        sellStatus.classList.add("success");
+        sellStatus.textContent = "Cap sold successfully. Your collection is refreshing.";
+        window.setTimeout(closeInspector, 1200);
+      } catch (error) {
+        sellButton.disabled = false;
+        sellButton.textContent = "sell this cap";
+        sellButton.classList.remove("confirming");
+        sellStatus.classList.add("error");
+        sellStatus.textContent =
+          error?.shortMessage || error?.message || "Could not sell this cap.";
+      }
+    });
 
     inspectorRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     inspectorRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -563,6 +660,7 @@ export function mountCollectionScreen({ app, onBack }) {
         activeSubKey = Object.keys(collection.subcollections || {})[0] || "";
         renderSwitcher();
         renderSubSwitcher();
+        renderMarketAction();
         renderCards();
       });
       switcher.appendChild(btn);
@@ -614,10 +712,56 @@ export function mountCollectionScreen({ app, onBack }) {
         }
         activeSubKey = subcollection.id;
         renderSubSwitcher();
+        renderMarketAction();
         renderCards();
       });
       subSwitcher.appendChild(btn);
     });
+  };
+
+  const renderMarketAction = () => {
+    marketAction.innerHTML = "";
+    if (activeCollectionKey !== "vibe" || activeSubKey !== "packs") {
+      return;
+    }
+    const vibeState = getVibeMarketState();
+    const action = document.createElement("div");
+    action.className = "buy-pack-panel";
+    action.innerHTML = `
+      <div>
+        <span class="buy-pack-kicker">naughty robots booster</span>
+        <strong>Buy a pack</strong>
+        <p>Mint an unopened pack, then reveal it here.</p>
+      </div>
+      <div class="buy-pack-cta">
+        <span>${escapeHtml(
+          vibeState.packInfo?.mintPriceEth
+            ? `${vibeState.packInfo.mintPriceEth} ETH`
+            : "Price loads from contract"
+        )}</span>
+        <button class="buy-pack-btn" type="button">buy pack</button>
+      </div>
+      <p class="buy-pack-status" aria-live="polite"></p>
+    `;
+    const button = action.querySelector(".buy-pack-btn");
+    const status = action.querySelector(".buy-pack-status");
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "buying...";
+      status.textContent = "Approve the pack purchase in your wallet.";
+      status.classList.remove("error", "success");
+      try {
+        await buyVibeMarketPack();
+        status.classList.add("success");
+        status.textContent = "Pack purchased. It is now ready to open.";
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "buy pack";
+        status.classList.add("error");
+        status.textContent = error?.shortMessage || error?.message || "Could not buy this pack.";
+      }
+    });
+    marketAction.appendChild(action);
   };
 
   const renderCards = () => {
@@ -634,17 +778,21 @@ export function mountCollectionScreen({ app, onBack }) {
       const isVibeCollection = topCollection.id === "vibe";
       const emptyTitle =
         isVibeCollection && topCollection.loading
-          ? "Loading vibe.market caps"
+          ? "Loading vibe.market collection"
           : isVibeCollection && topCollection.status === "error"
-            ? "Could not load vibe.market caps"
-            : isVibeCollection
+            ? "Could not load vibe.market collection"
+            : isVibeCollection && activeSubKey === "packs"
+              ? "no unopened packs"
+              : isVibeCollection
               ? "no caps from vibe market found"
               : "No items";
       const emptyDetails =
         isVibeCollection && topCollection.status === "error"
           ? topCollection.error
           : isVibeCollection
-            ? "Connect a wallet on Base or try another wallet."
+            ? activeSubKey === "packs"
+              ? "Buy a pack above to add it here."
+              : "Connect a wallet on Base or try another wallet."
             : "this section is empty for now.";
       const card = document.createElement("div");
       card.className = "collection-card";
@@ -667,8 +815,9 @@ export function mountCollectionScreen({ app, onBack }) {
     }
 
     active.items.forEach((item) => {
+      const isPack = item.itemType === "unopened-pack";
       const card = document.createElement("div");
-      card.className = "collection-card";
+      card.className = `collection-card${isPack ? " unopened-pack-card" : ""}`;
       const cardAttributes = renderAttributes(item.attributes, 3);
       card.innerHTML = `
       <div class="cap-slot">
@@ -689,15 +838,34 @@ export function mountCollectionScreen({ app, onBack }) {
             : `<p>${escapeHtml(item.details)}</p>`
         }
         ${cardAttributes ? `<div class="cap-attributes">${cardAttributes}</div>` : ""}
-        <button class="inspect-btn" type="button">inspect</button>
+        <button class="inspect-btn" type="button">${isPack ? "open pack" : "inspect"}</button>
       </div>
     `;
-      card.querySelector(".disc-card").addEventListener("click", () => {
-        openInspector(item);
-      });
-      card.querySelector(".inspect-btn").addEventListener("click", () => {
-        openInspector(item);
-      });
+      const onCardAction = async () => {
+        if (!isPack) {
+          openInspector(item);
+          return;
+        }
+        if (openingPackTokenId) {
+          return;
+        }
+        openingPackTokenId = item.tokenId;
+        const openButton = card.querySelector(".inspect-btn");
+        openButton.disabled = true;
+        openButton.textContent = "revealing...";
+        try {
+          const revealed = await openVibeMarketPack(item);
+          showReveal(revealed);
+        } catch (error) {
+          openButton.disabled = false;
+          openButton.textContent = "open pack";
+          window.alert(error?.shortMessage || error?.message || "Could not open this pack.");
+        } finally {
+          openingPackTokenId = "";
+        }
+      };
+      card.querySelector(".disc-card").addEventListener("click", onCardAction);
+      card.querySelector(".inspect-btn").addEventListener("click", onCardAction);
 
       const img = card.querySelector("img");
       const discBtn = card.querySelector(".disc-card");
@@ -749,6 +917,7 @@ export function mountCollectionScreen({ app, onBack }) {
 
   renderSwitcher();
   renderSubSwitcher();
+  renderMarketAction();
   renderCards();
 
   const unsubscribeVibeMarket = subscribeVibeMarketState((vibeState) => {
@@ -758,9 +927,11 @@ export function mountCollectionScreen({ app, onBack }) {
     vibeCollection.error = vibeState.error;
     vibeCollection.label = vibeState.collectionName || "vibe.market";
     vibeCollection.subcollections.caps.items = vibeState.items;
+    vibeCollection.subcollections.packs.items = vibeState.unopenedPacks;
     if (!unmounted) {
       renderSwitcher();
       renderSubSwitcher();
+      renderMarketAction();
       renderCards();
     }
   });
@@ -769,6 +940,7 @@ export function mountCollectionScreen({ app, onBack }) {
   backBtn.addEventListener("click", onBack);
   modalClose.addEventListener("click", closeInspector);
   modalBackdrop.addEventListener("click", closeInspector);
+  revealClose.addEventListener("click", closeReveal);
 
   return () => {
     stopPreviewSpriteAnimation();
@@ -779,5 +951,6 @@ export function mountCollectionScreen({ app, onBack }) {
     backBtn.removeEventListener("click", onBack);
     modalClose.removeEventListener("click", closeInspector);
     modalBackdrop.removeEventListener("click", closeInspector);
+    revealClose.removeEventListener("click", closeReveal);
   };
 }
