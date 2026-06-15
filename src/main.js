@@ -7,6 +7,10 @@ import {
   setWalletAccessTheme,
   showInitialAccessModal,
 } from "./wallet-access.js";
+import {
+  getVibeMarketState,
+  loadVibeMarketCollectionForWallet,
+} from "./vibe-market.js";
 
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "caps_last_theme_v1";
@@ -611,6 +615,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
                 <button class="mode-btn" type="button" data-cap-filter="classics">Classics</button>
                 <button class="mode-btn" type="button" data-cap-filter="jungle-bay">Jungle Bay</button>
                 <button class="mode-btn" type="button" data-cap-filter="bankr">Bankr</button>
+                <button class="mode-btn" type="button" data-cap-filter="vibe-market">Vibe Market</button>
               `
           }
         </div>
@@ -643,7 +648,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
     const launchBtn = overlay.querySelector("#capsLaunchBtn");
     const backdrop = overlay.querySelector(".play-setup-backdrop");
 
-    const baseCaps = CAP_OPTIONS.filter((cap) =>
+    const baseCaps = [...CAP_OPTIONS, ...getVibeMarketState().items].filter((cap) =>
       gameMode === "slammer"
         ? cap.id.startsWith("slammer-")
         : !cap.id.startsWith("slammer-")
@@ -761,7 +766,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
             <span class="cap-pick-card-loader" aria-hidden="true">
               <span class="cap-loading-spinner"></span>
             </span>
-            <img src="${cap.imagePath}" alt="${cap.name}" loading="lazy" decoding="async" />
+            <img class="${cap.centerCrop ? "center-crop" : ""}" src="${cap.imagePath}" alt="${cap.name}" loading="lazy" decoding="async" />
             <span class="cap-pick-name">${cap.name}</span>
             <span class="cap-pick-weight">Weight ${capWeightText(cap)}</span>
             ${cap.rarity ? `<span class="cap-pick-weight">Rarity ${cap.rarity}</span>` : ""}
@@ -881,6 +886,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
           rarity: playerCap.rarity || "",
           isSpriteCap: Boolean(playerCap.isSpriteCap),
           spriteHints: playerCap.spriteHints || null,
+          centerCrop: Boolean(playerCap.centerCrop),
         },
         cpuCapMeta: showsCpuPick
           ? {
@@ -891,6 +897,7 @@ async function showCapSelectModal({ theme, battleMode = "vs-ai", gameMode = "cla
               rarity: cpuCap.rarity || "",
               isSpriteCap: Boolean(cpuCap.isSpriteCap),
               spriteHints: cpuCap.spriteHints || null,
+              centerCrop: Boolean(cpuCap.centerCrop),
             }
           : null,
       });
@@ -1892,8 +1899,20 @@ if (PVP_ENABLED && pendingPvpInviteCode && getCurrentRoute() === ROUTES.menu) {
   setRoute(getCurrentRoute(), { replace: true });
 }
 
+window.addEventListener("caps:wallet-session", (event) => {
+  const session = event.detail;
+  if (session?.mode === "wallet" && session.address) {
+    loadVibeMarketCollectionForWallet(session.address);
+  } else {
+    loadVibeMarketCollectionForWallet("");
+  }
+});
+
 setWalletAccessTheme(currentTheme);
-showInitialAccessModal().then(() => {
+showInitialAccessModal().then((session) => {
   mountWalletConnectButton();
+  if (session?.mode === "wallet" && session.address) {
+    loadVibeMarketCollectionForWallet(session.address);
+  }
   renderCurrentRoute();
 });

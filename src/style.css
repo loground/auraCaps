@@ -1232,6 +1232,11 @@ button:disabled {
   transition: opacity 160ms ease;
 }
 
+.cap-pick-card img.center-crop {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .cap-pick-card .sprite-preview-canvas {
   width: 58px;
   height: 58px;

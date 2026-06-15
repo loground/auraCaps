@@ -1,8 +1,15 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DISC_HEIGHT, DISC_RADIUS } from "../game/constants.js";
-import { createDiscMesh, loadDiscTexture } from "../game/discs.js";
+import {
+  createDiscMesh,
+  loadDiscTexture,
+} from "../game/discs.js";
 import { getCapWeightMultiplier } from "../game/cap-physics.js";
+import {
+  getVibeMarketState,
+  subscribeVibeMarketState,
+} from "../vibe-market.js";
 
 export function mountCollectionScreen({ app, onBack }) {
   const resolveSpritePlayback = (image, hints) => {
@@ -162,6 +169,20 @@ export function mountCollectionScreen({ app, onBack }) {
   }));
 
   const COLLECTIONS = {
+    vibe: {
+      id: "vibe",
+      label: "vibe.market",
+      loading: getVibeMarketState().status === "loading",
+      status: getVibeMarketState().status,
+      error: getVibeMarketState().error,
+      subcollections: {
+        caps: {
+          id: "caps",
+          label: "caps",
+          items: getVibeMarketState().items,
+        },
+      },
+    },
     f2p: {
       id: "f2p",
       label: "f2p",
@@ -181,7 +202,7 @@ export function mountCollectionScreen({ app, onBack }) {
     },
   };
 
-  let activeCollectionKey = "f2p";
+  let activeCollectionKey = "vibe";
   let activeSubKey = "caps";
 
   app.innerHTML = `
@@ -393,7 +414,9 @@ export function mountCollectionScreen({ app, onBack }) {
       };
       image.src = item.imagePath;
     } else {
-      frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath);
+      frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath, {
+        centerCrop: Boolean(item.centerCrop),
+      });
     }
     backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
     backTexture.rotation = Math.PI * 0.5;
@@ -578,6 +601,21 @@ export function mountCollectionScreen({ app, onBack }) {
     }
 
     if (!active || !Array.isArray(active.items) || active.items.length === 0) {
+      const isVibeCollection = topCollection.id === "vibe";
+      const emptyTitle =
+        isVibeCollection && topCollection.loading
+          ? "Loading vibe.market caps"
+          : isVibeCollection && topCollection.status === "error"
+            ? "Could not load vibe.market caps"
+            : isVibeCollection
+              ? "no caps from vibe market found"
+              : "No items";
+      const emptyDetails =
+        isVibeCollection && topCollection.status === "error"
+          ? topCollection.error
+          : isVibeCollection
+            ? "Connect a wallet on Base or try another wallet."
+            : "this section is empty for now.";
       const card = document.createElement("div");
       card.className = "collection-card";
       card.innerHTML = `
@@ -589,9 +627,9 @@ export function mountCollectionScreen({ app, onBack }) {
         </div>
       </div>
       <div class="cap-info">
-        <h3>No items</h3>
+        <h3>${emptyTitle}</h3>
         <p>${topCollection.label}</p>
-        <p>this section is empty for now.</p>
+        <p>${emptyDetails}</p>
       </div>
     `;
       grid.appendChild(card);
@@ -608,7 +646,7 @@ export function mountCollectionScreen({ app, onBack }) {
             <span class="cap-loading-spinner" aria-hidden="true"></span>
             <span class="cap-loading-text">loading</span>
           </div>
-          <img src="${item.imagePath}" alt="${item.name}" loading="lazy" decoding="async" />
+          <img class="${item.centerCrop ? "center-crop" : ""}" src="${item.imagePath}" alt="${item.name}" loading="lazy" decoding="async" />
         </button>
       </div>
       <div class="cap-info">
@@ -677,6 +715,20 @@ export function mountCollectionScreen({ app, onBack }) {
   renderSubSwitcher();
   renderCards();
 
+  const unsubscribeVibeMarket = subscribeVibeMarketState((vibeState) => {
+    const vibeCollection = COLLECTIONS.vibe;
+    vibeCollection.loading = vibeState.status === "loading";
+    vibeCollection.status = vibeState.status;
+    vibeCollection.error = vibeState.error;
+    vibeCollection.label = vibeState.collectionName || "vibe.market";
+    vibeCollection.subcollections.caps.items = vibeState.items;
+    if (!unmounted) {
+      renderSwitcher();
+      renderSubSwitcher();
+      renderCards();
+    }
+  });
+
   const backBtn = app.querySelector("#backBtn");
   backBtn.addEventListener("click", onBack);
   modalClose.addEventListener("click", closeInspector);
@@ -684,6 +736,7 @@ export function mountCollectionScreen({ app, onBack }) {
 
   return () => {
     stopPreviewSpriteAnimation();
+    unsubscribeVibeMarket();
     previewSpriteNodes = [];
     unmounted = true;
     closeInspector();

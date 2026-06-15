@@ -5,6 +5,12 @@ let walletProvider = null;
 let walletSession = null;
 const ACCESS_THEMES = ["hell", "heaven", "jungle-bay", "bankr"];
 
+function announceWalletSession() {
+  window.dispatchEvent(
+    new CustomEvent("caps:wallet-session", { detail: walletSession })
+  );
+}
+
 function shortenAddress(address) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
@@ -77,6 +83,22 @@ export async function connectBaseWallet() {
       },
       qrModalOptions: getWalletConnectModalTheme(),
     });
+    walletProvider.on("accountsChanged", (accounts) => {
+      const address = accounts?.[0] || null;
+      walletSession = address
+        ? {
+            mode: "wallet",
+            address,
+            chainId: BASE_CHAIN_ID,
+            provider: walletProvider,
+          }
+        : { mode: "guest", address: null, chainId: null, provider: null };
+      announceWalletSession();
+    });
+    walletProvider.on("disconnect", () => {
+      walletSession = { mode: "guest", address: null, chainId: null, provider: null };
+      announceWalletSession();
+    });
   }
 
   if (!walletProvider.connected || walletProvider.accounts.length === 0) {
@@ -97,6 +119,7 @@ export async function connectBaseWallet() {
     chainId: BASE_CHAIN_ID,
     provider: walletProvider,
   };
+  announceWalletSession();
 
   return walletSession;
 }
@@ -157,10 +180,12 @@ export function mountWalletConnectButton() {
   };
 
   button.addEventListener("click", onConnect);
+  window.addEventListener("caps:wallet-session", syncButton);
   syncButton();
 
   return () => {
     button.removeEventListener("click", onConnect);
+    window.removeEventListener("caps:wallet-session", syncButton);
     control.remove();
     document.body.classList.remove("wallet-connect-active");
   };
@@ -207,6 +232,7 @@ export function showInitialAccessModal() {
       "click",
       () => {
         walletSession = { mode: "guest", address: null, chainId: null, provider: null };
+        announceWalletSession();
         finish(walletSession);
       },
       { once: true }

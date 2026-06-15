@@ -23,6 +23,7 @@ import {
   TABLE_TOP_Y,
 } from "./constants.js";
 import {
+  applyCenterCropToTexture,
   createDiscMesh,
   loadDiscTexture,
   setDiscFaceTextures,
@@ -863,6 +864,9 @@ export class DiscDropGame {
       rarity: capMeta.rarity || texture.userData?.rarity || "",
       capId: capMeta.id || texture.userData?.capId || "",
     };
+    if (capMeta.centerCrop) {
+      applyCenterCropToTexture(texture);
+    }
     return texture;
   }
 

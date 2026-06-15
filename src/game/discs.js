@@ -1,6 +1,34 @@
 import * as THREE from "three";
 
-export function loadDiscTexture(renderer, path) {
+export function applyCenterCropToTexture(texture) {
+  if (!texture) return texture;
+  const applyCrop = () => {
+    const width = texture.image?.naturalWidth || texture.image?.videoWidth || texture.image?.width;
+    const height =
+      texture.image?.naturalHeight || texture.image?.videoHeight || texture.image?.height;
+    if (!width || !height) return;
+    if (width > height) {
+      texture.repeat.set(height / width, 1);
+    } else {
+      texture.repeat.set(1, width / height);
+    }
+    texture.offset.set((1 - texture.repeat.x) * 0.5, (1 - texture.repeat.y) * 0.5);
+    texture.needsUpdate = true;
+  };
+  texture.userData = { ...(texture.userData || {}), centerCrop: true };
+  if (texture.image) {
+    applyCrop();
+  } else {
+    const applyCropOnce = () => {
+      texture.removeEventListener("update", applyCropOnce);
+      applyCrop();
+    };
+    texture.addEventListener("update", applyCropOnce);
+  }
+  return texture;
+}
+
+export function loadDiscTexture(renderer, path, { centerCrop = false } = {}) {
   const textureLoader = new THREE.TextureLoader();
   const texture = textureLoader.load(path);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -9,6 +37,9 @@ export function loadDiscTexture(renderer, path) {
   texture.offset.set(0, 0);
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
   texture.userData = { ...(texture.userData || {}), sourcePath: path };
+  if (centerCrop) {
+    applyCenterCropToTexture(texture);
+  }
   return texture;
 }
 
