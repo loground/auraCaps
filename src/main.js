@@ -2,6 +2,11 @@ import "./style.css";
 import { ARENA_CONFIGS, DEFAULT_ARENA_KEY } from "./game/arena-configs.js";
 import { getCapWeightMultiplier } from "./game/cap-physics.js";
 import { playSound, preloadSounds, unlockSounds } from "./sound.js";
+import {
+  mountWalletConnectButton,
+  setWalletAccessTheme,
+  showInitialAccessModal,
+} from "./wallet-access.js";
 
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "caps_last_theme_v1";
@@ -1647,6 +1652,7 @@ function normalizeTheme(theme) {
 
 function setTheme(nextTheme) {
   currentTheme = normalizeTheme(nextTheme);
+  setWalletAccessTheme(currentTheme);
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, currentTheme);
   } catch {
@@ -1886,4 +1892,8 @@ if (PVP_ENABLED && pendingPvpInviteCode && getCurrentRoute() === ROUTES.menu) {
   setRoute(getCurrentRoute(), { replace: true });
 }
 
-renderCurrentRoute();
+setWalletAccessTheme(currentTheme);
+showInitialAccessModal().then(() => {
+  mountWalletConnectButton();
+  renderCurrentRoute();
+});

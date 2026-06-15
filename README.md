@@ -35,9 +35,12 @@ Create `.env.local` with:
 ```bash
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
+VITE_WALLETCONNECT_PROJECT_ID=
 ```
 
-The Supabase values support the currently hidden PvP implementation.
+Create the WalletConnect project ID in the Reown dashboard. Wallet connections
+are restricted to Base Mainnet. The Supabase values support the currently
+hidden PvP implementation.
 
 ## Useful Scripts
 
