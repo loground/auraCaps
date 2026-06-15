@@ -187,7 +187,7 @@ export function showInitialAccessModal() {
           </button>
         </div>
         <p id="accessStatus" class="access-status" aria-live="polite">
-          Wallet connections use Base Mainnet only.
+          Connect Phantom or another wallet. Base Mainnet only.
         </p>
       </section>
     `;

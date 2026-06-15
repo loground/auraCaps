@@ -38,9 +38,10 @@ VITE_SUPABASE_ANON_KEY=
 VITE_WALLETCONNECT_PROJECT_ID=
 ```
 
-Create the WalletConnect project ID in the Reown dashboard. Wallet connections
-are restricted to Base Mainnet. The Supabase values support the currently
-hidden PvP implementation.
+Create the WalletConnect project ID in the Reown dashboard. WalletConnect lets
+users connect Phantom and other supported wallets, while the app restricts
+sessions to Base Mainnet. The Supabase values support the currently hidden PvP
+implementation.
 
 ## Useful Scripts
 
