@@ -102,6 +102,11 @@ async function fetchJson(path) {
   });
   const body = await response.json().catch(() => null);
   if (!response.ok || body?.success === false) {
+    if (!apiKey && response.status === 429) {
+      throw new Error(
+        "Vibe Market requires an API key. Add VITE_VIBE_MARKET_API_KEY to .env.local."
+      );
+    }
     throw new Error(body?.message || `Vibe Market request failed (${response.status})`);
   }
   return body;

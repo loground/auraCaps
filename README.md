@@ -36,12 +36,32 @@ Create `.env.local` with:
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 VITE_WALLETCONNECT_PROJECT_ID=
+VITE_VIBE_MARKET_API_KEY=
 ```
 
 Create the WalletConnect project ID in the Reown dashboard. WalletConnect lets
 users connect Phantom and other supported wallets, while the app restricts
 sessions to Base Mainnet. The Supabase values support the currently hidden PvP
 implementation.
+
+Create a free vibe.market API key:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "AURA CAPS",
+    "email": "YOUR_EMAIL"
+  }' \
+  https://build.vibechain.com/apikey/create
+```
+
+Put the returned key in `VITE_VIBE_MARKET_API_KEY`. The app sends it to the
+vibe.market API using the documented `API-KEY` request header.
+
+Because Vite exposes all `VITE_*` variables to browser code, this setup is
+appropriate for development only. Production deployments should keep the key
+server-side and proxy vibe.market API requests through a backend.
 
 ## Useful Scripts
 
