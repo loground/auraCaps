@@ -6,7 +6,7 @@ import {
   mountWalletConnectButton,
   setWalletAccessTheme,
   showInitialAccessModal,
-} from "./wallet-access.js";
+} from "./wallet-access.jsx";
 import {
   getVibeMarketState,
   loadVibeMarketCollectionForWallet,

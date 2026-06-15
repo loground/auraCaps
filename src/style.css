@@ -2388,6 +2388,34 @@ button:disabled {
   letter-spacing: 0.02em;
 }
 
+.cap-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.cap-attributes,
+.inspector-attributes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.cap-attribute {
+  border: 1px solid rgba(255, 151, 112, 0.35);
+  border-radius: 999px;
+  padding: 0.18rem 0.38rem;
+  color: #f4b694;
+  font-size: 0.6rem;
+  line-height: 1.1;
+}
+
+.cap-attribute strong {
+  color: #ffd0bb;
+  font-weight: 700;
+}
+
 .inspect-btn {
   margin-top: 0.2rem;
   align-self: flex-start;
@@ -2514,11 +2542,54 @@ button:disabled {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(250px, 0.8fr);
 }
 
 .inspector-canvas-wrap {
   width: 100%;
   height: 100%;
+  min-width: 0;
+}
+
+.inspector-metadata {
+  overflow: auto;
+  padding: 4.5rem 1.1rem 1.1rem;
+  border-left: 1px solid rgba(255, 151, 112, 0.35);
+  background: rgba(20, 5, 5, 0.42);
+}
+
+.inspector-kicker {
+  color: #f4b694;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.inspector-metadata h3 {
+  margin: 0.4rem 0 0.65rem;
+  color: #ffd0bb;
+  font-family: "Hell", "Teko", sans-serif;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.inspector-metadata p {
+  margin: 0 0 1rem;
+  color: #f4b694;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.inspector-attributes .cap-attribute {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  border-radius: 7px;
+  padding: 0.42rem 0.5rem;
 }
 
 .inspector-close {
@@ -2583,6 +2654,18 @@ button:disabled {
   color: #35658f;
 }
 
+.theme-heaven .cap-attribute,
+.theme-heaven .inspector-kicker,
+.theme-heaven .inspector-metadata p {
+  color: #35658f;
+  border-color: rgba(94, 151, 210, 0.35);
+}
+
+.theme-heaven .cap-attribute strong,
+.theme-heaven .inspector-metadata h3 {
+  color: #204b75;
+}
+
 .theme-heaven .inspect-btn {
   border: 1px solid rgba(95, 148, 205, 0.72);
   background: linear-gradient(180deg, rgba(224, 241, 255, 0.95), rgba(176, 212, 242, 0.95));
@@ -2640,6 +2723,18 @@ button:disabled {
 
 .theme-jungle-bay .cap-info p {
   color: #3f6742;
+}
+
+.theme-jungle-bay .cap-attribute,
+.theme-jungle-bay .inspector-kicker,
+.theme-jungle-bay .inspector-metadata p {
+  color: #3f6742;
+  border-color: rgba(106, 154, 92, 0.35);
+}
+
+.theme-jungle-bay .cap-attribute strong,
+.theme-jungle-bay .inspector-metadata h3 {
+  color: #2f603f;
 }
 
 .theme-jungle-bay .inspect-btn {
@@ -2759,6 +2854,18 @@ button:disabled {
 
 .theme-bankr .cap-info p {
   color: #594795;
+}
+
+.theme-bankr .cap-attribute,
+.theme-bankr .inspector-kicker,
+.theme-bankr .inspector-metadata p {
+  color: #594795;
+  border-color: rgba(122, 94, 230, 0.3);
+}
+
+.theme-bankr .cap-attribute strong,
+.theme-bankr .inspector-metadata h3 {
+  color: #3b2b78;
 }
 
 .theme-bankr .cap-loading {
@@ -3065,6 +3172,23 @@ button:disabled {
     min-width: 84px;
     font-size: 0.64rem;
     padding: 0.3rem 0.48rem;
+  }
+
+  .inspector-panel {
+    height: min(680px, calc(100vh - 1rem));
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(260px, 52%) minmax(0, 1fr);
+  }
+
+  .inspector-metadata {
+    padding: 0.8rem;
+    border-left: 0;
+    border-top: 1px solid rgba(255, 151, 112, 0.35);
+  }
+
+  .inspector-close {
+    top: 0.5rem;
+    right: 0.5rem;
   }
 
   .mode-play .panel {

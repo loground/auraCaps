@@ -43,6 +43,17 @@ function getAttribute(attributes, name) {
   return match?.value;
 }
 
+function normalizeAttributes(attributes) {
+  if (!Array.isArray(attributes)) return [];
+  return attributes
+    .filter((attribute) => attribute?.trait_type && attribute?.value !== undefined)
+    .map((attribute) => ({
+      traitType: String(attribute.trait_type),
+      value: String(attribute.value),
+      displayType: attribute.display_type ? String(attribute.display_type) : "",
+    }));
+}
+
 function formatValue(box, game) {
   const directValue =
     box.value ??
@@ -87,6 +98,10 @@ function normalizeBox(box, game, index) {
     rarity: String(rarity),
     value,
     details: `Rarity ${rarity} • Value ${value}`,
+    description: box.metadata?.description || game?.description || "",
+    attributes: normalizeAttributes(box.metadata?.attributes),
+    externalUrl: box.metadata?.external_url || "",
+    animationUrl: box.metadata?.animation_url || "",
     filterGroup: "vibe-market",
     series: "vibe.market",
     centerCrop: true,
@@ -110,6 +125,32 @@ async function fetchJson(path) {
     throw new Error(body?.message || `Vibe Market request failed (${response.status})`);
   }
   return body;
+}
+
+async function enrichBoxesWithMetadata(boxes, slug) {
+  if (!slug || boxes.length === 0) return boxes;
+
+  const enriched = new Array(boxes.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(6, boxes.length) }, async () => {
+    while (nextIndex < boxes.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const box = boxes[index];
+      const tokenId = box.tokenId ?? index + 1;
+      try {
+        const metadata = await fetchJson(
+          `/metadata/${encodeURIComponent(slug)}/${encodeURIComponent(tokenId)}`
+        );
+        enriched[index] = { ...box, metadata: { ...box.metadata, ...metadata } };
+      } catch (error) {
+        console.warn(`Could not load vibe.market metadata for token ${tokenId}`, error);
+        enriched[index] = box;
+      }
+    }
+  });
+  await Promise.all(workers);
+  return enriched;
 }
 
 export function getVibeMarketState() {
@@ -160,8 +201,12 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
     fetchJson(contractPath),
     fetchJson(`/owner/${normalizedAddress}?${ownerParams}`),
   ])
-    .then(([contractResponse, ownerResponse]) => {
-      const game = contractResponse?.game || ownerResponse?.boosterBoxes?.[0]?.contractDetails || {};
+    .then(async ([contractResponse, ownerResponse]) => {
+      const game =
+        contractResponse?.contractInfo ||
+        contractResponse?.game ||
+        ownerResponse?.boosterBoxes?.[0]?.contractDetails ||
+        {};
       const returnedTokenAddress = game?.tokenAddress?.toLowerCase();
       if (returnedTokenAddress && returnedTokenAddress !== VIBE_MARKET_TOKEN_ADDRESS) {
         console.warn("Vibe Market collection returned an unexpected token contract", {
@@ -169,9 +214,10 @@ export async function loadVibeMarketCollectionForWallet(walletAddress) {
           received: returnedTokenAddress,
         });
       }
-      const boxes = Array.isArray(ownerResponse?.boosterBoxes)
+      const ownedBoxes = Array.isArray(ownerResponse?.boosterBoxes)
         ? ownerResponse.boosterBoxes
         : [];
+      const boxes = await enrichBoxesWithMetadata(ownedBoxes, game?.slug || "naughty-robots");
       const items = boxes
         .map((box, index) => normalizeBox(box, game, index))
         .filter((item) => item.imagePath);

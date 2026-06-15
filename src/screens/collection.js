@@ -12,6 +12,24 @@ import {
 } from "../vibe-market.js";
 
 export function mountCollectionScreen({ app, onBack }) {
+  const escapeHtml = (value) =>
+    String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  const renderAttributes = (attributes, limit = Infinity) =>
+    (attributes || [])
+      .slice(0, limit)
+      .map(
+        (attribute) => `
+          <span class="cap-attribute">
+            <strong>${escapeHtml(attribute.traitType)}</strong>
+            ${escapeHtml(attribute.value)}
+          </span>`
+      )
+      .join("");
   const resolveSpritePlayback = (image, hints) => {
     const maxFrames = 64;
     const naturalW = Math.max(1, image.naturalWidth || image.width || 1);
@@ -217,6 +235,7 @@ export function mountCollectionScreen({ app, onBack }) {
         <div class="inspector-panel">
           <button id="inspectorClose" class="inspector-close" type="button">close</button>
           <div class="inspector-canvas-wrap" id="inspectorCanvasWrap"></div>
+          <aside class="inspector-metadata" id="inspectorMetadata"></aside>
         </div>
       </div>
     </div>
@@ -227,6 +246,7 @@ export function mountCollectionScreen({ app, onBack }) {
   const modalBackdrop = app.querySelector("#inspectorBackdrop");
   const modalClose = app.querySelector("#inspectorClose");
   const canvasWrap = app.querySelector("#inspectorCanvasWrap");
+  const inspectorMetadata = app.querySelector("#inspectorMetadata");
 
   let inspectorRenderer = null;
   let inspectorScene = null;
@@ -341,6 +361,16 @@ export function mountCollectionScreen({ app, onBack }) {
 
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
+    inspectorMetadata.innerHTML = `
+      <span class="inspector-kicker">${escapeHtml(item.subtitle)}</span>
+      <h3>${escapeHtml(item.name)}</h3>
+      ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
+      ${
+        item.attributes?.length
+          ? `<div class="inspector-attributes">${renderAttributes(item.attributes)}</div>`
+          : `<p>${escapeHtml(item.details)}</p>`
+      }
+    `;
 
     inspectorRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     inspectorRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -639,20 +669,26 @@ export function mountCollectionScreen({ app, onBack }) {
     active.items.forEach((item) => {
       const card = document.createElement("div");
       card.className = "collection-card";
+      const cardAttributes = renderAttributes(item.attributes, 3);
       card.innerHTML = `
       <div class="cap-slot">
-        <button class="disc-card" type="button" aria-label="Inspect ${item.name}">
+        <button class="disc-card" type="button" aria-label="Inspect ${escapeHtml(item.name)}">
           <div class="cap-loading">
             <span class="cap-loading-spinner" aria-hidden="true"></span>
             <span class="cap-loading-text">loading</span>
           </div>
-          <img class="${item.centerCrop ? "center-crop" : ""}" src="${item.imagePath}" alt="${item.name}" loading="lazy" decoding="async" />
+          <img class="${item.centerCrop ? "center-crop" : ""}" src="${escapeHtml(item.imagePath)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async" />
         </button>
       </div>
       <div class="cap-info">
-        <h3>${item.name}</h3>
-        <p>${item.subtitle}</p>
-        <p>${item.details}</p>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${escapeHtml(item.subtitle)}</p>
+        ${
+          item.description
+            ? `<p class="cap-description">${escapeHtml(item.description)}</p>`
+            : `<p>${escapeHtml(item.details)}</p>`
+        }
+        ${cardAttributes ? `<div class="cap-attributes">${cardAttributes}</div>` : ""}
         <button class="inspect-btn" type="button">inspect</button>
       </div>
     `;

@@ -14,6 +14,7 @@ AURA CAPS is a browser-based 3D cap-battle game built with Three.js, Rapier phys
 ## Tech Stack
 
 - Vite
+- wagmi + RainbowKit
 - Three.js
 - Rapier 3D
 - Supabase JS
@@ -39,10 +40,9 @@ VITE_WALLETCONNECT_PROJECT_ID=
 VITE_VIBE_MARKET_API_KEY=
 ```
 
-Create the WalletConnect project ID in the Reown dashboard. WalletConnect lets
-users connect Phantom and other supported wallets, while the app restricts
-sessions to Base Mainnet. The Supabase values support the currently hidden PvP
-implementation.
+Create the WalletConnect project ID in the Reown dashboard. RainbowKit presents
+Phantom first in its recommended wallet list, and wagmi restricts sessions to
+Base Mainnet. The Supabase values support the currently hidden PvP implementation.
 
 Create a free vibe.market API key:
 
