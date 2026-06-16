@@ -1,5 +1,5 @@
 import "@rainbow-me/rainbowkit/styles.css";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -18,7 +18,7 @@ import {
 } from "@rainbow-me/rainbowkit/wallets";
 import { createConfig, http, WagmiProvider } from "wagmi";
 import { base } from "wagmi/chains";
-import { useAccount, useConnectorClient } from "wagmi";
+import { useAccount, useConnectorClient, useSwitchChain } from "wagmi";
 
 const BASE_RPC_URL = "https://mainnet.base.org";
 const WALLET_DISCONNECTED_KEY = "aura-caps:wallet-disconnected";
@@ -137,10 +137,33 @@ function ModalRegistrar({ open }) {
 
 function WalletBridge({ showControl }) {
   const { address, chainId, isConnected } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
+  const switchingChainRef = useRef(false);
   const {
     data: connectorClient,
     error: connectorClientError,
-  } = useConnectorClient({ chainId: base.id });
+  } = useConnectorClient({
+    chainId: base.id,
+    query: {
+      enabled: isConnected && chainId === base.id,
+      retry: false,
+    },
+  });
+
+  useEffect(() => {
+    if (!isConnected || !address || chainId === base.id || switchingChainRef.current) {
+      return undefined;
+    }
+    switchingChainRef.current = true;
+    switchChainAsync({ chainId: base.id })
+      .catch((error) => {
+        console.warn("Wallet is connected on the wrong chain. Switch to Base to continue.", error);
+      })
+      .finally(() => {
+        switchingChainRef.current = false;
+      });
+    return undefined;
+  }, [address, chainId, isConnected, switchChainAsync]);
 
   useEffect(() => {
     if (!isConnected || !address || chainId !== base.id) {
@@ -165,6 +188,9 @@ function WalletBridge({ showControl }) {
 
   useEffect(() => {
     if (connectorClientError) {
+      if (connectorClientError.name === "ConnectorChainMismatchError") {
+        return;
+      }
       console.error("Could not access the connected wallet provider", connectorClientError);
     }
   }, [connectorClientError]);
