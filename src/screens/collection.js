@@ -10,8 +10,10 @@ import {
   buyVibeMarketPack,
   getVibeMarketState,
   openVibeMarketPack,
+  openVibeMarketPacks,
   sellVibeMarketCap,
   sellVibeMarketPack,
+  sellVibeMarketPacks,
   subscribeVibeMarketState,
 } from "../vibe-market.js";
 
@@ -244,20 +246,23 @@ export function mountCollectionScreen({ app, onBack }) {
 
   let activeCollectionKey = "vibe";
   let activeSubKey = "caps";
+  let activeRarityFilter = "all";
 
   app.innerHTML = `
     <div class="collection-screen">
       <button id="backBtn" class="back-btn" type="button">Back</button>
-      <h2>Collection</h2>
+      <div class="collection-header-row">
+        <h2>Collection</h2>
+      </div>
       <div class="collection-switcher" id="collectionSwitcher" role="tablist" aria-label="Collection tabs"></div>
       <div class="collection-switcher collection-sub-switcher" id="collectionSubSwitcher" role="tablist" aria-label="Collection sub tabs"></div>
-      <div class="collection-token-balance" id="collectionTokenBalance"></div>
       <div class="collection-market-action" id="collectionMarketAction"></div>
       <div class="collection-grid" id="collectionGrid"></div>
       <div id="inspectorModal" class="inspector-modal hidden" aria-hidden="true">
         <div class="inspector-backdrop" id="inspectorBackdrop"></div>
-        <div class="inspector-panel">
+        <div class="inspector-panel" id="inspectorPanel">
           <button id="inspectorClose" class="inspector-close" type="button">Close</button>
+          <aside class="inspector-story hidden" id="inspectorStory"></aside>
           <div class="inspector-canvas-wrap" id="inspectorCanvasWrap"></div>
           <aside class="inspector-metadata" id="inspectorMetadata"></aside>
         </div>
@@ -267,9 +272,12 @@ export function mountCollectionScreen({ app, onBack }) {
         <div class="pack-reveal-stage">
           <p class="pack-reveal-kicker">pack opened</p>
           <div class="pack-reveal-card">
+            <div class="pack-reveal-stack pack-reveal-stack-back"></div>
+            <div class="pack-reveal-stack pack-reveal-stack-mid"></div>
             <div class="pack-reveal-glow"></div>
             <img id="packRevealImage" alt="" />
           </div>
+          <p id="packRevealCounter" class="pack-reveal-counter hidden"></p>
           <h3 id="packRevealTitle">Your cap is revealed</h3>
           <p id="packRevealRarity"></p>
           <button id="packRevealClose" type="button">Continue</button>
@@ -280,15 +288,17 @@ export function mountCollectionScreen({ app, onBack }) {
 
   const grid = app.querySelector("#collectionGrid");
   const marketAction = app.querySelector("#collectionMarketAction");
-  const tokenBalance = app.querySelector("#collectionTokenBalance");
   const modal = app.querySelector("#inspectorModal");
   const modalBackdrop = app.querySelector("#inspectorBackdrop");
   const modalClose = app.querySelector("#inspectorClose");
+  const inspectorPanel = app.querySelector("#inspectorPanel");
   const canvasWrap = app.querySelector("#inspectorCanvasWrap");
+  const inspectorStory = app.querySelector("#inspectorStory");
   const inspectorMetadata = app.querySelector("#inspectorMetadata");
   const revealModal = app.querySelector("#packRevealModal");
   const revealClose = app.querySelector("#packRevealClose");
   const revealImage = app.querySelector("#packRevealImage");
+  const revealCounter = app.querySelector("#packRevealCounter");
   const revealTitle = app.querySelector("#packRevealTitle");
   const revealRarity = app.querySelector("#packRevealRarity");
 
@@ -307,6 +317,8 @@ export function mountCollectionScreen({ app, onBack }) {
   let unmounted = false;
   let pendingSellTokenId = "";
   let openingPackTokenId = "";
+  let revealQueue = [];
+  let revealQueueIndex = 0;
 
   const disposeInspector = () => {
     if (rafId !== null) {
@@ -404,29 +416,78 @@ export function mountCollectionScreen({ app, onBack }) {
   };
 
   const closeReveal = () => {
+    if (!revealModal.classList.contains("hidden") && revealQueue.length > 1) {
+      const nextIndex = revealQueueIndex + 1;
+      if (nextIndex < revealQueue.length) {
+        revealQueueIndex = nextIndex;
+        renderRevealItem(revealQueue[revealQueueIndex], revealQueueIndex, revealQueue.length);
+        return;
+      }
+    }
+    revealQueue = [];
+    revealQueueIndex = 0;
     revealModal.classList.add("hidden");
     revealModal.setAttribute("aria-hidden", "true");
   };
 
-  const showReveal = ({ item, rarity, tokenId }) => {
+  const restartRevealAnimation = () => {
+    const card = revealModal.querySelector(".pack-reveal-card");
+    if (!card) return;
+    card.classList.remove("is-animating");
+    void card.offsetWidth;
+    card.classList.add("is-animating");
+  };
+
+  const renderRevealItem = ({ item, rarity, tokenId }, index = 0, total = 1) => {
     revealModal.classList.remove("is-revealing", "has-error");
     revealClose.disabled = false;
-    revealClose.textContent = "Continue";
+    revealClose.textContent = index + 1 < total ? "Next" : "Continue";
+    revealModal.dataset.revealCount = String(total);
     revealImage.src = item?.imagePath || "";
     revealImage.alt = item?.name || `Revealed cap #${tokenId}`;
     revealTitle.textContent = item?.name || `Cap #${tokenId}`;
     revealRarity.textContent = `${rarity} rarity`;
+    if (total > 1) {
+      revealCounter.textContent = `${index + 1} of ${total}`;
+      revealCounter.classList.remove("hidden");
+    } else {
+      revealCounter.textContent = "";
+      revealCounter.classList.add("hidden");
+    }
     revealModal.classList.remove("hidden");
     revealModal.setAttribute("aria-hidden", "false");
+    restartRevealAnimation();
   };
 
-  const showRevealProgress = (item) => {
+  const showReveal = (result) => {
+    revealQueue = [result];
+    revealQueueIndex = 0;
+    renderRevealItem(result, 0, 1);
+  };
+
+  const showRevealSequence = (results) => {
+    revealQueue = Array.isArray(results) ? results.filter(Boolean) : [];
+    if (revealQueue.length === 0) {
+      return;
+    }
+    revealQueueIndex = 0;
+    renderRevealItem(revealQueue[0], 0, revealQueue.length);
+  };
+
+  const showRevealProgress = (item, count = 1) => {
     revealModal.classList.add("is-revealing");
     revealModal.classList.remove("has-error");
+    revealModal.dataset.revealCount = String(Math.max(1, count));
     revealImage.src = item.imagePath;
     revealImage.alt = item.name;
-    revealTitle.textContent = "Revealing your cap";
-    revealRarity.textContent = "Waiting for onchain randomness and artwork";
+    revealCounter.textContent = count > 1 ? `0 of ${count}` : "";
+    revealCounter.classList.toggle("hidden", count <= 1);
+    revealTitle.textContent =
+      count > 1 ? `Revealing ${count} caps` : "Revealing your cap";
+    revealRarity.textContent =
+      count > 1
+        ? "Waiting for onchain randomness, then your results will fan out here"
+        : "Waiting for onchain randomness and artwork";
     revealClose.disabled = true;
     revealClose.textContent = "Revealing...";
     revealModal.classList.remove("hidden");
@@ -441,7 +502,7 @@ export function mountCollectionScreen({ app, onBack }) {
     button.disabled = true;
     button.textContent = "Revealing...";
     closeInspector();
-    showRevealProgress(item);
+    showRevealProgress(item, 1);
     if (status) {
       status.textContent = "Approve the opening transaction, then wait for the reveal.";
       status.classList.remove("error");
@@ -501,24 +562,210 @@ export function mountCollectionScreen({ app, onBack }) {
     }
   };
 
+  const buyPack = async (currency, button, status = null, amount = 1) => {
+    const packAmount = Math.max(1, Math.floor(Number(amount) || 1));
+    button.disabled = true;
+    button.textContent = "Buying...";
+    if (status) {
+      status.textContent = `Confirm the ${packAmount} pack ${currency.toUpperCase()} purchase in your wallet.`;
+      status.classList.remove("error", "success");
+    }
+    try {
+      await buyVibeMarketPack(currency, packAmount);
+      if (status) {
+        status.classList.add("success");
+        status.textContent = `${packAmount} pack${packAmount === 1 ? "" : "s"} purchased.`;
+      }
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Buy Packs";
+      if (status) {
+        status.classList.add("error");
+        status.textContent = error?.shortMessage || error?.message || "Could not buy this pack.";
+      } else {
+        window.alert(error?.shortMessage || error?.message || "Could not buy this pack.");
+      }
+    }
+  };
+
+  const buildQuantityStepper = (className, max, selected = 1) => {
+    const maxValue = Math.max(0, Number(max) || 0);
+    const disabled = maxValue <= 0;
+    const value = disabled ? 0 : Math.max(1, Math.min(maxValue, Number(selected) || 1));
+    const disabledAttr = disabled ? " disabled" : "";
+    return `
+      <div class="pack-quantity-stepper${disabled ? " disabled" : ""}">
+        <button type="button" data-quantity-step="-1" data-quantity-target="${className}"${disabledAttr}>-</button>
+        <input class="${className}" type="text" inputmode="numeric" value="${value}" readonly data-min="${disabled ? 0 : 1}" data-max="${maxValue}"${disabledAttr} />
+        <button type="button" data-quantity-step="1" data-quantity-target="${className}"${disabledAttr}>+</button>
+      </div>
+    `;
+  };
+
+  const bindQuantitySteppers = (root) => {
+    root.querySelectorAll("[data-quantity-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const input = root.querySelector(`.${button.dataset.quantityTarget}`);
+        if (!input || input.disabled) {
+          return;
+        }
+        const min = Number(input.dataset.min) || 1;
+        const max = Number(input.dataset.max) || min;
+        const step = Number(button.dataset.quantityStep) || 0;
+        const next = Math.max(min, Math.min(max, (Number(input.value) || min) + step));
+        input.value = String(next);
+      });
+    });
+  };
+
+  const openPackBatch = async (packs, amount, button, status = null) => {
+    const selectedPacks = packs.slice(0, Math.max(1, Math.min(packs.length, Number(amount) || 1)));
+    button.disabled = true;
+    button.textContent = "Opening...";
+    closeInspector();
+    showRevealProgress(selectedPacks[0], selectedPacks.length);
+    if (status) {
+      status.classList.remove("error", "success");
+      status.textContent = `Confirm opening ${selectedPacks.length} pack${selectedPacks.length === 1 ? "" : "s"} in your wallet.`;
+    }
+    try {
+      const opened = await openVibeMarketPacks(selectedPacks);
+      if (opened.results?.length === 1) {
+        showReveal(opened.results[0]);
+      } else if (opened.results?.length > 1) {
+        showRevealSequence(opened.results);
+      }
+      if (status) {
+        status.classList.add("success");
+        status.textContent = `Opened ${opened.results?.length || selectedPacks.length} pack${selectedPacks.length === 1 ? "" : "s"}.`;
+      }
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Open Packs";
+      revealModal.classList.remove("is-revealing");
+      revealModal.classList.add("has-error");
+      revealCounter.classList.add("hidden");
+      if (status) {
+        status.classList.add("error");
+        status.textContent = error?.shortMessage || error?.message || "Could not open packs.";
+      } else {
+        window.alert(error?.shortMessage || error?.message || "Could not open packs.");
+      }
+      revealTitle.textContent = "Reveal is still processing";
+      revealRarity.textContent =
+        error?.shortMessage || error?.message || "Could not open packs.";
+      revealClose.disabled = false;
+      revealClose.textContent = "Continue";
+    }
+  };
+
+  const sellPackBatch = async (packs, amount, currency, button, status = null) => {
+    const selectedPacks = packs.slice(0, Math.max(1, Math.min(packs.length, Number(amount) || 1)));
+    button.disabled = true;
+    button.textContent = "Selling...";
+    if (status) {
+      status.classList.remove("error", "success");
+      status.textContent = `Confirm ${selectedPacks.length} sell transaction${selectedPacks.length === 1 ? "" : "s"} in your wallet.`;
+    }
+    try {
+      await sellVibeMarketPacks(selectedPacks, currency);
+      if (status) {
+        status.classList.add("success");
+        status.textContent = `Sold ${selectedPacks.length} pack${selectedPacks.length === 1 ? "" : "s"}.`;
+      }
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Sell Packs";
+      if (status) {
+        status.classList.add("error");
+        status.textContent = error?.shortMessage || error?.message || "Could not sell packs.";
+      } else {
+        window.alert(error?.shortMessage || error?.message || "Could not sell packs.");
+      }
+    }
+  };
+
+  const createPackShopItem = (vibeState = getVibeMarketState()) => ({
+    itemType: "pack-shop",
+    name: "Naughty Robots Booster Pack",
+    subtitle: "vibe.market pack",
+    imagePath: vibeState.packInfo?.imagePath || "",
+    description:
+      "Mint an unopened Naughty Robots booster pack, then open it in the collection to reveal your cap.",
+    details: "Choose ETH or NR, buy the pack, then reveal it here.",
+    attributes: [
+      {
+        traitType: "Mint ETH",
+        value: vibeState.packInfo?.mintPriceEth
+          ? `${formatEth(vibeState.packInfo.mintPriceEth)} ETH`
+          : "Loading",
+      },
+      {
+        traitType: "Mint NR",
+        value: vibeState.packInfo?.tokensPerMintFormatted
+          ? `${formatNr(vibeState.packInfo.tokensPerMintFormatted)} NR`
+          : "Loading",
+      },
+      {
+        traitType: "Opening fee",
+        value: vibeState.packInfo?.entropyFeeEth
+          ? `${vibeState.packInfo.entropyFeeEth} ETH`
+          : "Loaded from contract",
+      },
+    ],
+  });
+
   const openInspector = (item) => {
     const isPack = item.itemType === "unopened-pack";
+    const isPackShop = item.itemType === "pack-shop";
+    const isPackLike = isPack || isPackShop;
     pendingSellTokenId = "";
     disposeInspector();
 
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
+    const storyText = item.description || "";
+    inspectorPanel.classList.toggle("has-story", Boolean(storyText));
+    inspectorStory.innerHTML = storyText
+      ? `
+        <span>${isPackLike ? "Pack Story" : "Collection Story"}</span>
+        <p>${escapeHtml(storyText)}</p>
+      `
+      : "";
+    inspectorStory.classList.toggle("hidden", !storyText);
     inspectorMetadata.innerHTML = `
       <span class="inspector-kicker">${escapeHtml(item.subtitle)}</span>
       <h3>${escapeHtml(item.name)}</h3>
-      ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ""}
       ${
         item.attributes?.length
           ? `<div class="inspector-attributes">${renderAttributes(item.attributes)}</div>`
           : `<p>${escapeHtml(item.details)}</p>`
       }
       ${
-        isPack
+        isPackShop
+          ? `
+            <div class="open-pack-panel">
+              <p>Buy this booster pack, then open it from your packs folder.</p>
+              <label class="pack-currency-field">
+                Pay with
+                <select class="buy-pack-inspector-currency">
+                  <option value="eth">${escapeHtml(
+                    getVibeMarketState().packInfo?.mintPriceEth
+                      ? `${formatEth(getVibeMarketState().packInfo.mintPriceEth)} ETH`
+                      : "ETH"
+                  )}</option>
+                  <option value="nr">${escapeHtml(
+                    getVibeMarketState().packInfo?.tokensPerMintFormatted
+                      ? `${formatNr(getVibeMarketState().packInfo.tokensPerMintFormatted)} NR`
+                      : "NR"
+                  )}</option>
+                </select>
+              </label>
+              <button class="buy-pack-btn" type="button">Buy Pack</button>
+              <p class="buy-pack-status" aria-live="polite"></p>
+            </div>
+          `
+          : isPack
           ? `
             <div class="open-pack-panel">
               <p>
@@ -589,7 +836,13 @@ export function mountCollectionScreen({ app, onBack }) {
     const sellPackButton = inspectorMetadata.querySelector(".sell-pack-btn");
     const sellPackCurrency = inspectorMetadata.querySelector(".sell-pack-currency");
     const openStatus = inspectorMetadata.querySelector(".open-pack-status");
+    const buyPackButton = inspectorMetadata.querySelector(".buy-pack-btn");
+    const buyPackCurrency = inspectorMetadata.querySelector(".buy-pack-inspector-currency");
+    const buyPackStatus = inspectorMetadata.querySelector(".buy-pack-status");
     openButton?.addEventListener("click", () => openPack(item, openButton, openStatus));
+    buyPackButton?.addEventListener("click", () =>
+      buyPack(buyPackCurrency?.value || "eth", buyPackButton, buyPackStatus)
+    );
     sellPackButton?.addEventListener("click", () =>
       sellPack(item, sellPackCurrency?.value || "nr", sellPackButton, openStatus)
     );
@@ -653,7 +906,7 @@ export function mountCollectionScreen({ app, onBack }) {
     inspectorControls.enableDamping = true;
     inspectorControls.minDistance = 3.1;
     inspectorControls.maxDistance = 6;
-    if (isPack) {
+    if (isPackLike) {
       inspectorControls.minAzimuthAngle = -Math.PI / 4;
       inspectorControls.maxAzimuthAngle = Math.PI / 4;
       inspectorControls.minPolarAngle = Math.PI / 4;
@@ -672,7 +925,7 @@ export function mountCollectionScreen({ app, onBack }) {
     let spriteCtx = null;
     let spriteImage = null;
     let spriteConfig = null;
-    if (isPack) {
+    if (isPackLike) {
       frontTexture = loadDiscTexture(inspectorRenderer, item.imagePath, {
         centerCrop: false,
       });
@@ -718,7 +971,7 @@ export function mountCollectionScreen({ app, onBack }) {
         centerCrop: Boolean(item.centerCrop),
       });
     }
-    if (!isPack) {
+    if (!isPackLike) {
       backTexture = loadDiscTexture(inspectorRenderer, "/caps/back1.png");
       backTexture.rotation = Math.PI * 0.5;
     }
@@ -733,7 +986,7 @@ export function mountCollectionScreen({ app, onBack }) {
           lastFrame: -1,
         }
       : null;
-    if (isPack) {
+    if (isPackLike) {
       const packMaterial = new THREE.MeshBasicMaterial({
         map: frontTexture,
         transparent: true,
@@ -771,7 +1024,7 @@ export function mountCollectionScreen({ app, onBack }) {
 
     const render = () => {
       rafId = requestAnimationFrame(render);
-      if (!isPack) {
+      if (!isPackLike) {
         inspectorDisc.rotation.z += 0.0025;
       }
       if (spriteAnimState) {
@@ -809,12 +1062,29 @@ export function mountCollectionScreen({ app, onBack }) {
   const switcher = app.querySelector("#collectionSwitcher");
   const subSwitcher = app.querySelector("#collectionSubSwitcher");
 
-  const getActiveTopCollection = () => COLLECTIONS[activeCollectionKey] || null;
+  const getVisibleCollections = () => {
+    const vibeState = getVibeMarketState();
+    return vibeState.walletAddress ? [COLLECTIONS.vibe] : Object.values(COLLECTIONS);
+  };
+
+  const syncActiveCollectionKey = () => {
+    const visibleCollections = getVisibleCollections();
+    if (visibleCollections.some((collection) => collection.id === activeCollectionKey)) {
+      return;
+    }
+    activeCollectionKey = visibleCollections[0]?.id || "vibe";
+  };
+
+  const getActiveTopCollection = () => {
+    syncActiveCollectionKey();
+    return COLLECTIONS[activeCollectionKey] || null;
+  };
 
   const getSubcollections = () =>
     getActiveTopCollection()?.subcollections || {};
 
   const syncActiveSubKey = () => {
+    syncActiveCollectionKey();
     const subcollections = getSubcollections();
     if (activeSubKey && subcollections[activeSubKey]) {
       return;
@@ -823,13 +1093,18 @@ export function mountCollectionScreen({ app, onBack }) {
   };
 
   const getActiveSubcollection = () => {
+    syncActiveCollectionKey();
     syncActiveSubKey();
     return getSubcollections()[activeSubKey] || null;
   };
 
   const renderSwitcher = () => {
+    syncActiveCollectionKey();
+    syncActiveSubKey();
+    const visibleCollections = getVisibleCollections();
     switcher.innerHTML = "";
-    Object.values(COLLECTIONS).forEach((collection) => {
+    switcher.classList.toggle("single-option", visibleCollections.length <= 1);
+    visibleCollections.forEach((collection) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = `collection-tab ${
@@ -850,7 +1125,6 @@ export function mountCollectionScreen({ app, onBack }) {
         renderSwitcher();
         renderSubSwitcher();
         renderMarketAction();
-        renderTokenBalance();
         renderCards();
       });
       switcher.appendChild(btn);
@@ -858,6 +1132,7 @@ export function mountCollectionScreen({ app, onBack }) {
   };
 
   const renderSubSwitcher = () => {
+    syncActiveCollectionKey();
     subSwitcher.innerHTML = "";
     const topCollection = getActiveTopCollection();
     const subcollections = getSubcollections();
@@ -903,7 +1178,6 @@ export function mountCollectionScreen({ app, onBack }) {
         activeSubKey = subcollection.id;
         renderSubSwitcher();
         renderMarketAction();
-        renderTokenBalance();
         renderCards();
       });
       subSwitcher.appendChild(btn);
@@ -912,71 +1186,147 @@ export function mountCollectionScreen({ app, onBack }) {
 
   const renderMarketAction = () => {
     marketAction.innerHTML = "";
+    const topCollection = getActiveTopCollection();
+    const active = getActiveSubcollection();
+    if (topCollection?.id !== "vibe" || activeSubKey !== "caps" || !active?.items?.length) {
+      activeRarityFilter = "all";
+      return;
+    }
+
+    const rarities = Array.from(
+      new Set(
+        active.items
+          .map((item) => String(item.rarity || item.details || "").trim())
+          .filter(Boolean)
+      )
+    );
+    if (rarities.length <= 1) {
+      activeRarityFilter = "all";
+      return;
+    }
+    if (activeRarityFilter !== "all" && !rarities.includes(activeRarityFilter)) {
+      activeRarityFilter = "all";
+    }
+
+    marketAction.innerHTML = `
+      <div class="rarity-filter" role="group" aria-label="Filter caps by rarity">
+        <span>Filter by rarity</span>
+        <button class="${activeRarityFilter === "all" ? "active" : ""}" type="button" data-rarity="all">All</button>
+        ${rarities
+          .map(
+            (rarity) =>
+              `<button class="${activeRarityFilter === rarity ? "active" : ""}" type="button" data-rarity="${escapeHtml(rarity)}">${escapeHtml(rarity)}</button>`
+          )
+          .join("")}
+      </div>
+    `;
+    marketAction.querySelectorAll("[data-rarity]").forEach((button) => {
+      button.addEventListener("click", () => {
+        activeRarityFilter = button.dataset.rarity || "all";
+        renderMarketAction();
+        renderCards();
+      });
+    });
   };
 
-  const renderTokenBalance = () => {
+  const renderPackBatchCard = (packs = []) => {
     const vibeState = getVibeMarketState();
-    tokenBalance.textContent =
-      activeCollectionKey === "vibe" && vibeState.walletAddress
-        ? vibeState.tokenBalance === null
-          ? "NR balance: Loading..."
-          : `NR balance: ${formatNr(vibeState.tokenBalanceFormatted)} NR`
-        : "";
-  };
-
-  const renderPackShopCard = () => {
-    const vibeState = getVibeMarketState();
+    const shopItem = createPackShopItem(vibeState);
+    const packCount = packs.length;
     const card = document.createElement("div");
-    card.className = "collection-card pack-shop-card";
+    card.className = "collection-card pack-shop-card pack-batch-card";
     card.innerHTML = `
-      <div class="pack-shop-visual">
+      <button class="pack-shop-visual" type="button" aria-label="Inspect Naughty Robots booster pack">
         ${
-          vibeState.packInfo?.imagePath
-            ? `<img src="${escapeHtml(vibeState.packInfo.imagePath)}" alt="Naughty Robots booster pack" />`
+          shopItem.imagePath
+            ? `<img src="${escapeHtml(shopItem.imagePath)}" alt="Naughty Robots booster pack" />`
             : '<div class="cap-loading"><span class="cap-loading-spinner"></span></div>'
         }
-      </div>
+      </button>
       <div class="cap-info">
         <span class="pack-shop-name">Naughty Robots</span>
-        <p>Mint an unopened pack, then reveal it here.</p>
-        <label class="pack-currency-field">
-          Pay with
-          <select class="buy-pack-currency">
-            <option value="eth">${escapeHtml(
-              vibeState.packInfo?.mintPriceEth
-                ? `${formatEth(vibeState.packInfo.mintPriceEth)} ETH`
-                : "ETH"
-            )}</option>
-            <option value="nr">${escapeHtml(
-              vibeState.packInfo?.tokensPerMintFormatted
-                ? `${formatNr(vibeState.packInfo.tokensPerMintFormatted)} NR`
-                : "NR"
-            )}</option>
-          </select>
-        </label>
-        <button class="buy-pack-btn" type="button">Buy Pack</button>
-        <p class="buy-pack-status" aria-live="polite"></p>
+        <p>${packCount ? `You hold ${packCount} unopened pack${packCount === 1 ? "" : "s"}.` : shopItem.details}</p>
+        <div class="pack-batch-actions">
+          <div class="pack-batch-section pack-batch-buy">
+            <strong>Buy</strong>
+            <label class="pack-amount-field">
+              <span>Amount</span>
+              ${buildQuantityStepper("buy-pack-amount", 10, 1)}
+            </label>
+            <label class="pack-currency-field pack-row-currency">
+              <span>Pay</span>
+              <select class="buy-pack-currency">
+                <option value="eth">${escapeHtml(
+                  vibeState.packInfo?.mintPriceEth
+                    ? `${formatEth(vibeState.packInfo.mintPriceEth)} ETH`
+                    : "ETH"
+                )}</option>
+                <option value="nr">${escapeHtml(
+                  vibeState.packInfo?.tokensPerMintFormatted
+                    ? `${formatNr(vibeState.packInfo.tokensPerMintFormatted)} NR`
+                    : "NR"
+                )}</option>
+              </select>
+            </label>
+            <button class="buy-pack-btn" type="button">Buy Packs</button>
+          </div>
+          <div class="pack-batch-section pack-batch-open">
+            <strong>Open</strong>
+            <label class="pack-amount-field">
+              <span>Amount</span>
+              ${buildQuantityStepper("open-pack-amount", packCount, Math.min(1, packCount || 1))}
+            </label>
+            <button class="open-pack-btn" type="button" ${packCount ? "" : "disabled"}>Open Packs</button>
+          </div>
+          <div class="pack-batch-section pack-batch-sell">
+            <strong>Sell</strong>
+            <label class="pack-amount-field">
+              <span>Amount</span>
+              ${buildQuantityStepper("sell-pack-amount", packCount, Math.min(1, packCount || 1))}
+            </label>
+            <label class="pack-currency-field pack-row-currency">
+              <span>Get</span>
+              <select class="sell-pack-currency" ${packCount ? "" : "disabled"}>
+                <option value="nr">${escapeHtml(
+                  vibeState.packInfo?.tokensPerMintFormatted
+                    ? `${formatNr(vibeState.packInfo.tokensPerMintFormatted)} NR`
+                    : "NR"
+                )}</option>
+                <option value="eth">${escapeHtml(
+                  vibeState.packInfo?.sellPriceEthFormatted
+                    ? `${formatEth(vibeState.packInfo.sellPriceEthFormatted)} ETH`
+                    : "ETH"
+                )}</option>
+              </select>
+            </label>
+            <button class="sell-pack-btn" type="button" ${packCount ? "" : "disabled"}>Sell Packs</button>
+          </div>
+        </div>
+        <p class="buy-pack-status pack-batch-status" aria-live="polite"></p>
       </div>
     `;
     const button = card.querySelector(".buy-pack-btn");
+    const buyAmount = card.querySelector(".buy-pack-amount");
     const currency = card.querySelector(".buy-pack-currency");
     const status = card.querySelector(".buy-pack-status");
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      button.textContent = "Buying...";
-      status.textContent = `Confirm the ${currency.value.toUpperCase()} pack purchase in your wallet.`;
-      status.classList.remove("error", "success");
-      try {
-        await buyVibeMarketPack(currency.value);
-        status.classList.add("success");
-        status.textContent = "Pack purchased. It is now ready to open.";
-      } catch (error) {
-        button.disabled = false;
-        button.textContent = "Buy Pack";
-        status.classList.add("error");
-        status.textContent = error?.shortMessage || error?.message || "Could not buy this pack.";
-      }
-    });
+    const openButton = card.querySelector(".open-pack-btn");
+    const openAmount = card.querySelector(".open-pack-amount");
+    const sellButton = card.querySelector(".sell-pack-btn");
+    const sellAmount = card.querySelector(".sell-pack-amount");
+    const sellCurrency = card.querySelector(".sell-pack-currency");
+    bindQuantitySteppers(card);
+    card.querySelector(".pack-shop-visual").addEventListener("click", () =>
+      openInspector(shopItem)
+    );
+    button.addEventListener("click", () =>
+      buyPack(currency.value, button, status, buyAmount.value)
+    );
+    openButton?.addEventListener("click", () =>
+      openPackBatch(packs, openAmount.value, openButton, status)
+    );
+    sellButton?.addEventListener("click", () =>
+      sellPackBatch(packs, sellAmount.value, sellCurrency.value, sellButton, status)
+    );
     const image = card.querySelector("img");
     if (image) {
       image.addEventListener("load", () => image.classList.add("loaded"), { once: true });
@@ -997,8 +1347,10 @@ export function mountCollectionScreen({ app, onBack }) {
       return;
     }
     const isPackCollection = topCollection.id === "vibe" && activeSubKey === "packs";
+    grid.classList.toggle("pack-batch-grid", isPackCollection);
     if (isPackCollection) {
-      renderPackShopCard();
+      renderPackBatchCard(active?.items || []);
+      return;
     }
 
     if (!active || !Array.isArray(active.items) || active.items.length === 0) {
@@ -1058,11 +1410,39 @@ export function mountCollectionScreen({ app, onBack }) {
       return;
     }
 
-    active.items.forEach((item) => {
+    const visibleItems =
+      topCollection.id === "vibe" && activeSubKey === "caps" && activeRarityFilter !== "all"
+        ? active.items.filter((item) => String(item.rarity || item.details) === activeRarityFilter)
+        : active.items;
+
+    if (visibleItems.length === 0) {
+      const card = document.createElement("div");
+      card.className = "collection-card";
+      card.innerHTML = `
+        <div class="cap-slot">
+          <div class="disc-card" aria-label="No matching caps">
+            <div class="cap-loading loaded">
+              <span class="cap-loading-text">empty</span>
+            </div>
+          </div>
+        </div>
+        <div class="cap-info">
+          <h3>No ${escapeHtml(activeRarityFilter)} caps</h3>
+          <p>Try another rarity filter.</p>
+        </div>
+      `;
+      grid.appendChild(card);
+      return;
+    }
+
+    visibleItems.forEach((item) => {
       const isPack = item.itemType === "unopened-pack";
       const card = document.createElement("div");
       card.className = `collection-card${isPack ? " unopened-pack-card" : ""}`;
-      const cardAttributes = renderAttributes(item.attributes, 3);
+      const previewAttributes = (item.attributes || []).filter(
+        (attribute) => String(attribute.traitType).toLowerCase() !== "rarity"
+      );
+      const cardAttributes = renderAttributes(previewAttributes, 3);
       card.innerHTML = `
       <div class="cap-slot">
         <button class="disc-card" type="button" aria-label="Inspect ${escapeHtml(item.name)}">
@@ -1076,11 +1456,7 @@ export function mountCollectionScreen({ app, onBack }) {
       <div class="cap-info">
         <h3>${escapeHtml(item.name)}</h3>
         <p>${escapeHtml(item.subtitle)}</p>
-        ${
-          item.description
-            ? `<p class="cap-description">${escapeHtml(item.description)}</p>`
-            : `<p>${escapeHtml(item.details)}</p>`
-        }
+        <p>${escapeHtml(item.details)}</p>
         ${cardAttributes ? `<div class="cap-attributes">${cardAttributes}</div>` : ""}
         <div class="collection-card-actions">
           <button class="inspect-btn" type="button">${isPack ? "Open Pack" : "Inspect"}</button>
@@ -1173,7 +1549,6 @@ export function mountCollectionScreen({ app, onBack }) {
   renderSwitcher();
   renderSubSwitcher();
   renderMarketAction();
-  renderTokenBalance();
   renderCards();
 
   const unsubscribeVibeMarket = subscribeVibeMarketState((vibeState) => {
@@ -1188,7 +1563,6 @@ export function mountCollectionScreen({ app, onBack }) {
       renderSwitcher();
       renderSubSwitcher();
       renderMarketAction();
-      renderTokenBalance();
       renderCards();
     }
   });

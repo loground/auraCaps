@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="fonts-loading">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -29,6 +29,12 @@
     <meta name="twitter:image" content="/paste.png" />
   </head>
   <body>
+    <div id="fontLoader" class="font-loader" aria-live="polite">
+      <div class="font-loader-card">
+        <span class="font-loader-title">AURA CAPS</span>
+        <span class="font-loader-text">Loading arena type</span>
+      </div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

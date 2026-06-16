@@ -1,5 +1,5 @@
 import "@rainbow-me/rainbowkit/styles.css";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -50,6 +50,7 @@ const connectors = connectorsForWallets(
 const wagmiConfig = createConfig({
   chains: [base],
   connectors,
+  storage: null,
   transports: {
     [base.id]: http(BASE_RPC_URL),
   },
@@ -61,11 +62,49 @@ let walletRoot = null;
 let walletRootElement = null;
 let walletControlVisible = false;
 let openConnectModal = null;
+let pendingWalletSessionAnnouncement = 0;
+let lastAnnouncedWalletSessionKey = "";
+
+function getWalletSessionKey(session) {
+  return [
+    session?.mode || "guest",
+    session?.address || "",
+    session?.chainId || "",
+    session?.provider ? "provider" : "no-provider",
+  ].join(":");
+}
+
+function createWalletSessionEvent(detail) {
+  if (typeof CustomEvent === "function") {
+    return new CustomEvent("caps:wallet-session", { detail });
+  }
+  const event = document.createEvent("CustomEvent");
+  event.initCustomEvent("caps:wallet-session", false, false, detail);
+  return event;
+}
 
 function announceWalletSession() {
-  window.dispatchEvent(
-    new CustomEvent("caps:wallet-session", { detail: walletSession })
-  );
+  const sessionKey = getWalletSessionKey(walletSession);
+  if (sessionKey === lastAnnouncedWalletSessionKey) {
+    return;
+  }
+  window.clearTimeout(pendingWalletSessionAnnouncement);
+  pendingWalletSessionAnnouncement = window.setTimeout(() => {
+    const currentKey = getWalletSessionKey(walletSession);
+    if (currentKey === lastAnnouncedWalletSessionKey) {
+      return;
+    }
+    lastAnnouncedWalletSessionKey = currentKey;
+    window.dispatchEvent(createWalletSessionEvent(walletSession));
+  }, 0);
+}
+
+function setWalletSession(nextSession) {
+  const previousKey = getWalletSessionKey(walletSession);
+  walletSession = nextSession;
+  if (getWalletSessionKey(walletSession) !== previousKey) {
+    announceWalletSession();
+  }
 }
 
 function setWalletDisconnected(disconnected) {
@@ -77,7 +116,7 @@ function setWalletDisconnected(disconnected) {
 }
 
 function shouldReconnectWalletOnMount() {
-  return window.localStorage.getItem(WALLET_DISCONNECTED_KEY) !== "true";
+  return false;
 }
 
 wagmiConfig.subscribe(
@@ -92,8 +131,7 @@ wagmiConfig.subscribe(
       (previousStatus === "connected" || walletSession?.mode === "wallet")
     ) {
       setWalletDisconnected(true);
-      walletSession = { mode: "guest", address: null, chainId: null, provider: null };
-      announceWalletSession();
+      setWalletSession({ mode: "guest", address: null, chainId: null, provider: null });
     }
   }
 );
@@ -167,8 +205,7 @@ function WalletBridge({ showControl }) {
 
   useEffect(() => {
     if (!isConnected || !address || chainId !== base.id) {
-      walletSession = { mode: "guest", address: null, chainId: null, provider: null };
-      announceWalletSession();
+      setWalletSession({ mode: "guest", address: null, chainId: null, provider: null });
       return undefined;
     }
 
@@ -176,13 +213,12 @@ function WalletBridge({ showControl }) {
       return undefined;
     }
 
-    walletSession = {
+    setWalletSession({
       mode: "wallet",
       address,
       chainId: base.id,
       provider: connectorClient,
-    };
-    announceWalletSession();
+    });
     return undefined;
   }, [address, chainId, connectorClient, isConnected]);
 
@@ -245,11 +281,17 @@ function WalletBridge({ showControl }) {
 }
 
 function WalletApp({ showControl }) {
+  const [bridgeReady, setBridgeReady] = useState(false);
+
+  useEffect(() => {
+    setBridgeReady(true);
+  }, []);
+
   return (
     <WagmiProvider config={wagmiConfig} reconnectOnMount={shouldReconnectWalletOnMount()}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider theme={getRainbowTheme()} initialChain={base}>
-          <WalletBridge showControl={showControl} />
+          {bridgeReady ? <WalletBridge showControl={showControl} /> : null}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
@@ -313,7 +355,7 @@ export function showInitialAccessModal() {
       <div class="access-modal-backdrop"></div>
       <section class="access-panel" role="dialog" aria-modal="true" aria-labelledby="accessTitle">
         <span class="access-kicker">AURA CAPS</span>
-        <h1 id="accessTitle">Choose how to play</h1>
+        <h1 id="accessTitle">Collect and battle</h1>
         <p class="access-copy">
           Jump straight into the arena as a guest, or connect your wallet on Base.
         </p>
@@ -325,9 +367,7 @@ export function showInitialAccessModal() {
             Play as guest
           </button>
         </div>
-        <p id="accessStatus" class="access-status" aria-live="polite">
-          Phantom is recommended. Base Mainnet only.
-        </p>
+        <p id="accessStatus" class="access-status" aria-live="polite">Base Mainnet only.</p>
       </section>
     `;
 
@@ -357,8 +397,7 @@ export function showInitialAccessModal() {
     guestButton.addEventListener(
       "click",
       () => {
-        walletSession = { mode: "guest", address: null, chainId: null, provider: null };
-        announceWalletSession();
+        setWalletSession({ mode: "guest", address: null, chainId: null, provider: null });
         finish(walletSession);
       },
       { once: true }

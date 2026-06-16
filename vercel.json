@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/collection",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/collection/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/battles",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/battles/:path*",
+      "destination": "/index.html"
+    }
+  ]
+}

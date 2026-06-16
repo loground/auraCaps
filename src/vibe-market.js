@@ -330,7 +330,7 @@ function normalizeBox(box, game, offers, index) {
     rarity: String(rarity),
     value,
     offer,
-    details: `Rarity ${rarity} • Value ${value}`,
+    details: String(rarity),
     description: box.metadata?.description || game?.description || "",
     attributes: getBoxAttributes(box, rarity),
     externalUrl: box.metadata?.external_url || "",
@@ -561,22 +561,26 @@ async function sendDropTransaction(session, functionName, args, value = 0n) {
   return { hash, receipt };
 }
 
-export async function buyVibeMarketPack(currency = "eth") {
+export async function buyVibeMarketPack(currency = "eth", amount = 1) {
   const session = requireWalletSession("buying a pack");
+  const packAmount = BigInt(Math.max(1, Math.floor(Number(amount) || 1)));
   const mintPrice =
-    state.packInfo?.mintPrice ??
+    packAmount === 1n && state.packInfo?.mintPrice
+      ? state.packInfo.mintPrice
+      :
     (await publicClient.readContract({
       address: VIBE_MARKET_COLLECTION_ADDRESS,
       abi: DROP_ABI,
       functionName: "getMintPrice",
-      args: [1n],
+      args: [packAmount],
     }));
   const payWithToken = currency === "nr";
+  const tokenCost = (state.packInfo?.tokensPerMint || 0n) * packAmount;
   if (
     payWithToken &&
     state.tokenBalance !== null &&
-    state.packInfo?.tokensPerMint &&
-    state.tokenBalance < state.packInfo.tokensPerMint
+    tokenCost > 0n &&
+    state.tokenBalance < tokenCost
   ) {
     throw new Error("Your wallet does not have enough NR to buy this pack.");
   }
@@ -584,7 +588,7 @@ export async function buyVibeMarketPack(currency = "eth") {
   const { hash, receipt } = await sendDropTransaction(
     session,
     payWithToken ? "mintWithToken" : "mint",
-    [1n],
+    [packAmount],
     payWithToken ? 0n : bufferedMintPrice
   );
   const mintedLog = receipt.logs
@@ -626,49 +630,8 @@ export async function buyVibeMarketPack(currency = "eth") {
   return hash;
 }
 
-export async function openVibeMarketPack(pack) {
-  const session = requireWalletSession("opening a pack");
-  if (!pack?.tokenId) {
-    throw new Error("This pack does not have a valid token ID.");
-  }
-  const tokenId = BigInt(pack.tokenId);
-  const entropyFee =
-    state.packInfo?.entropyFee ??
-    (await publicClient.readContract({
-      address: VIBE_MARKET_COLLECTION_ADDRESS,
-      abi: DROP_ABI,
-      functionName: "getEntropyFee",
-    }));
-  const { hash } = await sendDropTransaction(session, "open", [[tokenId]], entropyFee);
-
-  let rarityInfo = null;
-  for (let attempt = 0; attempt < 45; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, 2000));
-    try {
-      const nextRarityInfo = await publicClient.readContract({
-        address: VIBE_MARKET_COLLECTION_ADDRESS,
-        abi: DROP_ABI,
-        functionName: "getTokenRarity",
-        args: [tokenId],
-      });
-      if (Number(nextRarityInfo.rarity) > 0 && nextRarityInfo.randomValue > 0n) {
-        rarityInfo = nextRarityInfo;
-        break;
-      }
-    } catch {
-      // Pyth entropy fulfills asynchronously.
-    }
-  }
-  if (!rarityInfo) {
-    throw new Error("The pack was opened, but its rarity is still being revealed. Refresh shortly.");
-  }
+async function resolveOpenedPack(pack, rarityInfo) {
   const rarity = RARITY_NAMES[Number(rarityInfo.rarity)] || "Unknown";
-  setState({
-    unopenedPacks: state.unopenedPacks.filter(
-      (item) => item.tokenId !== String(pack.tokenId)
-    ),
-  });
-  optimisticUnopenedPacks.delete(String(pack.tokenId));
   let revealedItem = null;
   for (let attempt = 0; attempt < 40; attempt += 1) {
     try {
@@ -725,25 +688,97 @@ export async function openVibeMarketPack(pack) {
     }
     await new Promise((resolve) => window.setTimeout(resolve, 1500));
   }
-  if (revealedItem) {
-    optimisticOpenedItems.set(revealedItem.tokenId, revealedItem);
-    setState({
-      items: [
-        revealedItem,
-        ...state.items.filter((item) => item.tokenId !== String(pack.tokenId)),
-      ],
-    });
-  } else {
+  if (!revealedItem) {
     throw new Error(
       "Pack opened successfully. The revealed card artwork is still processing and will appear shortly."
     );
   }
+  return { tokenId: String(pack.tokenId), rarity, item: revealedItem };
+}
+
+export async function openVibeMarketPacks(packs) {
+  const selectedPacks = (Array.isArray(packs) ? packs : [packs]).filter((pack) => pack?.tokenId);
+  const session = requireWalletSession("opening packs");
+  if (selectedPacks.length === 0) {
+    throw new Error("Select at least one pack to open.");
+  }
+  const tokenIds = selectedPacks.map((pack) => BigInt(pack.tokenId));
+  const entropyFee =
+    state.packInfo?.entropyFee ??
+    (await publicClient.readContract({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName: "getEntropyFee",
+    }));
+  const { hash } = await sendDropTransaction(session, "open", [tokenIds], entropyFee);
+
+  const rarityByTokenId = new Map();
+  for (let attempt = 0; attempt < 45 && rarityByTokenId.size < selectedPacks.length; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+    await Promise.all(
+      selectedPacks.map(async (pack) => {
+        if (rarityByTokenId.has(String(pack.tokenId))) return;
+        try {
+          const rarityInfo = await publicClient.readContract({
+            address: VIBE_MARKET_COLLECTION_ADDRESS,
+            abi: DROP_ABI,
+            functionName: "getTokenRarity",
+            args: [BigInt(pack.tokenId)],
+          });
+          if (Number(rarityInfo.rarity) > 0 && rarityInfo.randomValue > 0n) {
+            rarityByTokenId.set(String(pack.tokenId), rarityInfo);
+          }
+        } catch {
+          // Pyth entropy fulfills asynchronously.
+        }
+      })
+    );
+  }
+  if (rarityByTokenId.size === 0) {
+    throw new Error("The packs were opened, but rarity is still being revealed. Refresh shortly.");
+  }
+
+  setState({
+    unopenedPacks: state.unopenedPacks.filter(
+      (item) => !selectedPacks.some((pack) => String(pack.tokenId) === item.tokenId)
+    ),
+  });
+  for (const pack of selectedPacks) {
+    optimisticUnopenedPacks.delete(String(pack.tokenId));
+  }
+
+  const results = [];
+  for (const pack of selectedPacks) {
+    const rarityInfo = rarityByTokenId.get(String(pack.tokenId));
+    if (!rarityInfo) continue;
+    const result = await resolveOpenedPack(pack, rarityInfo);
+    results.push(result);
+    optimisticOpenedItems.set(result.item.tokenId, result.item);
+  }
+  if (results.length > 0) {
+    setState({
+      items: [
+        ...results.map((result) => result.item),
+        ...state.items.filter(
+          (item) => !results.some((result) => result.tokenId === String(item.tokenId))
+        ),
+      ],
+    });
+  }
   return {
     hash,
-    tokenId: String(pack.tokenId),
-    rarity,
-    item: revealedItem,
+    results,
+    tokenId: results[0]?.tokenId,
+    rarity: results[0]?.rarity || "Unknown",
+    item: results[0]?.item || null,
   };
+}
+
+export async function openVibeMarketPack(pack) {
+  if (!pack?.tokenId) {
+    throw new Error("This pack does not have a valid token ID.");
+  }
+  return openVibeMarketPacks([pack]);
 }
 
 export async function sellVibeMarketCap(item, currency = "nr", minEthPayout = 0n) {
@@ -779,6 +814,18 @@ export async function sellVibeMarketPack(item, currency = "nr") {
       ? (state.packInfo.sellPriceEth * 95n) / 100n
       : 0n;
   return sellVibeMarketCap(item, currency, minEthPayout);
+}
+
+export async function sellVibeMarketPacks(items, currency = "nr") {
+  const selectedItems = (Array.isArray(items) ? items : [items]).filter((item) => item?.tokenId);
+  if (selectedItems.length === 0) {
+    throw new Error("Select at least one pack to sell.");
+  }
+  const hashes = [];
+  for (const item of selectedItems) {
+    hashes.push(await sellVibeMarketPack(item, currency));
+  }
+  return hashes;
 }
 
 export function getVibeMarketState() {

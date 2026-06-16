@@ -14,6 +14,22 @@ import {
   subscribeVibeMarketState,
 } from "./vibe-market.js";
 
+const finishFontBoot = () => {
+  document.documentElement.classList.remove("fonts-loading");
+  document.querySelector("#fontLoader")?.remove();
+};
+
+if ("fonts" in document) {
+  const fontReady = Promise.all([
+    document.fonts.load('1em "Hell"'),
+    document.fonts.ready,
+  ]);
+  const fontTimeout = new Promise((resolve) => window.setTimeout(resolve, 2400));
+  Promise.race([fontReady, fontTimeout]).then(finishFontBoot, finishFontBoot);
+} else {
+  finishFontBoot();
+}
+
 const app = document.querySelector("#app");
 const THEME_STORAGE_KEY = "caps_last_theme_v1";
 const THEME_OPTIONS = ["hell", "heaven", "jungle-bay", "bankr"];
