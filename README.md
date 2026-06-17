@@ -41,6 +41,7 @@ VITE_WALLETCONNECT_PROJECT_ID=
 VITE_BASE_RPC_URL=
 VITE_VIBE_MARKET_API_KEY=
 VITE_PVP_WAGER_ESCROW_ADDRESS=
+VITE_PVP_WAGER_AUTO_SETTLE=
 ```
 
 Create the WalletConnect project ID in the Reown dashboard. RainbowKit presents
@@ -56,6 +57,11 @@ redeploy because Vite embeds `VITE_*` values at build time.
 
 `VITE_PVP_WAGER_ESCROW_ADDRESS` enables Wager PvP in the game setup. Leave it
 empty until the escrow contract is deployed and audited.
+
+`VITE_PVP_WAGER_AUTO_SETTLE` defaults to `false`. Keep it false if tied wager
+matches should be returned by `refund` after the escrow timeout. Set it to
+`true` only if you deploy the Supabase `pvp-settle-wager` Edge Function and want
+the result signer to settle matches immediately.
 
 Create a free vibe.market API key:
 
@@ -132,6 +138,19 @@ supabase secrets set \
 `PVP_WAGER_RESULT_SIGNER_PRIVATE_KEY` must be the private key for the wallet
 passed as `resultSigner` when deploying `AuraCapsWagerEscrow`. Do not expose
 this key as a `VITE_*` variable.
+
+If you do not use the Supabase CLI, settle a finished wager room manually from
+your local machine:
+
+```bash
+npm run wager:settle -- --room-id YOUR_PVP_ROOM_ID
+```
+
+The script reads the finished room from Supabase, recomputes the final score,
+and calls `settle` or `settleDraw` from the result signer wallet. It needs
+`VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` or `VITE_SUPABASE_ANON_KEY`,
+`PVP_WAGER_RESULT_SIGNER_PRIVATE_KEY`, and `BASE_RPC_URL` in `.env.local` or
+your shell.
 
 Compile the escrow contract:
 

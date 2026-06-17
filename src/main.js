@@ -60,6 +60,8 @@ const PVP_ENABLED = true;
 const PVP_WAGER_ESCROW_ADDRESS = String(
   import.meta.env?.VITE_PVP_WAGER_ESCROW_ADDRESS || ""
 ).trim();
+const PVP_WAGER_AUTO_SETTLE =
+  String(import.meta.env?.VITE_PVP_WAGER_AUTO_SETTLE || "false").toLowerCase() === "true";
 const ROUTES = {
   menu: "/",
   battles: "/battles",
@@ -1740,7 +1742,13 @@ function startPvpMatchController({
         `${final}\nYOU ${scores.player} - ${opponentName.toUpperCase()} ${scores.opponent}`,
         5000
       );
-      if (isWager && !hasWagerSettlement && !wagerSettlementStarted && settlePvpWager) {
+      if (
+        isWager &&
+        PVP_WAGER_AUTO_SETTLE &&
+        !hasWagerSettlement &&
+        !wagerSettlementStarted &&
+        settlePvpWager
+      ) {
         wagerSettlementStarted = true;
         gameInstance.setStatus(`${final.toLowerCase()} • settling wager`, "confirming escrow");
         settlePvpWager({
@@ -1781,7 +1789,7 @@ function startPvpMatchController({
         }
         leavePvpToMenu();
       };
-      if (isWager && final === "MATCH TIE" && wagerSettlementError) {
+      if (isWager && final === "MATCH TIE" && (!PVP_WAGER_AUTO_SETTLE || wagerSettlementError)) {
         setWagerRefundButton();
       }
       return;
