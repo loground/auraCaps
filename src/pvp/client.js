@@ -102,6 +102,13 @@ export async function submitPvpTurnResult({ playerIdentity, roomId, turn }) {
   });
 }
 
+export async function settlePvpWager({ playerIdentity, roomId }) {
+  return callPvpFunction("pvp-settle-wager", {
+    roomId,
+    player: getPlayerIdentity(playerIdentity),
+  });
+}
+
 export function subscribePvpRoom({ roomId, onChange, onAim, onTurnSubmitted }) {
   const client = getSupabasePvpClient();
   if (!client || !roomId) {

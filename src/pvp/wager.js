@@ -26,6 +26,13 @@ const WAGER_ESCROW_ABI = [
     ],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "refund",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "matchId", type: "bytes32" }],
+    outputs: [],
+  },
 ];
 const ERC721_APPROVAL_ABI = [
   {
@@ -185,4 +192,16 @@ export async function joinWagerEscrow({ escrowAddress, matchId, cap }) {
     args: [matchId, tokenId],
   });
   return { matchId, approvalTxHash: approval?.hash || "", txHash: hash, receipt };
+}
+
+export async function refundWagerEscrow({ escrowAddress, matchId }) {
+  if (!matchId) {
+    throw new Error("Wager room is missing an escrow match id.");
+  }
+  const { hash, receipt } = await sendEscrowTransaction({
+    escrowAddress,
+    functionName: "refund",
+    args: [matchId],
+  });
+  return { matchId, txHash: hash, receipt };
 }

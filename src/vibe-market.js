@@ -842,12 +842,40 @@ export function subscribeVibeMarketState(listener) {
   return () => listeners.delete(listener);
 }
 
-export async function loadVibeMarketCollectionForWallet(walletAddress, { force = false } = {}) {
+export function clearVibeMarketOptimisticState() {
+  optimisticUnopenedPacks.clear();
+  optimisticOpenedItems.clear();
+  optimisticRemovedTokenIds.clear();
+}
+
+export function markVibeMarketTokensRemoved(tokenIds) {
+  const ids = (Array.isArray(tokenIds) ? tokenIds : [tokenIds])
+    .map((tokenId) => String(tokenId || "").trim())
+    .filter(Boolean);
+  if (ids.length === 0) {
+    return;
+  }
+  setState({
+    items: state.items.filter((item) => !ids.includes(String(item.tokenId))),
+    unopenedPacks: state.unopenedPacks.filter((item) => !ids.includes(String(item.tokenId))),
+  });
+  for (const tokenId of ids) {
+    optimisticRemovedTokenIds.add(tokenId);
+    optimisticUnopenedPacks.delete(tokenId);
+    optimisticOpenedItems.delete(tokenId);
+  }
+}
+
+export async function loadVibeMarketCollectionForWallet(
+  walletAddress,
+  { force = false, resetOptimistic = false } = {}
+) {
   const normalizedAddress = walletAddress?.toLowerCase() || "";
+  if (resetOptimistic) {
+    clearVibeMarketOptimisticState();
+  }
   if (!normalizedAddress) {
-    optimisticUnopenedPacks.clear();
-    optimisticOpenedItems.clear();
-    optimisticRemovedTokenIds.clear();
+    clearVibeMarketOptimisticState();
     setState({
       status: "idle",
       walletAddress: "",
@@ -865,11 +893,11 @@ export async function loadVibeMarketCollectionForWallet(walletAddress, { force =
   if (!force && state.walletAddress === normalizedAddress && state.status === "loaded") {
     return state;
   }
-  if (activeRequest?.walletAddress === normalizedAddress) {
+  if (!force && activeRequest?.walletAddress === normalizedAddress) {
     return activeRequest.promise;
   }
 
-  const preserveCurrentItems = state.walletAddress === normalizedAddress;
+  const preserveCurrentItems = !resetOptimistic && state.walletAddress === normalizedAddress;
   setState({
     status: "loading",
     walletAddress: normalizedAddress,
@@ -924,14 +952,12 @@ export async function loadVibeMarketCollectionForWallet(walletAddress, { force =
       ]);
       let tokenBalance = null;
       for (let attempt = 0; attempt < 3 && tokenBalance === null; attempt += 1) {
-        tokenBalance = await publicClient
-          .readContract({
-            address: game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS,
-            abi: ERC20_ABI,
-            functionName: "balanceOf",
-            args: [normalizedAddress],
-          })
-          .catch(() => null);
+        tokenBalance = await readContractWithRetry({
+          address: game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "balanceOf",
+          args: [normalizedAddress],
+        }).catch(() => null);
       }
       const items = boxes
         .map((box, index) => normalizeBox(box, game, offers, index))

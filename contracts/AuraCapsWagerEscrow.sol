@@ -52,6 +52,7 @@ contract AuraCapsWagerEscrow is AccessControl, ERC721Holder, Pausable, Reentranc
     );
     event MatchJoined(bytes32 indexed matchId, address indexed playerB, uint256 tokenB);
     event MatchSettled(bytes32 indexed matchId, address indexed winner, uint256 tokenA, uint256 tokenB);
+    event MatchDrawSettled(bytes32 indexed matchId, uint256 tokenA, uint256 tokenB);
     event MatchRefunded(bytes32 indexed matchId);
 
     error InvalidMatch();
@@ -131,6 +132,18 @@ contract AuraCapsWagerEscrow is AccessControl, ERC721Holder, Pausable, Reentranc
         collection.safeTransferFrom(address(this), winner, escrow.tokenB);
 
         emit MatchSettled(matchId, winner, escrow.tokenA, escrow.tokenB);
+    }
+
+    function settleDraw(bytes32 matchId) external nonReentrant onlyRole(RESULT_SIGNER_ROLE) {
+        MatchEscrow storage escrow = escrows[matchId];
+        if (escrow.status != Status.Funded) revert InvalidStatus();
+
+        escrow.status = Status.Settled;
+        IERC721 collection = IERC721(escrow.collection);
+        collection.safeTransferFrom(address(this), escrow.playerA, escrow.tokenA);
+        collection.safeTransferFrom(address(this), escrow.playerB, escrow.tokenB);
+
+        emit MatchDrawSettled(matchId, escrow.tokenA, escrow.tokenB);
     }
 
     function refund(bytes32 matchId) external nonReentrant {

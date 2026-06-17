@@ -94,6 +94,7 @@ supabase functions deploy pvp-join-room --no-verify-jwt
 supabase functions deploy pvp-get-room --no-verify-jwt
 supabase functions deploy pvp-list-rooms --no-verify-jwt
 supabase functions deploy pvp-submit-turn --no-verify-jwt
+supabase functions deploy pvp-settle-wager --no-verify-jwt
 ```
 
 Database migrations live in `supabase/migrations`.
@@ -108,13 +109,29 @@ Wager PvP must not rely on Supabase custody. The intended flow is:
 3. Player B approves the escrow contract and can only join by escrowing a cap
    from the same collection with the same on-chain rarity.
 4. Supabase coordinates the match and records turns, but does not hold assets.
-5. A backend result signer settles the escrow to the winner after the match.
+5. A backend result signer settles the escrow to the winner after the match, or
+   calls `settleDraw` to return both caps after a tied match.
 6. Either player can refund after the escrow timeout if the match never settles.
 
 The reference contract is in `contracts/AuraCapsWagerEscrow.sol`. Treat it as a
 starting point for audit and deployment, not production-ready custody code. The
 production backend should verify escrow events before starting wager matches and
-call `settle` from a protected result signer after the final round.
+call `settle` or `settleDraw` from a protected result signer after the final
+round.
+
+The Supabase `pvp-settle-wager` function recomputes the final score from stored
+turns and sends the settlement transaction from the result signer. Configure its
+secrets before deploying:
+
+```bash
+supabase secrets set \
+  BASE_RPC_URL=https://your-base-mainnet-rpc-url \
+  PVP_WAGER_RESULT_SIGNER_PRIVATE_KEY=0x...
+```
+
+`PVP_WAGER_RESULT_SIGNER_PRIVATE_KEY` must be the private key for the wallet
+passed as `resultSigner` when deploying `AuraCapsWagerEscrow`. Do not expose
+this key as a `VITE_*` variable.
 
 Compile the escrow contract:
 

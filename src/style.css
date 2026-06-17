@@ -354,7 +354,8 @@ canvas {
   color: #ffad98;
 }
 
-.app-mode-collection .wallet-connect-control {
+.app-mode-collection .wallet-connect-control,
+.app-mode-play .wallet-connect-control {
   display: none;
 }
 

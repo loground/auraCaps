@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.pvp-submit-turn]
 verify_jwt = false
+
+[functions.pvp-settle-wager]
+verify_jwt = false
