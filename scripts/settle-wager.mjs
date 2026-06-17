@@ -141,13 +141,14 @@ async function main() {
   }
   const turns = await supabaseRest(`pvp_turns?room_id=eq.${encodeURIComponent(roomId)}&order=round.asc`);
   const { playerAWins, playerBWins } = computeFinalScore(turns || [], players);
+  if (playerAWins === playerBWins) {
+    throw new Error("This wager match is tied. Use refund(matchId) after the escrow timeout.");
+  }
   const winner =
     playerAWins > playerBWins
       ? normalizeAddress(players[0].wallet)
-      : playerBWins > playerAWins
-        ? normalizeAddress(players[1].wallet)
-        : "";
-  if (playerAWins !== playerBWins && !winner) {
+      : normalizeAddress(players[1].wallet);
+  if (!winner) {
     throw new Error("Winning player does not have a wallet saved in pvp_room_players.");
   }
 
@@ -160,14 +161,14 @@ async function main() {
     DEFAULT_BASE_RPC_URL;
   const publicClient = createPublicClient({ chain: base, transport: http(rpcUrl) });
   const walletClient = createWalletClient({ account, chain: base, transport: http(rpcUrl) });
-  const functionName = winner ? "settle" : "settleDraw";
-  const args = winner ? [matchId, winner] : [matchId];
+  const functionName = "settle";
+  const args = [matchId, winner];
 
   console.log(`Room: ${roomId}`);
   console.log(`Score: player A ${playerAWins}, player B ${playerBWins}`);
   console.log(`Escrow: ${escrowAddress}`);
   console.log(`Match: ${matchId}`);
-  console.log(winner ? `Winner wallet: ${winner}` : "Result: draw, returning both caps");
+  console.log(`Winner wallet: ${winner}`);
 
   const hash = await walletClient.writeContract({
     address: escrowAddress,
@@ -186,7 +187,7 @@ async function main() {
     wager: {
       ...wager,
       settlementTx: hash,
-      settlementResult: winner ? "winner" : "draw",
+      settlementResult: "winner",
       settlementWinner: winner,
     },
   };

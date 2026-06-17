@@ -786,7 +786,9 @@ async function showCapSelectModal({
         : guestCaps;
     let activeCapFilter = isWalletPlayer ? "vibe-market" : "all";
     let selectableCaps = [...baseCaps];
-    let capsLoading = isWalletPlayer && getVibeMarketState().status === "loading";
+    const isVibeCapsLoading = (vibeState) =>
+      isWalletPlayer && !["loaded", "error"].includes(vibeState.status);
+    let capsLoading = isVibeCapsLoading(getVibeMarketState());
     let isClosed = false;
     let renderGridRequestId = 0;
     let spritePreviewNodes = [];
@@ -871,6 +873,9 @@ async function showCapSelectModal({
         `;
       }
       if (isClosed || requestId !== renderGridRequestId) {
+        return;
+      }
+      if (capsLoading) {
         return;
       }
       if (launchBtn) {
@@ -995,12 +1000,21 @@ async function showCapSelectModal({
     updateHints();
     updateFilterButtons();
     renderGrid();
+    if (isWalletPlayer) {
+      const session = getWalletSession();
+      const vibeState = getVibeMarketState();
+      if (session?.address && vibeState.status !== "loading") {
+        loadVibeMarketCollectionForWallet(session.address, {
+          force: vibeState.status !== "loaded" || !vibeState.items.length,
+        }).catch(() => {});
+      }
+    }
 
     const unsubscribeVibeMarket = isWalletPlayer
       ? subscribeVibeMarketState((vibeState) => {
           baseCaps = vibeState.items.filter((cap) => cap.filterGroup === "vibe-market");
           selectableCaps = [...baseCaps];
-          capsLoading = vibeState.status === "loading";
+          capsLoading = isVibeCapsLoading(vibeState);
           if (!byId(selectedPlayerCapId)) {
             selectedPlayerCapId = selectableCaps[0]?.id;
           }
@@ -1742,13 +1756,15 @@ function startPvpMatchController({
         `${final}\nYOU ${scores.player} - ${opponentName.toUpperCase()} ${scores.opponent}`,
         5000
       );
-      if (
+      const shouldSettleWinner =
+        isWager && final !== "MATCH TIE" && !hasWagerSettlement && !wagerSettlementStarted;
+      const shouldSettleTie =
         isWager &&
+        final === "MATCH TIE" &&
         PVP_WAGER_AUTO_SETTLE &&
         !hasWagerSettlement &&
-        !wagerSettlementStarted &&
-        settlePvpWager
-      ) {
+        !wagerSettlementStarted;
+      if ((shouldSettleWinner || shouldSettleTie) && settlePvpWager) {
         wagerSettlementStarted = true;
         gameInstance.setStatus(`${final.toLowerCase()} • settling wager`, "confirming escrow");
         settlePvpWager({
@@ -2244,6 +2260,15 @@ async function showCollection() {
   const localVersion = ++viewVersion;
   clearCurrentScreen();
   setViewMode("collection");
+  const session = getWalletSession();
+  if (session?.mode === "wallet" && session.address) {
+    const vibeState = getVibeMarketState();
+    if (vibeState.status !== "loading") {
+      loadVibeMarketCollectionForWallet(session.address, {
+        force: vibeState.status !== "loaded",
+      }).catch(() => {});
+    }
+  }
   const { mountCollectionScreen } = await loadCollectionModule();
   if (localVersion !== viewVersion) {
     return;

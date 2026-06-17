@@ -209,7 +209,7 @@ export function mountCollectionScreen({ app, onBack }) {
     vibe: {
       id: "vibe",
       label: "vibe.market",
-      loading: getVibeMarketState().status === "loading",
+      loading: !["loaded", "error"].includes(getVibeMarketState().status),
       status: getVibeMarketState().status,
       error: getVibeMarketState().error,
       subcollections: {
@@ -1553,7 +1553,7 @@ export function mountCollectionScreen({ app, onBack }) {
 
   const unsubscribeVibeMarket = subscribeVibeMarketState((vibeState) => {
     const vibeCollection = COLLECTIONS.vibe;
-    vibeCollection.loading = vibeState.status === "loading";
+    vibeCollection.loading = !["loaded", "error"].includes(vibeState.status);
     vibeCollection.status = vibeState.status;
     vibeCollection.error = vibeState.error;
     vibeCollection.label = vibeState.collectionName || "vibe.market";

@@ -115,19 +115,18 @@ Wager PvP must not rely on Supabase custody. The intended flow is:
 3. Player B approves the escrow contract and can only join by escrowing a cap
    from the same collection with the same on-chain rarity.
 4. Supabase coordinates the match and records turns, but does not hold assets.
-5. A backend result signer settles the escrow to the winner after the match, or
-   calls `settleDraw` to return both caps after a tied match.
-6. Either player can refund after the escrow timeout if the match never settles.
+5. A backend result signer settles the escrow to the winner after a won/lost
+   match.
+6. Tied or abandoned matches can be refunded after the escrow timeout.
 
 The reference contract is in `contracts/AuraCapsWagerEscrow.sol`. Treat it as a
 starting point for audit and deployment, not production-ready custody code. The
 production backend should verify escrow events before starting wager matches and
-call `settle` or `settleDraw` from a protected result signer after the final
-round.
+call `settle` from a protected result signer after a won/lost final round.
 
 The Supabase `pvp-settle-wager` function recomputes the final score from stored
-turns and sends the settlement transaction from the result signer. Configure its
-secrets before deploying:
+turns and sends the winner settlement transaction from the result signer.
+Configure its secrets before deploying:
 
 ```bash
 supabase secrets set \
@@ -139,7 +138,7 @@ supabase secrets set \
 passed as `resultSigner` when deploying `AuraCapsWagerEscrow`. Do not expose
 this key as a `VITE_*` variable.
 
-If you do not use the Supabase CLI, settle a finished wager room manually from
+If you do not use the Supabase CLI, settle a won/lost wager room manually from
 your local machine:
 
 ```bash
@@ -147,7 +146,7 @@ npm run wager:settle -- --room-id YOUR_PVP_ROOM_ID
 ```
 
 The script reads the finished room from Supabase, recomputes the final score,
-and calls `settle` or `settleDraw` from the result signer wallet. It needs
+and calls `settle` from the result signer wallet. It needs
 `VITE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` or `VITE_SUPABASE_ANON_KEY`,
 `PVP_WAGER_RESULT_SIGNER_PRIVATE_KEY`, and `BASE_RPC_URL` in `.env.local` or
 your shell.

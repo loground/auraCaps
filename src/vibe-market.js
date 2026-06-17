@@ -939,17 +939,33 @@ export async function loadVibeMarketCollectionForWallet(
           : [];
       const unopenedBoxes = ownedBoxes.filter(isUnopenedBox);
       const openedBoxes = ownedBoxes.filter((box) => !isUnopenedBox(box));
-      const [boxes, offers, packInfo] = await Promise.all([
-        enrichBoxesWithMetadata(openedBoxes, game?.slug || "naughty-robots"),
-        loadSellOffers(game).catch((error) => {
-          console.warn("Could not load vibe.market sell offers", error);
-          return {};
-        }),
-        loadPackInfo(game).catch((error) => {
-          console.warn("Could not load vibe.market pack pricing", error);
-          return DEFAULT_PACK_INFO;
-        }),
-      ]);
+      const offersPromise = loadSellOffers(game).catch((error) => {
+        console.warn("Could not load vibe.market sell offers", error);
+        return {};
+      });
+      const packInfoPromise = loadPackInfo(game).catch((error) => {
+        console.warn("Could not load vibe.market pack pricing", error);
+        return DEFAULT_PACK_INFO;
+      });
+      const boxes = await enrichBoxesWithMetadata(openedBoxes, game?.slug || "naughty-robots");
+      const initialItems = boxes
+        .map((box, index) => normalizeBox(box, game, {}, index))
+        .filter((item) => item.imagePath);
+      const unopenedPacks = unopenedBoxes
+        .map((box, index) => normalizeUnopenedPack(box, game, index))
+        .filter((item) => item.imagePath);
+      const initialOptimisticState = mergeOptimisticState(initialItems, unopenedPacks);
+      setState({
+        status: "loaded",
+        walletAddress: normalizedAddress,
+        collectionName: game?.nftName || game?.tokenName || "vibe.market",
+        items: initialOptimisticState.items,
+        unopenedPacks: initialOptimisticState.unopenedPacks,
+        packInfo: state.packInfo || DEFAULT_PACK_INFO,
+        error: "",
+      });
+
+      const [offers, packInfo] = await Promise.all([offersPromise, packInfoPromise]);
       let tokenBalance = null;
       for (let attempt = 0; attempt < 3 && tokenBalance === null; attempt += 1) {
         tokenBalance = await readContractWithRetry({
@@ -961,9 +977,6 @@ export async function loadVibeMarketCollectionForWallet(
       }
       const items = boxes
         .map((box, index) => normalizeBox(box, game, offers, index))
-        .filter((item) => item.imagePath);
-      const unopenedPacks = unopenedBoxes
-        .map((box, index) => normalizeUnopenedPack(box, game, index))
         .filter((item) => item.imagePath);
       const optimisticState = mergeOptimisticState(items, unopenedPacks);
       const nextState = {
