@@ -350,6 +350,10 @@ canvas {
   color: #ffad98;
 }
 
+.app-mode-collection .wallet-connect-control {
+  display: none;
+}
+
 .wallet-connect-active .back-btn {
   top: calc(env(safe-area-inset-top, 0px) + 4.8rem);
 }
@@ -828,9 +832,12 @@ button:disabled {
 .access-modal {
   position: fixed;
   inset: 0;
+  min-height: 100dvh;
   z-index: 100;
   display: grid;
   place-items: center;
+  align-items: center;
+  justify-items: center;
   padding:
     max(1rem, env(safe-area-inset-top, 0px))
     max(1rem, env(safe-area-inset-right, 0px))
@@ -1785,11 +1792,15 @@ button:disabled {
 .collection-screen {
   width: 100%;
   height: 100%;
-  padding: 2.2rem 1.2rem 1rem;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 2.2rem)
+    1.2rem
+    calc(env(safe-area-inset-bottom, 0px) + 1rem);
   display: flex;
   flex-direction: column;
   align-items: center;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mode-play {
@@ -4550,12 +4561,24 @@ button:disabled {
     bottom: auto;
   }
 
+  .app-mode-collection.wallet-connect-active .back-btn,
+  .mode-collection .back-btn {
+    top: calc(env(safe-area-inset-top, 0px) + 0.7rem);
+    right: calc(env(safe-area-inset-right, 0px) + 0.7rem);
+  }
+
   .back-btn {
     top: calc(env(safe-area-inset-top, 0px) + 4.15rem);
     right: calc(env(safe-area-inset-right, 0px) + 0.55rem);
     min-width: 96px;
     font-size: 0.8rem;
     padding: 0.42rem 0.5rem;
+  }
+
+  .app-mode-collection.wallet-connect-active .back-btn,
+  .mode-collection .back-btn {
+    top: calc(env(safe-area-inset-top, 0px) + 0.7rem);
+    right: calc(env(safe-area-inset-right, 0px) + 0.7rem);
   }
 
   .theme-btn {
@@ -4570,7 +4593,13 @@ button:disabled {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    padding-bottom: 0.75rem;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.2rem);
+  }
+
+  .collection-grid.pack-batch-grid {
+    min-height: 0;
+    align-items: stretch;
+    padding-top: 0;
   }
 
   .collection-market-action {
@@ -4579,15 +4608,48 @@ button:disabled {
 
   .pack-batch-card {
     grid-template-columns: 1fr;
+    width: 100%;
+    min-height: 0;
+    gap: 0.72rem;
+    padding: 0.7rem;
+    border-radius: 14px;
+    overflow: visible;
+  }
+
+  .pack-batch-card::before {
+    display: none;
+  }
+
+  .pack-shop-visual {
+    min-height: 0;
+    height: min(42vw, 150px);
+    padding: 0.45rem;
+    border-radius: 12px;
+  }
+
+  .pack-shop-visual img {
+    max-height: 132px;
   }
 
   .pack-batch-actions {
     grid-template-columns: 1fr;
+    gap: 0.55rem;
+    margin-top: 0.48rem;
   }
 
   .pack-batch-section {
     grid-template-columns: 1fr;
-    gap: 0.62rem;
+    gap: 0.42rem;
+    min-height: 0;
+    padding: 0.62rem;
+    border-radius: 12px;
+  }
+
+  .pack-batch-section > .buy-pack-btn,
+  .pack-batch-section > .open-pack-btn,
+  .pack-batch-section > .sell-pack-btn {
+    min-height: 42px;
+    font-size: 0.76rem;
   }
 
   .pack-batch-open .open-pack-btn {
@@ -4597,11 +4659,28 @@ button:disabled {
   .pack-amount-field,
   .pack-row-currency {
     justify-content: space-between;
+    gap: 0.44rem;
+  }
+
+  .pack-currency-field select,
+  .pack-quantity-stepper {
+    min-height: 38px;
+  }
+
+  .pack-batch-card .cap-info {
+    padding: 0;
+  }
+
+  .pack-shop-name {
+    font-size: 1.18rem;
   }
 
   .collection-screen {
     overflow: auto;
-    padding-inline: 0.9rem;
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 2rem)
+      0.9rem
+      calc(env(safe-area-inset-bottom, 0px) + 1rem);
   }
 
   .collection-switcher {

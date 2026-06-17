@@ -1904,6 +1904,9 @@ function addPvpResumeButton() {
 
 function setViewMode(mode) {
   app.className = `mode-${mode} theme-${currentTheme}`;
+  document.body.classList.toggle("app-mode-collection", mode === "collection");
+  document.body.classList.toggle("app-mode-play", mode === "play");
+  document.body.classList.toggle("app-mode-menu", mode === "menu");
 }
 
 function normalizeTheme(theme) {
