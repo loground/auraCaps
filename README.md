@@ -6,10 +6,11 @@ AURA CAPS is a browser-based 3D cap-battle game built with Three.js, Rapier phys
 
 - 3D themed main menu with Hell, Heaven, Jungle Bay, and Bankr themes
 - Classic cap duel and Slammer battle modes
-- Training and AI match flows
+- Training, AI, and PvP room match flows
+- Optional wager PvP rooms for wallet caps of matching rarity
 - Local free-cap collection with animated sprite cap support
 - Animated sprite cap support
-- Dormant Supabase PvP implementation reserved for a future wallet-gated release
+- Supabase-backed PvP rooms with public/private room support
 
 ## Tech Stack
 
@@ -38,11 +39,16 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 VITE_WALLETCONNECT_PROJECT_ID=
 VITE_VIBE_MARKET_API_KEY=
+VITE_PVP_WAGER_ESCROW_ADDRESS=
 ```
 
 Create the WalletConnect project ID in the Reown dashboard. RainbowKit presents
 Phantom first in its recommended wallet list, and wagmi restricts sessions to
-Base Mainnet. The Supabase values support the currently hidden PvP implementation.
+Base Mainnet. The Supabase values power PvP room creation, joining, realtime
+updates, and turn submission.
+
+`VITE_PVP_WAGER_ESCROW_ADDRESS` enables Wager PvP in the game setup. Leave it
+empty until the escrow contract is deployed and audited.
 
 Create a free vibe.market API key:
 
@@ -84,6 +90,24 @@ supabase functions deploy pvp-submit-turn --no-verify-jwt
 ```
 
 Database migrations live in `supabase/migrations`.
+
+## Wager PvP Escrow
+
+Wager PvP must not rely on Supabase custody. The intended flow is:
+
+1. Both players connect wallets on Base and pick opened vibe.market caps.
+2. Player A approves the escrow contract, creates an escrow match, and transfers
+   their selected ERC-721 cap to the escrow contract.
+3. Player B approves the escrow contract and can only join by escrowing a cap
+   from the same collection with the same on-chain rarity.
+4. Supabase coordinates the match and records turns, but does not hold assets.
+5. A backend result signer settles the escrow to the winner after the match.
+6. Either player can refund after the escrow timeout if the match never settles.
+
+The reference contract is in `contracts/AuraCapsWagerEscrow.sol`. Treat it as a
+starting point for audit and deployment, not production-ready custody code. The
+production backend should verify escrow events before starting wager matches and
+call `settle` from a protected result signer after the final round.
 
 ## Assets
 

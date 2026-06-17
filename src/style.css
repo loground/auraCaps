@@ -1176,6 +1176,16 @@ button:disabled {
   width: 100%;
 }
 
+.mode-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
+.wager-mode-btn {
+  border-color: rgba(255, 225, 135, 0.65);
+}
+
 .setup-mode-card {
   min-height: 48px;
   display: grid;

@@ -1,8 +1,10 @@
 import {
   handleCors,
   jsonResponse,
+  normalizeWager,
   normalizeRoomCode,
   requirePlayer,
+  requireWagerCap,
   rest,
 } from "../_shared/pvp.js";
 
@@ -30,6 +32,8 @@ Deno.serve(async (req) => {
     if (room.status !== "waiting") {
       throw new Error("Room is not waiting for players.");
     }
+    const wager = normalizeWager(room.setup || {}, payload.cap || null);
+    requireWagerCap({ player, cap: payload.cap || null, wager });
 
     const players = await rest(`pvp_room_players?room_id=eq.${room.id}&order=slot.asc`);
     const existing = players.find((entry) => entry.player_id === player.playerId);
@@ -46,7 +50,7 @@ Deno.serve(async (req) => {
         room_id: room.id,
         player_id: player.playerId,
         player_name: player.username,
-        wallet: null,
+        wallet: player.walletAddress || null,
         slot: 2,
         selected_cap: payload.cap || null,
       },

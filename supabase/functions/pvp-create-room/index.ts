@@ -2,7 +2,9 @@ import {
   handleCors,
   jsonResponse,
   normalizeMode,
+  normalizeWager,
   requirePlayer,
+  requireWagerCap,
   rest,
 } from "../_shared/pvp.js";
 
@@ -28,8 +30,14 @@ Deno.serve(async (req) => {
     const player = requirePlayer(payload.player);
     const setup = payload.setup || {};
     const mode = normalizeMode(setup.gameMode);
+    const wager = normalizeWager(setup, payload.cap || null);
+    requireWagerCap({ player, cap: payload.cap || null, wager });
     const roomCode = makeRoomCode();
     const isPrivate = Boolean(payload.isPrivate);
+    const storedSetup = {
+      ...setup,
+      wager,
+    };
 
     const [room] = await rest("pvp_rooms", {
       method: "POST",
@@ -41,7 +49,7 @@ Deno.serve(async (req) => {
         is_private: isPrivate,
         created_by: player.playerId,
         current_turn: player.playerId,
-        setup,
+        setup: storedSetup,
       },
     });
 
@@ -51,7 +59,7 @@ Deno.serve(async (req) => {
         room_id: room.id,
         player_id: player.playerId,
         player_name: player.username,
-        wallet: null,
+        wallet: player.walletAddress || null,
         slot: 1,
         selected_cap: payload.cap || null,
       },

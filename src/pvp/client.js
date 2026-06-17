@@ -59,6 +59,7 @@ export function getPlayerIdentity(identity) {
   return {
     playerId: identity?.playerId || "",
     username: identity?.username || "Player",
+    walletAddress: identity?.walletAddress || "",
   };
 }
 
