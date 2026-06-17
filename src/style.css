@@ -299,6 +299,10 @@ canvas {
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
 }
 
+.pvp-resume-btn:hover {
+  transform: translateX(-50%) translateY(-1px);
+}
+
 .wallet-connect-control {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 0.8rem);
@@ -4473,7 +4477,8 @@ button:disabled {
   }
 
   .pvp-resume-btn {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+    top: calc(env(safe-area-inset-top, 0px) + 4.15rem);
+    bottom: auto;
     min-width: min(220px, calc(100vw - 1.4rem));
     font-size: 0.9rem;
     padding: 0.52rem 0.7rem;
@@ -4592,13 +4597,13 @@ button:disabled {
     height: auto;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.55rem;
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.2rem);
   }
 
   .collection-grid.pack-batch-grid {
     min-height: 0;
-    align-items: stretch;
+    display: block;
     padding-top: 0;
   }
 
@@ -4610,9 +4615,9 @@ button:disabled {
     grid-template-columns: 1fr;
     width: 100%;
     min-height: 0;
-    gap: 0.72rem;
-    padding: 0.7rem;
-    border-radius: 14px;
+    gap: 0.45rem;
+    padding: 0.52rem;
+    border-radius: 12px;
     overflow: visible;
   }
 
@@ -4622,34 +4627,35 @@ button:disabled {
 
   .pack-shop-visual {
     min-height: 0;
-    height: min(42vw, 150px);
-    padding: 0.45rem;
-    border-radius: 12px;
+    height: min(32vw, 112px);
+    padding: 0.32rem;
+    border-radius: 10px;
   }
 
   .pack-shop-visual img {
-    max-height: 132px;
+    max-height: 96px;
   }
 
   .pack-batch-actions {
     grid-template-columns: 1fr;
-    gap: 0.55rem;
-    margin-top: 0.48rem;
+    gap: 0.36rem;
+    margin-top: 0.28rem;
   }
 
   .pack-batch-section {
     grid-template-columns: 1fr;
-    gap: 0.42rem;
+    gap: 0.28rem;
     min-height: 0;
-    padding: 0.62rem;
-    border-radius: 12px;
+    padding: 0.42rem;
+    border-radius: 10px;
   }
 
   .pack-batch-section > .buy-pack-btn,
   .pack-batch-section > .open-pack-btn,
   .pack-batch-section > .sell-pack-btn {
-    min-height: 42px;
-    font-size: 0.76rem;
+    min-height: 36px;
+    font-size: 0.68rem;
+    border-radius: 9px;
   }
 
   .pack-batch-open .open-pack-btn {
@@ -4659,12 +4665,17 @@ button:disabled {
   .pack-amount-field,
   .pack-row-currency {
     justify-content: space-between;
-    gap: 0.44rem;
+    gap: 0.32rem;
+    font-size: 0.62rem;
   }
 
   .pack-currency-field select,
   .pack-quantity-stepper {
-    min-height: 38px;
+    min-height: 34px;
+  }
+
+  .pack-quantity-stepper {
+    grid-template-columns: 28px 38px 28px;
   }
 
   .pack-batch-card .cap-info {
@@ -4672,7 +4683,14 @@ button:disabled {
   }
 
   .pack-shop-name {
-    font-size: 1.18rem;
+    font-size: 1rem;
+  }
+
+  .pack-shop-price,
+  .pack-batch-status,
+  .pack-batch-card .cap-info p {
+    font-size: 0.62rem;
+    line-height: 1.16;
   }
 
   .collection-screen {
@@ -4692,45 +4710,46 @@ button:disabled {
   .collection-tab {
     min-width: 0;
     flex: 1;
-    font-size: 0.68rem;
-    padding: 0.34rem 0.45rem;
+    font-size: 0.62rem;
+    padding: 0.3rem 0.36rem;
   }
 
   .collection-card {
-    min-height: 126px;
+    min-height: 96px;
     width: 100%;
-    grid-template-columns: minmax(86px, 34%) 1fr;
-    gap: 0.48rem;
-    padding: 0.45rem;
+    grid-template-columns: minmax(66px, 29%) 1fr;
+    gap: 0.36rem;
+    padding: 0.34rem;
+    border-radius: 10px;
   }
 
   .collection-card::after {
-    left: calc(34% + 0.02rem);
+    left: calc(29% + 0.02rem);
   }
 
   .cap-info {
-    padding: 0.42rem 0.52rem;
-    gap: 0.3rem;
+    padding: 0.32rem 0.38rem;
+    gap: 0.22rem;
   }
 
   .cap-info h3 {
-    font-size: 0.86rem;
+    font-size: 0.76rem;
   }
 
   .cap-info p {
-    font-size: 0.68rem;
-    line-height: 1.2;
+    font-size: 0.58rem;
+    line-height: 1.14;
   }
 
   .disc-card {
-    width: min(29vw, 116px);
-    height: min(29vw, 116px);
+    width: min(22vw, 82px);
+    height: min(22vw, 82px);
   }
 
   .inspect-btn {
-    min-width: 84px;
-    font-size: 0.64rem;
-    padding: 0.3rem 0.48rem;
+    min-width: 70px;
+    font-size: 0.56rem;
+    padding: 0.24rem 0.36rem;
   }
 
   .inspector-panel {
