@@ -1,0 +1,11 @@
+{
+  "contractName": "AuraCapsWagerEscrow",
+  "network": "base",
+  "chainId": 8453,
+  "address": "0xe79bcd5b289e694312a59e789392c9880d4463af",
+  "transactionHash": "0x79de66334a22794bdfa6129e8783005f528cf2f273d4db9ba4d7caac2a762f06",
+  "deployer": "0xAB1cba166C0cAa617461F8702aDBF0470682c51F",
+  "admin": "0xAB1cba166C0cAa617461F8702aDBF0470682c51F",
+  "resultSigner": "0xAB1cba166C0cAa617461F8702aDBF0470682c51F",
+  "deployedAt": "2026-06-17T11:47:50.167Z"
+}

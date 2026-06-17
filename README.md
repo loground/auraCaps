@@ -109,6 +109,30 @@ starting point for audit and deployment, not production-ready custody code. The
 production backend should verify escrow events before starting wager matches and
 call `settle` from a protected result signer after the final round.
 
+Compile the escrow contract:
+
+```bash
+npm run contracts:compile
+```
+
+Deploy it to Base after creating and funding a dedicated deployer wallet:
+
+```bash
+# .env.local
+DEPLOYER_PRIVATE_KEY=0xYOUR_DEPLOYER_PRIVATE_KEY
+ESCROW_ADMIN_ADDRESS=0xYOUR_ADMIN_WALLET
+ESCROW_RESULT_SIGNER_ADDRESS=0xYOUR_BACKEND_SETTLEMENT_WALLET
+```
+
+```bash
+npm run contracts:deploy:base
+```
+
+The deploy script prints the escrow contract address, saves a deployment JSON in
+`deployments/`, and updates `VITE_PVP_WAGER_ESCROW_ADDRESS` in `.env.local`.
+Use `npm run contracts:deploy:base-sepolia` first if you want a testnet dress
+rehearsal.
+
 ## Assets
 
 Large game assets are served from `public/` and referenced by path at runtime.

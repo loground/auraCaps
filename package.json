@@ -5,9 +5,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "contracts:compile": "node scripts/compile-escrow.mjs",
+    "contracts:deploy:base": "node scripts/deploy-escrow.mjs --network base",
+    "contracts:deploy:base-sepolia": "node scripts/deploy-escrow.mjs --network base-sepolia"
   },
   "devDependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
+    "solc": "^0.8.35",
     "vite": "^8.0.4"
   },
   "dependencies": {
