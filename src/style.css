@@ -284,6 +284,21 @@ canvas {
   opacity: 0.82;
 }
 
+.pvp-resume-btn {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 5.4rem);
+  z-index: 12;
+  transform: translateX(-50%);
+  min-width: min(240px, calc(100vw - 2rem));
+  border-color: rgba(255, 224, 156, 0.88);
+  background: linear-gradient(180deg, rgba(242, 157, 73, 0.98), rgba(143, 50, 24, 0.98));
+  color: #fff8e9;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
+}
+
 .wallet-connect-control {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 0.8rem);
@@ -816,7 +831,12 @@ button:disabled {
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 1rem;
+  padding:
+    max(1rem, env(safe-area-inset-top, 0px))
+    max(1rem, env(safe-area-inset-right, 0px))
+    max(1rem, env(safe-area-inset-bottom, 0px))
+    max(1rem, env(safe-area-inset-left, 0px));
+  overflow: auto;
 }
 
 .access-modal-backdrop {
@@ -832,6 +852,7 @@ button:disabled {
   position: relative;
   z-index: 1;
   width: min(440px, 100%);
+  max-height: calc(100dvh - 2rem);
   overflow: hidden;
   border: 1px solid rgba(255, 126, 87, 0.56);
   border-radius: 18px;
@@ -1082,6 +1103,12 @@ button:disabled {
   z-index: 20;
   display: grid;
   place-items: center;
+  padding:
+    max(0.7rem, env(safe-area-inset-top, 0px))
+    max(0.7rem, env(safe-area-inset-right, 0px))
+    max(0.7rem, env(safe-area-inset-bottom, 0px))
+    max(0.7rem, env(safe-area-inset-left, 0px));
+  overflow: auto;
 }
 
 .play-setup-backdrop {
@@ -1095,6 +1122,8 @@ button:disabled {
   position: relative;
   z-index: 1;
   width: min(460px, calc(100vw - 1.4rem));
+  max-height: calc(100dvh - 1.4rem);
+  overflow: auto;
   border-radius: 14px;
   border: 1px solid rgba(255, 126, 87, 0.5);
   background: linear-gradient(180deg, rgba(54, 14, 11, 0.95), rgba(23, 7, 7, 0.95));
@@ -1170,6 +1199,10 @@ button:disabled {
 
 .mode-buttons:has(> :nth-child(3)) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mode-buttons:has(> :nth-child(4)) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .mode-btn {
@@ -4348,13 +4381,33 @@ button:disabled {
   }
 
   .play-setup-panel {
-    width: min(430px, calc(100vw - 1rem));
+    width: min(430px, calc(100vw - 0.8rem));
+    max-height: calc(100dvh - 0.8rem);
     padding: 0.78rem 0.74rem 0.72rem;
     gap: 0.48rem;
   }
 
+  .mode-buttons,
+  .mode-buttons:has(> :nth-child(3)),
+  .mode-buttons:has(> :nth-child(4)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mode-btn {
+    min-width: 0;
+    min-height: 42px;
+    padding: 0.42rem 0.46rem;
+    font-size: 0.78rem;
+    line-height: 1.08;
+    white-space: normal;
+  }
+
+  .setup-rules-preview {
+    width: min(100%, 300px);
+  }
+
   .caps-select-panel {
-    width: min(430px, calc(100vw - 1rem));
+    width: min(430px, calc(100vw - 0.8rem));
   }
 
   .cap-pick-grid {
@@ -4366,6 +4419,10 @@ button:disabled {
     font-size: 0.8rem;
   }
 
+  .play-setup-panel h2 {
+    max-width: calc(100% - 2.3rem);
+  }
+
   .play-setup-panel select {
     font-size: 0.86rem;
     padding: 0.42rem 0.5rem;
@@ -4375,6 +4432,40 @@ button:disabled {
     min-width: 96px;
     font-size: 0.8rem;
     padding: 0.4rem 0.54rem;
+  }
+
+  .pvp-room-panel {
+    width: min(430px, calc(100vw - 0.8rem));
+  }
+
+  .pvp-public-room {
+    grid-template-columns: 1fr;
+    gap: 0.22rem;
+  }
+
+  .pvp-room-result {
+    min-height: 3.4rem;
+    font-size: 0.8rem;
+    padding: 0.58rem;
+  }
+
+  .access-panel {
+    width: min(440px, calc(100vw - 0.8rem));
+    max-height: calc(100dvh - 0.8rem);
+    overflow: auto;
+    border-radius: 14px;
+  }
+
+  .access-actions button {
+    min-height: 44px;
+    font-size: 0.86rem;
+  }
+
+  .pvp-resume-btn {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+    min-width: min(220px, calc(100vw - 1.4rem));
+    font-size: 0.9rem;
+    padding: 0.52rem 0.7rem;
   }
 
   .play-setup-close {

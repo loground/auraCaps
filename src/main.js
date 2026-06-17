@@ -5,6 +5,7 @@ import { playSound, preloadSounds, unlockSounds } from "./sound.js";
 import {
   getWalletSession,
   mountWalletConnectButton,
+  openWalletPicker,
   setWalletAccessTheme,
   showInitialAccessModal,
 } from "./wallet-access.jsx";
@@ -297,9 +298,9 @@ function navigateToCollection() {
   showCollection();
 }
 
-function navigateToBattles({ pvpRoomCode = "" } = {}) {
+function navigateToBattles({ pvpRoomCode = "", pvpRoomId = "" } = {}) {
   setRoute(ROUTES.battles);
-  showPlay({ pvpRoomCode });
+  showPlay({ pvpRoomCode, pvpRoomId });
 }
 
 function returnToMenuFromCancelledBattle() {
@@ -317,7 +318,11 @@ async function renderCurrentRoute() {
   if (route === ROUTES.battles) {
     await showMenu({ startPendingPvpInvite: false });
     if (getCurrentRoute() === ROUTES.battles) {
-      await showPlay({ pvpRoomCode: pendingPvpInviteCode });
+      const activeRoom = loadActivePvpRoom();
+      await showPlay({
+        pvpRoomCode: pendingPvpInviteCode || activeRoom?.code || "",
+        pvpRoomId: pendingPvpInviteCode ? "" : activeRoom?.id || "",
+      });
     }
     return;
   }
@@ -339,11 +344,12 @@ function pickRefreshTheme() {
 
 function showPlaySetupModal({ theme }) {
   return new Promise((resolve) => {
-    const walletSession = getWalletSession();
-    const canStartWagerPvp =
-      PVP_ENABLED && walletSession?.mode === "wallet" && Boolean(walletSession.address) && isPvpWagerConfigured();
+    const hasWalletForWager = () => {
+      const walletSession = getWalletSession();
+      return walletSession?.mode === "wallet" && Boolean(walletSession.address);
+    };
     const wagerDisabledReason =
-      walletSession?.mode !== "wallet" || !walletSession.address
+      !hasWalletForWager()
         ? "Connect a wallet to wager a cap."
         : getPvpWagerConfigStatus();
     const overlay = document.createElement("div");
@@ -378,9 +384,7 @@ function showPlaySetupModal({ theme }) {
             ${PVP_ENABLED ? '<button id="setupBattlePvpBtn" class="mode-btn" type="button">PvP</button>' : ""}
             ${
               PVP_ENABLED
-                ? `<button id="setupBattlePvpWagerBtn" class="mode-btn wager-mode-btn" type="button" ${
-                    canStartWagerPvp ? "" : "disabled"
-                  }>Wager PvP</button>`
+                ? `<button id="setupBattlePvpWagerBtn" class="mode-btn wager-mode-btn" type="button">Wager PvP</button>`
                 : ""
             }
           </div>
@@ -506,14 +510,13 @@ function showPlaySetupModal({ theme }) {
       updateBattleModeUI();
     };
     const onBattlePvpWager = () => {
-      if (!canStartWagerPvp) {
-        if (battleHint) {
-          battleHint.textContent = wagerDisabledReason;
-        }
-        return;
-      }
       selectedBattleMode = "pvp-wager";
       updateBattleModeUI();
+      if ((!hasWalletForWager() || !isPvpWagerConfigured()) && battleHint) {
+        battleHint.textContent = !hasWalletForWager()
+          ? "Connect a wallet to wager a cap."
+          : getPvpWagerConfigStatus();
+      }
     };
     const onBack = () => {
       setupStep = "mode";
@@ -550,6 +553,20 @@ function showPlaySetupModal({ theme }) {
       if (setupStep === "mode") {
         setupStep = "battle";
         updateStepUI();
+        return;
+      }
+      if (selectedBattleMode === "pvp-wager" && !hasWalletForWager()) {
+        if (battleHint) {
+          battleHint.textContent = "Connect a wallet first, then choose Wager PvP again.";
+        }
+        try {
+          openWalletPicker();
+        } catch (error) {
+          if (battleHint) {
+            battleHint.textContent =
+              error?.message || "Wallet connection is unavailable right now.";
+          }
+        }
         return;
       }
       const value = {
@@ -1853,8 +1870,36 @@ function addBackButton(onClick) {
 }
 
 function leavePvpToMenu() {
-  clearPvpResumeTarget();
   navigateToMenu();
+}
+
+function addPvpResumeButton() {
+  if (!PVP_ENABLED) {
+    return null;
+  }
+  const activeRoom = loadActivePvpRoom();
+  if (!activeRoom?.id && !activeRoom?.code) {
+    return null;
+  }
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "pvp-resume-btn";
+  button.textContent = "resume match";
+  button.addEventListener("click", onResume);
+  app.appendChild(button);
+
+  function onResume() {
+    navigateToBattles({
+      pvpRoomCode: activeRoom.code || "",
+      pvpRoomId: activeRoom.id || "",
+    });
+  }
+
+  return () => {
+    button.removeEventListener("click", onResume);
+    button.remove();
+  };
 }
 
 function setViewMode(mode) {
@@ -1893,7 +1938,7 @@ async function showMenu({ startPendingPvpInvite = true } = {}) {
   if (localVersion !== viewVersion) {
     return;
   }
-  cleanupScreen = mountMenuScreen({
+  cleanupScreen = composeCleanups(mountMenuScreen({
     app,
     theme: currentTheme,
     soundEnabled,
@@ -1910,14 +1955,14 @@ async function showMenu({ startPendingPvpInvite = true } = {}) {
     },
     onPlay: navigateToBattles,
     onCollection: navigateToCollection,
-  });
+  }), addPvpResumeButton());
   if (startPendingPvpInvite) {
     maybeStartPendingPvpInvite();
   }
 }
 
-async function showPlay({ pvpRoomCode = "" } = {}) {
-  if (!PVP_ENABLED && pvpRoomCode) {
+async function showPlay({ pvpRoomCode = "", pvpRoomId = "" } = {}) {
+  if (!PVP_ENABLED && (pvpRoomCode || pvpRoomId)) {
     clearPvpResumeTarget();
     navigateToMenu({ replace: true });
     return;
@@ -1925,12 +1970,13 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
   const localVersion = ++viewVersion;
   let setup = null;
   let resumePvpRoomState = null;
-  if (pvpRoomCode) {
+  if (pvpRoomCode || pvpRoomId) {
     const { getPlayerIdentity, getPvpRoom } = await loadPvpModule();
     try {
       const preview = await getPvpRoom({
         playerIdentity: getCurrentPlayerIdentity(),
         roomCode: pvpRoomCode,
+        roomId: pvpRoomId,
       });
       const localPlayer = getPlayerIdentity(getCurrentPlayerIdentity());
       const players = Array.isArray(preview?.players) ? preview.players : [];
@@ -1944,6 +1990,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
         theme: preview?.room?.setup?.theme || currentTheme,
         wager: preview?.room?.setup?.wager || { enabled: false },
         pvpRoomCode,
+        pvpRoomId,
       };
       if (isAlreadyInRoom && preview?.room?.status !== "waiting") {
         resumePvpRoomState = preview;
@@ -1957,6 +2004,7 @@ async function showPlay({ pvpRoomCode = "" } = {}) {
         battleMode: "pvp",
         gameMode: "classic",
         pvpRoomCode,
+        pvpRoomId,
       };
     }
   } else {

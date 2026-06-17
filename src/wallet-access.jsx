@@ -116,7 +116,7 @@ function setWalletDisconnected(disconnected) {
 }
 
 function shouldReconnectWalletOnMount() {
-  return false;
+  return window.localStorage.getItem(WALLET_DISCONNECTED_KEY) !== "true";
 }
 
 wagmiConfig.subscribe(
@@ -208,6 +208,13 @@ function WalletBridge({ showControl }) {
       setWalletSession({ mode: "guest", address: null, chainId: null, provider: null });
       return undefined;
     }
+
+    setWalletSession({
+      mode: "wallet",
+      address,
+      chainId: base.id,
+      provider: connectorClient || null,
+    });
 
     if (!connectorClient) {
       return undefined;
