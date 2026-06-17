@@ -19,8 +19,8 @@ import {
 import { createConfig, http, WagmiProvider } from "wagmi";
 import { base } from "wagmi/chains";
 import { useAccount, useConnectorClient, useSwitchChain } from "wagmi";
+import { BASE_RPC_URL } from "./base-rpc.js";
 
-const BASE_RPC_URL = "https://mainnet.base.org";
 const WALLET_DISCONNECTED_KEY = "aura-caps:wallet-disconnected";
 const ACCESS_THEMES = ["hell", "heaven", "jungle-bay", "bankr"];
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID?.trim();

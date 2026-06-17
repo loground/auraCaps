@@ -38,6 +38,7 @@ Create `.env.local` with:
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 VITE_WALLETCONNECT_PROJECT_ID=
+VITE_BASE_RPC_URL=
 VITE_VIBE_MARKET_API_KEY=
 VITE_PVP_WAGER_ESCROW_ADDRESS=
 ```
@@ -46,6 +47,12 @@ Create the WalletConnect project ID in the Reown dashboard. RainbowKit presents
 Phantom first in its recommended wallet list, and wagmi restricts sessions to
 Base Mainnet. The Supabase values power PvP room creation, joining, realtime
 updates, and turn submission.
+
+`VITE_BASE_RPC_URL` should be a Base Mainnet HTTPS RPC URL from a provider such
+as Alchemy, QuickNode, Infura, Ankr, or Coinbase Developer Platform. The public
+`https://mainnet.base.org` fallback is fine for light local testing but can rate
+limit production users. In Vercel, set it for Production and Preview, then
+redeploy because Vite embeds `VITE_*` values at build time.
 
 `VITE_PVP_WAGER_ESCROW_ADDRESS` enables Wager PvP in the game setup. Leave it
 empty until the escrow contract is deployed and audited.

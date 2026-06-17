@@ -7,6 +7,7 @@ import {
   http,
 } from "viem";
 import { base } from "viem/chains";
+import { BASE_RPC_URL, isRpcRateLimitError, wait } from "./base-rpc.js";
 import { getWalletSession } from "./wallet-access.jsx";
 
 export const VIBE_MARKET_COLLECTION_ADDRESS =
@@ -152,7 +153,7 @@ const ERC20_ABI = [
 ];
 const publicClient = createPublicClient({
   chain: base,
-  transport: http("https://mainnet.base.org"),
+  transport: http(BASE_RPC_URL),
 });
 const listeners = new Set();
 const optimisticUnopenedPacks = new Map();
@@ -181,6 +182,22 @@ function emitState() {
 function setState(nextState) {
   state = { ...state, ...nextState };
   emitState();
+}
+
+async function readContractWithRetry(args, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await publicClient.readContract(args);
+    } catch (error) {
+      lastError = error;
+      if (!isRpcRateLimitError(error) || attempt === attempts - 1) {
+        throw error;
+      }
+      await wait(500 * (attempt + 1));
+    }
+  }
+  throw lastError;
 }
 
 function mergeOptimisticState(items, unopenedPacks) {
@@ -421,40 +438,35 @@ async function enrichBoxesWithMetadata(boxes, slug) {
 
 async function loadSellOffers(game) {
   const tokenAddress = game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS;
-  const decimals = await publicClient
-    .readContract({
+  const decimals = await readContractWithRetry({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: "decimals",
+  }).catch(() => 18);
+  const uniqueFunctions = [...new Set(Object.values(OFFER_FUNCTIONS))];
+  const results = [];
+  for (const functionName of uniqueFunctions) {
+    const raw = await readContractWithRetry({
+      address: VIBE_MARKET_COLLECTION_ADDRESS,
+      abi: DROP_ABI,
+      functionName,
+    });
+    const ethQuote = await readContractWithRetry({
       address: tokenAddress,
       abi: ERC20_ABI,
-      functionName: "decimals",
-    })
-    .catch(() => 18);
-  const uniqueFunctions = [...new Set(Object.values(OFFER_FUNCTIONS))];
-  const results = await Promise.all(
-    uniqueFunctions.map(async (functionName) => {
-      const raw = await publicClient.readContract({
-        address: VIBE_MARKET_COLLECTION_ADDRESS,
-        abi: DROP_ABI,
-        functionName,
-      });
-      const ethQuote = await publicClient
-        .readContract({
-          address: tokenAddress,
-          abi: ERC20_ABI,
-          functionName: "getTokenSellQuote",
-          args: [raw],
-        })
-        .catch(() => null);
-      return [
-        functionName,
-        {
-          raw,
-          formatted: formatUnits(raw, decimals),
-          ethQuote,
-          ethFormatted: ethQuote === null ? "" : formatEther(ethQuote),
-        },
-      ];
-    })
-  );
+      functionName: "getTokenSellQuote",
+      args: [raw],
+    }).catch(() => null);
+    results.push([
+      functionName,
+      {
+        raw,
+        formatted: formatUnits(raw, decimals),
+        ethQuote,
+        ethFormatted: ethQuote === null ? "" : formatEther(ethQuote),
+      },
+    ]);
+  }
   const byFunction = Object.fromEntries(results);
   return Object.fromEntries(
     Object.entries(OFFER_FUNCTIONS).map(([rarity, functionName]) => [
@@ -466,37 +478,33 @@ async function loadSellOffers(game) {
 
 async function loadPackInfo(game) {
   const tokenAddress = game?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS;
-  const [mintPrice, entropyFee, tokensPerMint, tokenDecimals] = await Promise.all([
-    publicClient.readContract({
-      address: VIBE_MARKET_COLLECTION_ADDRESS,
-      abi: DROP_ABI,
-      functionName: "getMintPrice",
-      args: [1n],
-    }),
-    publicClient.readContract({
-      address: VIBE_MARKET_COLLECTION_ADDRESS,
-      abi: DROP_ABI,
-      functionName: "getEntropyFee",
-    }),
-    publicClient.readContract({
-      address: VIBE_MARKET_COLLECTION_ADDRESS,
-      abi: DROP_ABI,
-      functionName: "tokensPerMint",
-    }),
-    publicClient.readContract({
-      address: tokenAddress,
-      abi: ERC20_ABI,
-      functionName: "decimals",
-    }),
-  ]);
-  const sellPriceEth = await publicClient
-    .readContract({
-      address: tokenAddress,
-      abi: ERC20_ABI,
-      functionName: "getTokenSellQuote",
-      args: [tokensPerMint],
-    })
-    .catch(() => null);
+  const mintPrice = await readContractWithRetry({
+    address: VIBE_MARKET_COLLECTION_ADDRESS,
+    abi: DROP_ABI,
+    functionName: "getMintPrice",
+    args: [1n],
+  });
+  const entropyFee = await readContractWithRetry({
+    address: VIBE_MARKET_COLLECTION_ADDRESS,
+    abi: DROP_ABI,
+    functionName: "getEntropyFee",
+  });
+  const tokensPerMint = await readContractWithRetry({
+    address: VIBE_MARKET_COLLECTION_ADDRESS,
+    abi: DROP_ABI,
+    functionName: "tokensPerMint",
+  });
+  const tokenDecimals = await readContractWithRetry({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: "decimals",
+  });
+  const sellPriceEth = await readContractWithRetry({
+    address: tokenAddress,
+    abi: ERC20_ABI,
+    functionName: "getTokenSellQuote",
+    args: [tokensPerMint],
+  }).catch(() => null);
   return {
     imagePath: normalizeImageUrl(
       game?.packImage || game?.featuredImageUrl || game?.imageUrl || NAUGHTY_ROBOTS_PACK_IMAGE
@@ -520,14 +528,12 @@ async function refreshTokenBalance(walletAddress) {
   const tokenAddress = state.packInfo?.tokenAddress || VIBE_MARKET_TOKEN_ADDRESS;
   let balance = null;
   for (let attempt = 0; attempt < 3 && balance === null; attempt += 1) {
-    balance = await publicClient
-      .readContract({
-        address: tokenAddress,
-        abi: ERC20_ABI,
-        functionName: "balanceOf",
-        args: [walletAddress],
-      })
-      .catch(() => null);
+    balance = await readContractWithRetry({
+      address: tokenAddress,
+      abi: ERC20_ABI,
+      functionName: "balanceOf",
+      args: [walletAddress],
+    }).catch(() => null);
   }
   if (balance === null) return;
   setState({
@@ -567,13 +573,12 @@ export async function buyVibeMarketPack(currency = "eth", amount = 1) {
   const mintPrice =
     packAmount === 1n && state.packInfo?.mintPrice
       ? state.packInfo.mintPrice
-      :
-    (await publicClient.readContract({
-      address: VIBE_MARKET_COLLECTION_ADDRESS,
-      abi: DROP_ABI,
-      functionName: "getMintPrice",
-      args: [packAmount],
-    }));
+      : await readContractWithRetry({
+          address: VIBE_MARKET_COLLECTION_ADDRESS,
+          abi: DROP_ABI,
+          functionName: "getMintPrice",
+          args: [packAmount],
+        });
   const payWithToken = currency === "nr";
   const tokenCost = (state.packInfo?.tokensPerMint || 0n) * packAmount;
   if (
@@ -705,7 +710,7 @@ export async function openVibeMarketPacks(packs) {
   const tokenIds = selectedPacks.map((pack) => BigInt(pack.tokenId));
   const entropyFee =
     state.packInfo?.entropyFee ??
-    (await publicClient.readContract({
+    (await readContractWithRetry({
       address: VIBE_MARKET_COLLECTION_ADDRESS,
       abi: DROP_ABI,
       functionName: "getEntropyFee",
@@ -719,7 +724,7 @@ export async function openVibeMarketPacks(packs) {
       selectedPacks.map(async (pack) => {
         if (rarityByTokenId.has(String(pack.tokenId))) return;
         try {
-          const rarityInfo = await publicClient.readContract({
+          const rarityInfo = await readContractWithRetry({
             address: VIBE_MARKET_COLLECTION_ADDRESS,
             abi: DROP_ABI,
             functionName: "getTokenRarity",

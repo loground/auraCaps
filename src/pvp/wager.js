@@ -1,5 +1,6 @@
 import { createPublicClient, encodeFunctionData, http } from "viem";
 import { base } from "viem/chains";
+import { BASE_RPC_URL, isRpcRateLimitError, wait } from "../base-rpc.js";
 import { getWalletSession } from "../wallet-access.jsx";
 
 const WAGER_ESCROW_ABI = [
@@ -58,8 +59,24 @@ const ERC721_APPROVAL_ABI = [
 
 const publicClient = createPublicClient({
   chain: base,
-  transport: http("https://mainnet.base.org"),
+  transport: http(BASE_RPC_URL),
 });
+
+async function readContractWithRetry(args, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await publicClient.readContract(args);
+    } catch (error) {
+      lastError = error;
+      if (!isRpcRateLimitError(error) || attempt === attempts - 1) {
+        throw error;
+      }
+      await wait(500 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
 
 function requireWallet(action) {
   const session = getWalletSession();
@@ -103,13 +120,13 @@ async function sendEscrowTransaction({ escrowAddress, functionName, args }) {
 async function ensureCapApproved({ escrowAddress, collectionAddress, tokenId }) {
   const session = requireWallet("approving a wager cap");
   const [approvedAddress, approvedForAll] = await Promise.all([
-    publicClient.readContract({
+    readContractWithRetry({
       address: collectionAddress,
       abi: ERC721_APPROVAL_ABI,
       functionName: "getApproved",
       args: [tokenId],
     }),
-    publicClient.readContract({
+    readContractWithRetry({
       address: collectionAddress,
       abi: ERC721_APPROVAL_ABI,
       functionName: "isApprovedForAll",
