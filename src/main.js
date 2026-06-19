@@ -1983,6 +1983,7 @@ function addBackButton(onClick) {
 }
 
 function leavePvpToMenu() {
+  clearPvpResumeTarget();
   navigateToMenu();
 }
 
@@ -2227,7 +2228,7 @@ async function showPlay({ pvpRoomCode = "", pvpRoomId = "" } = {}) {
       sendPvpTurnSubmitted,
       settlePvpWager,
     });
-    cleanupScreen = composeCleanups(addBackButton(leavePvpToMenu), addGlobalMuteButton());
+    cleanupScreen = addGlobalMuteButton();
     return;
   }
 

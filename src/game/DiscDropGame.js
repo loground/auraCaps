@@ -2189,7 +2189,7 @@ export class DiscDropGame {
     this.ui.resetBtn.disabled = this.battleMode === "vs-ai";
     this.ui.actionButtonsEl.classList.toggle(
       "show-reset",
-      this.battleMode !== "vs-ai"
+      this.battleMode === "training"
     );
     if (resetTurnResults) {
       this.playerTurnResult = null;

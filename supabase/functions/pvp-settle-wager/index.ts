@@ -101,16 +101,6 @@ Deno.serve(async (req) => {
     if (!wager?.enabled) {
       throw new Error("Room is not a wager match.");
     }
-    if (wager.settlementTx) {
-      return jsonResponse({
-        room,
-        settlement: {
-          hash: wager.settlementTx,
-          result: wager.settlementResult || "settled",
-          winner: wager.settlementWinner || "",
-        },
-      });
-    }
     const matchId = normalizeBytes32(wager.matchId);
     const escrowContract = normalizeAddress(wager.escrowContract);
     if (!matchId || !escrowContract) {
@@ -140,6 +130,21 @@ Deno.serve(async (req) => {
       chain: base,
       transport: http(rpcUrl),
     });
+    if (wager.settlementTx) {
+      const receipt = await publicClient.getTransactionReceipt({
+        hash: wager.settlementTx as `0x${string}`,
+      }).catch(() => null);
+      if (receipt?.status === "success") {
+        return jsonResponse({
+          room,
+          settlement: {
+            hash: wager.settlementTx,
+            result: wager.settlementResult || "settled",
+            winner: wager.settlementWinner || "",
+          },
+        });
+      }
+    }
     const functionName = winner ? "settle" : "settleDraw";
     const args = winner ? [matchId, winner] : [matchId];
     const hash = await walletClient.sendTransaction({
@@ -150,7 +155,10 @@ Deno.serve(async (req) => {
         args: args as any,
       }),
     });
-    await publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== "success") {
+      throw new Error(`Wager settlement transaction reverted: ${hash}`);
+    }
 
     const nextSetup = {
       ...room.setup,

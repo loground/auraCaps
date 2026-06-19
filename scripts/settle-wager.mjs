@@ -124,10 +124,6 @@ async function main() {
 
   const wager = room.setup?.wager || {};
   if (!wager.enabled) throw new Error("Room is not a wager room.");
-  if (wager.settlementTx && !process.argv.includes("--force")) {
-    console.log(`Wager already recorded as settled: ${wager.settlementTx}`);
-    return;
-  }
 
   const escrowAddress = normalizeAddress(wager.escrowContract || process.env.VITE_PVP_WAGER_ESCROW_ADDRESS);
   const matchId = normalizeBytes32(wager.matchId);
@@ -161,6 +157,16 @@ async function main() {
     DEFAULT_BASE_RPC_URL;
   const publicClient = createPublicClient({ chain: base, transport: http(rpcUrl) });
   const walletClient = createWalletClient({ account, chain: base, transport: http(rpcUrl) });
+  if (wager.settlementTx && !process.argv.includes("--force")) {
+    const existingReceipt = await publicClient
+      .getTransactionReceipt({ hash: wager.settlementTx })
+      .catch(() => null);
+    if (existingReceipt?.status === "success") {
+      console.log(`Wager already settled successfully: ${wager.settlementTx}`);
+      return;
+    }
+    console.warn(`Recorded settlement tx did not succeed, retrying: ${wager.settlementTx}`);
+  }
   const functionName = "settle";
   const args = [matchId, winner];
 
