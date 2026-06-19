@@ -1355,6 +1355,7 @@ export class DiscDropGame {
     if (!notice) {
       return;
     }
+    notice.classList.remove("prize");
     notice.textContent = message;
     notice.classList.add("visible");
     if (this.centerNoticeTimeoutId !== null) {
@@ -1362,6 +1363,63 @@ export class DiscDropGame {
     }
     this.centerNoticeTimeoutId = setTimeout(() => {
       notice.classList.remove("visible");
+      this.centerNoticeTimeoutId = null;
+    }, durationMs);
+  }
+
+  showPrizeNotice({
+    title = "MATCH WON",
+    subtitle = "",
+    cap = null,
+    durationMs = 6200,
+  } = {}) {
+    const notice = this.ui?.centerNoticeEl;
+    if (!notice) {
+      return;
+    }
+    if (this.centerNoticeTimeoutId !== null) {
+      clearTimeout(this.centerNoticeTimeoutId);
+    }
+    notice.classList.add("prize");
+    notice.replaceChildren();
+
+    const titleEl = document.createElement("strong");
+    titleEl.className = "prize-notice-title";
+    titleEl.textContent = title;
+    notice.appendChild(titleEl);
+
+    const subtitleEl = document.createElement("span");
+    subtitleEl.className = "prize-notice-subtitle";
+    subtitleEl.textContent = subtitle || "Prize secured";
+    notice.appendChild(subtitleEl);
+
+    const capWrap = document.createElement("span");
+    capWrap.className = "prize-notice-cap";
+    const imagePath = cap?.imagePath || cap?.image || "";
+    if (imagePath) {
+      const img = document.createElement("img");
+      img.src = imagePath;
+      img.alt = cap?.name || cap?.title || "Won cap";
+      img.decoding = "async";
+      capWrap.appendChild(img);
+    }
+    const nameEl = document.createElement("span");
+    nameEl.className = "prize-notice-cap-name";
+    nameEl.textContent =
+      cap?.name || cap?.title || (cap?.tokenId ? `Cap #${cap.tokenId}` : "Won cap");
+    capWrap.appendChild(nameEl);
+    if (cap?.rarity) {
+      const rarityEl = document.createElement("span");
+      rarityEl.className = "prize-notice-cap-rarity";
+      rarityEl.textContent = String(cap.rarity);
+      capWrap.appendChild(rarityEl);
+    }
+    notice.appendChild(capWrap);
+
+    notice.classList.add("visible");
+    this.centerNoticeTimeoutId = setTimeout(() => {
+      notice.classList.remove("visible", "prize");
+      notice.replaceChildren();
       this.centerNoticeTimeoutId = null;
     }, durationMs);
   }

@@ -1741,6 +1741,9 @@ function startPvpMatchController({
       gameInstance.playerWins = scores.player;
       gameInstance.cpuWins = scores.opponent;
       gameInstance.setStatus(final.toLowerCase(), "finished");
+      const localPrizeCap = localPlayer?.selected_cap || gameInstance.playerCapMeta || null;
+      const opponentPrizeCap =
+        opponentPlayer?.selected_cap || gameInstance.cpuCapMeta || null;
       const setWagerRefundButton = () => {
         const wager = latestFinishedRoom?.setup?.wager || {};
         const refundLockMessage = getWagerRefundLockMessage(wager);
@@ -1826,10 +1829,24 @@ function startPvpMatchController({
           }
         };
       };
-      gameInstance.showCenterNotice(
-        `${final}\nYOU ${scores.player} - ${opponentName.toUpperCase()} ${scores.opponent}`,
-        5000
-      );
+      if (isWager && final === "MATCH WON" && opponentPrizeCap) {
+        gameInstance.showPrizeNotice?.({
+          title: "MATCH WON",
+          subtitle: `You won ${opponentName}'s cap`,
+          cap: opponentPrizeCap,
+        });
+      } else if (isWager && final === "MATCH LOST" && localPrizeCap) {
+        gameInstance.showPrizeNotice?.({
+          title: "MATCH LOST",
+          subtitle: `${opponentName} won your cap`,
+          cap: localPrizeCap,
+        });
+      } else {
+        gameInstance.showCenterNotice(
+          `${final}\nYOU ${scores.player} - ${opponentName.toUpperCase()} ${scores.opponent}`,
+          5000
+        );
+      }
       const shouldSettleWinner =
         isWager && final !== "MATCH TIE" && !hasWagerSettlement && !wagerSettlementStarted;
       const shouldSettleTie =
