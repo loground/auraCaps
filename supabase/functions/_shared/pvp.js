@@ -96,6 +96,7 @@ export function normalizeWager(setup = {}, cap = null) {
     collectionAddress,
     escrowContract,
     matchId: normalizeBytes32(wager.matchId),
+    refundAfter: normalizeUint64(wager.refundAfter),
     creatorApprovalTx: normalizeTxHash(wager.creatorApprovalTx),
     creatorDepositTx: normalizeTxHash(wager.creatorDepositTx),
   };
@@ -131,6 +132,12 @@ export function requireWagerCap({ player, cap, wager }) {
 export function normalizeBytes32(value) {
   const text = String(value || "").trim().toLowerCase();
   return /^0x[a-f0-9]{64}$/.test(text) ? text : "";
+}
+
+export function normalizeUint64(value) {
+  const text = String(value || "").trim();
+  if (!/^\d+$/.test(text)) return "";
+  return text;
 }
 
 export function normalizeTxHash(value) {

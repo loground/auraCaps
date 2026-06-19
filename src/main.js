@@ -108,6 +108,19 @@ function getPvpWagerConfigStatus() {
     : "Set VITE_PVP_WAGER_ESCROW_ADDRESS before wager PvP can custody caps.";
 }
 
+function getWagerRefundLockMessage(wager = {}) {
+  const refundAfter = Number(wager.refundAfter || 0);
+  if (!Number.isFinite(refundAfter) || refundAfter <= 0) {
+    return "";
+  }
+  const secondsRemaining = Math.ceil(refundAfter - Date.now() / 1000);
+  if (secondsRemaining <= 0) {
+    return "";
+  }
+  const minutes = Math.ceil(secondsRemaining / 60);
+  return `Refund unlocks in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+}
+
 function getCurrentPlayerIdentity() {
   const session = getWalletSession();
   return {
@@ -1430,6 +1443,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
               enabled: true,
               escrowContract: PVP_WAGER_ESCROW_ADDRESS,
               matchId: escrowResult.matchId,
+              refundAfter: escrowResult.refundAfter || "",
               creatorApprovalTx: escrowResult.approvalTxHash || "",
               creatorDepositTx: escrowResult.txHash,
               rarity: capSelection?.playerCapMeta?.rarity || "",
@@ -1728,10 +1742,19 @@ function startPvpMatchController({
       gameInstance.cpuWins = scores.opponent;
       gameInstance.setStatus(final.toLowerCase(), "finished");
       const setWagerRefundButton = () => {
+        const wager = latestFinishedRoom?.setup?.wager || {};
+        const refundLockMessage = getWagerRefundLockMessage(wager);
         gameInstance.ui.resetBtn.textContent = "Refund";
-        gameInstance.ui.resetBtn.disabled = false;
+        gameInstance.ui.resetBtn.disabled = Boolean(refundLockMessage);
+        if (refundLockMessage) {
+          gameInstance.setStatus("refund locked", refundLockMessage);
+        }
         gameInstance.ui.resetBtn.onclick = async () => {
-          const wager = latestFinishedRoom?.setup?.wager || {};
+          const refundLockMessage = getWagerRefundLockMessage(wager);
+          if (refundLockMessage) {
+            gameInstance.setStatus("refund locked", refundLockMessage);
+            return;
+          }
           try {
             gameInstance.ui.resetBtn.disabled = true;
             gameInstance.setStatus("refunding wager caps", "confirm in wallet");
@@ -1745,9 +1768,13 @@ function startPvpMatchController({
             leavePvpToMenu();
           } catch (error) {
             gameInstance.ui.resetBtn.disabled = false;
+            const message =
+              error?.message === "Refund is locked until the escrow timeout passes."
+                ? "Wait until the escrow timeout passes, then try refund again."
+                : error?.message || "Refund is locked until the escrow timeout.";
             gameInstance.setStatus(
               "refund unavailable",
-              error?.message || "Refund is locked until the escrow timeout."
+              message
             );
           }
         };

@@ -63,6 +63,14 @@ const ERC721_APPROVAL_ABI = [
     outputs: [{ name: "", type: "bool" }],
   },
 ];
+const ESCROW_REVERT_REASONS = {
+  "0x29ac473e": "Escrow match was not found.",
+  "0x0e8a471c": "Connect one of the wallets that escrowed a cap for this match.",
+  "0xc1ab6dc1": "This cap cannot be used for this escrow match.",
+  "0x27d7b920": "Both wager caps must have matching on-chain rarity.",
+  "0xf525e320": "This escrow match cannot be refunded from its current state.",
+  "0x0a516555": "Refund is locked until the escrow timeout passes.",
+};
 
 const publicClient = createPublicClient({
   chain: base,
@@ -108,20 +116,39 @@ function makeMatchId() {
   return `0x${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
+function getReadableEscrowError(error) {
+  let text = `${error?.shortMessage || ""} ${error?.message || ""} ${String(error || "")}`;
+  try {
+    text += ` ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`;
+  } catch {
+    // Some wallet errors contain cyclic provider objects.
+  }
+  for (const [selector, message] of Object.entries(ESCROW_REVERT_REASONS)) {
+    if (text.includes(selector)) {
+      return message;
+    }
+  }
+  return error?.shortMessage || error?.message || "Escrow transaction failed.";
+}
+
 async function sendEscrowTransaction({ escrowAddress, functionName, args }) {
   const session = requireWallet("wagering a cap");
-  const hash = await session.provider.request({
-    method: "eth_sendTransaction",
-    params: [
-      {
-        from: session.address,
-        to: escrowAddress,
-        data: encodeFunctionData({ abi: WAGER_ESCROW_ABI, functionName, args }),
-      },
-    ],
-  });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  return { hash, receipt };
+  try {
+    const hash = await session.provider.request({
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from: session.address,
+          to: escrowAddress,
+          data: encodeFunctionData({ abi: WAGER_ESCROW_ABI, functionName, args }),
+        },
+      ],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    return { hash, receipt };
+  } catch (error) {
+    throw new Error(getReadableEscrowError(error));
+  }
 }
 
 async function ensureCapApproved({ escrowAddress, collectionAddress, tokenId }) {
@@ -177,7 +204,13 @@ export async function createWagerEscrow({
     functionName: "createMatch",
     args: [matchId, collectionAddress, tokenId, refundAfter],
   });
-  return { matchId, approvalTxHash: approval?.hash || "", txHash: hash, receipt };
+  return {
+    matchId,
+    approvalTxHash: approval?.hash || "",
+    txHash: hash,
+    receipt,
+    refundAfter: refundAfter.toString(),
+  };
 }
 
 export async function joinWagerEscrow({ escrowAddress, matchId, cap }) {
