@@ -51,8 +51,18 @@ function requireEnv(name) {
   return value;
 }
 
-async function supabaseRest(pathname, { method = "GET", body } = {}) {
+function getSupabaseUrl() {
   const url = requireEnv("VITE_SUPABASE_URL").replace(/\/$/, "");
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url)) {
+    throw new Error(
+      `VITE_SUPABASE_URL must be the project API URL like https://PROJECT_REF.supabase.co, got ${url}`
+    );
+  }
+  return url;
+}
+
+async function supabaseRest(pathname, { method = "GET", body } = {}) {
+  const url = getSupabaseUrl();
   const key = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "");
   if (!key) {
     throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY or VITE_SUPABASE_ANON_KEY.");
@@ -68,7 +78,13 @@ async function supabaseRest(pathname, { method = "GET", body } = {}) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    const preview = text.slice(0, 180).replace(/\s+/g, " ").trim();
+    throw new Error(`Supabase returned non-JSON from /rest/v1/${pathname}: ${preview}`);
+  }
   if (!response.ok) {
     throw new Error(data?.message || data?.error || `Supabase REST failed: ${response.status}`);
   }
@@ -98,12 +114,24 @@ function computeFinalScore(turns, players) {
   return { playerAWins, playerBWins };
 }
 
+async function findRoom(roomRef) {
+  const ref = String(roomRef || "").trim();
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ref)) {
+    const byId = await supabaseRest(`pvp_rooms?id=eq.${encodeURIComponent(ref)}&limit=1`);
+    if (byId?.[0]) return byId[0];
+  }
+  const code = ref.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  if (!code) return null;
+  const byCode = await supabaseRest(`pvp_rooms?code=eq.${encodeURIComponent(code)}&limit=1`);
+  return byCode?.[0] || null;
+}
+
 async function main() {
   loadDotEnv(ENV_PATH);
 
-  const roomId = String(getArg("--room-id")).trim();
-  if (!roomId) {
-    throw new Error("Usage: npm run wager:settle -- --room-id <pvp_room_id>");
+  const roomRef = String(getArg("--room-id") || getArg("--room-code")).trim();
+  if (!roomRef) {
+    throw new Error("Usage: npm run wager:settle -- --room-id <pvp_room_id_or_code>");
   }
 
   const signerKey = normalizePrivateKey(
@@ -115,9 +143,9 @@ async function main() {
     throw new Error("Missing PVP_WAGER_RESULT_SIGNER_PRIVATE_KEY in .env.local.");
   }
 
-  const rooms = await supabaseRest(`pvp_rooms?id=eq.${encodeURIComponent(roomId)}&limit=1`);
-  const room = rooms?.[0];
+  const room = await findRoom(roomRef);
   if (!room) throw new Error("Room not found.");
+  const roomId = room.id;
   if (room.status !== "finished") {
     throw new Error(`Room is ${room.status}, not finished.`);
   }
