@@ -1779,6 +1779,53 @@ function startPvpMatchController({
           }
         };
       };
+      const setWagerExitButton = () => {
+        gameInstance.ui.resetBtn.textContent = "Exit";
+        gameInstance.ui.resetBtn.disabled = false;
+        gameInstance.ui.resetBtn.onclick = () => {
+          if (isWager) {
+            if (wagerSettlementComplete || hasWagerSettlement) {
+              clearVibeMarketOptimisticState();
+              refreshConnectedWalletCollection({ resetOptimistic: true }).catch(() => {});
+            } else {
+              refreshConnectedWalletCollection().catch(() => {});
+            }
+            if (wagerSettlementError) {
+              console.warn("Wager settlement did not complete before exit", wagerSettlementError);
+            }
+          }
+          leavePvpToMenu();
+        };
+      };
+      const setWagerRetryPayoutButton = () => {
+        gameInstance.ui.resetBtn.textContent = "Retry Payout";
+        gameInstance.ui.resetBtn.disabled = !settlePvpWager;
+        gameInstance.ui.resetBtn.onclick = async () => {
+          if (!settlePvpWager) {
+            gameInstance.setStatus("payout unavailable", "settlement function is not loaded");
+            return;
+          }
+          try {
+            gameInstance.ui.resetBtn.disabled = true;
+            gameInstance.setStatus(`${final.toLowerCase()} • retrying payout`, "confirming escrow");
+            await settlePvpWager({
+              playerIdentity: getCurrentPlayerIdentity(),
+              roomId,
+            });
+            wagerSettlementError = "";
+            wagerSettlementComplete = true;
+            clearVibeMarketOptimisticState();
+            await refreshConnectedWalletCollection({ resetOptimistic: true });
+            gameInstance.setStatus(`${final.toLowerCase()} • payout complete`, "escrow settled");
+            setWagerExitButton();
+          } catch (error) {
+            wagerSettlementError =
+              error?.message || "Wager settlement failed. Try again after checking backend signer config.";
+            gameInstance.ui.resetBtn.disabled = false;
+            gameInstance.setStatus("payout failed", wagerSettlementError);
+          }
+        };
+      };
       gameInstance.showCenterNotice(
         `${final}\nYOU ${scores.player} - ${opponentName.toUpperCase()} ${scores.opponent}`,
         5000
@@ -1810,28 +1857,15 @@ function startPvpMatchController({
             gameInstance.setStatus(final.toLowerCase(), wagerSettlementError);
             if (final === "MATCH TIE") {
               setWagerRefundButton();
+            } else {
+              setWagerRetryPayoutButton();
             }
           });
       }
       gameInstance.lockPlayerInput = true;
       gameInstance.ui.launchBtn.disabled = true;
-      gameInstance.ui.resetBtn.textContent = "Exit";
-      gameInstance.ui.resetBtn.disabled = false;
       gameInstance.ui.actionButtonsEl.classList.add("show-reset");
-      gameInstance.ui.resetBtn.onclick = () => {
-        if (isWager) {
-          if (wagerSettlementComplete || hasWagerSettlement) {
-            clearVibeMarketOptimisticState();
-            refreshConnectedWalletCollection({ resetOptimistic: true }).catch(() => {});
-          } else {
-            refreshConnectedWalletCollection().catch(() => {});
-          }
-          if (wagerSettlementError) {
-            console.warn("Wager settlement did not complete before exit", wagerSettlementError);
-          }
-        }
-        leavePvpToMenu();
-      };
+      setWagerExitButton();
       if (isWager && final === "MATCH TIE" && (!PVP_WAGER_AUTO_SETTLE || wagerSettlementError)) {
         setWagerRefundButton();
       }

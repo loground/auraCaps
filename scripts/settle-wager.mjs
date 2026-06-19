@@ -114,6 +114,16 @@ function computeFinalScore(turns, players) {
   return { playerAWins, playerBWins };
 }
 
+function formatRefundAfter(value) {
+  const seconds = Number(value || 0);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "unknown";
+  const unlockTime = new Date(seconds * 1000).toISOString();
+  const remaining = Math.ceil(seconds - Date.now() / 1000);
+  if (remaining <= 0) return `${unlockTime} (unlocked now)`;
+  const minutes = Math.ceil(remaining / 60);
+  return `${unlockTime} (about ${minutes} minute${minutes === 1 ? "" : "s"} remaining)`;
+}
+
 async function findRoom(roomRef) {
   const ref = String(roomRef || "").trim();
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ref)) {
@@ -166,7 +176,18 @@ async function main() {
   const turns = await supabaseRest(`pvp_turns?room_id=eq.${encodeURIComponent(roomId)}&order=round.asc`);
   const { playerAWins, playerBWins } = computeFinalScore(turns || [], players);
   if (playerAWins === playerBWins) {
-    throw new Error("This wager match is tied. Use refund(matchId) after the escrow timeout.");
+    console.log(`Room: ${roomId} (${room.code || roomRef})`);
+    console.log(`Score: player A ${playerAWins}, player B ${playerBWins}`);
+    console.log(`Escrow: ${escrowAddress}`);
+    console.log(`Match: ${matchId}`);
+    console.log(`Player A wallet: ${normalizeAddress(players[0].wallet) || "missing"}`);
+    console.log(`Player B wallet: ${normalizeAddress(players[1].wallet) || "missing"}`);
+    console.log(`Refund after: ${formatRefundAfter(wager.refundAfter)}`);
+    console.log("");
+    console.log("This wager match is tied. It cannot be winner-settled.");
+    console.log("After refund unlocks, refund from player A or player B wallet with:");
+    console.log(`WAGER_REFUND_PRIVATE_KEY=0xYOUR_PLAYER_WALLET_KEY npm run wager:refund -- --match-id ${matchId}`);
+    return;
   }
   const winner =
     playerAWins > playerBWins
