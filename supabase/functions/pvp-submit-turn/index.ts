@@ -4,6 +4,7 @@ import {
   requirePlayer,
   rest,
 } from "../_shared/pvp.js";
+import { settleFinishedWagerRoom } from "../_shared/wager-settlement.js";
 
 function clampNumber(value, min, max, fallback = 0) {
   const number = Number(value);
@@ -101,8 +102,44 @@ Deno.serve(async (req) => {
       method: "PATCH",
       body: roomPatch,
     });
+    let settledRoom = updatedRoom || room;
+    let settlement = null;
+    if (
+      roomPatch.status === "finished" &&
+      settledRoom?.setup?.wager?.enabled &&
+      !settledRoom?.setup?.wager?.settlementTx
+    ) {
+      try {
+        const allTurns = await rest(`pvp_turns?room_id=eq.${roomId}&order=round.asc`);
+        const settlementResult = await settleFinishedWagerRoom({
+          room: settledRoom,
+          players: roomPlayers,
+          turns: allTurns || [],
+          allowDraw: false,
+        });
+        if (settlementResult?.room) {
+          settledRoom = settlementResult.room;
+        }
+        settlement = settlementResult?.settlement || null;
+      } catch (settlementError) {
+        const nextSetup = {
+          ...settledRoom.setup,
+          wager: {
+            ...(settledRoom.setup?.wager || {}),
+            settlementError:
+              settlementError?.message || "Automatic wager settlement failed.",
+            settlementErrorAt: new Date().toISOString(),
+          },
+        };
+        const [roomWithSettlementError] = await rest(`pvp_rooms?id=eq.${roomId}`, {
+          method: "PATCH",
+          body: { setup: nextSetup },
+        });
+        settledRoom = roomWithSettlementError || { ...settledRoom, setup: nextSetup };
+      }
+    }
 
-    return jsonResponse({ turn: savedTurn, room: updatedRoom || room });
+    return jsonResponse({ turn: savedTurn, room: settledRoom, settlement });
   } catch (error) {
     return jsonResponse({ error: error?.message || "Could not submit PvP turn." }, 400);
   }
