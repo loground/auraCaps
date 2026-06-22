@@ -1511,7 +1511,7 @@ export class DiscDropGame {
     this.lockPlayerInput = !isMyTurn;
     this.ui.launchBtn.disabled = !isMyTurn || this.hasLaunched;
     this.ui.resetBtn.disabled = true;
-    this.ui.actionButtonsEl.classList.remove("show-reset");
+    this.ui.actionButtonsEl.classList.remove("show-reset", "terminal");
     if (isMyTurn) {
       this.hasResolved = false;
       this.hasLaunched = false;
@@ -2249,6 +2249,7 @@ export class DiscDropGame {
       "show-reset",
       this.battleMode === "training"
     );
+    this.ui.actionButtonsEl.classList.remove("terminal");
     if (resetTurnResults) {
       this.playerTurnResult = null;
       this.cpuTurnResult = null;

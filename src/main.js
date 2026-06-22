@@ -62,6 +62,10 @@ const PVP_WAGER_ESCROW_ADDRESS = String(
 ).trim();
 const PVP_WAGER_AUTO_SETTLE =
   String(import.meta.env?.VITE_PVP_WAGER_AUTO_SETTLE || "false").toLowerCase() === "true";
+const PVP_WAGER_REFUND_SECONDS = Math.max(
+  60,
+  Math.floor(Number(import.meta.env?.VITE_PVP_WAGER_REFUND_SECONDS || 60))
+);
 const ROUTES = {
   menu: "/",
   battles: "/battles",
@@ -118,7 +122,11 @@ function getWagerRefundLockMessage(wager = {}) {
     return "";
   }
   const minutes = Math.ceil(secondsRemaining / 60);
-  return `Refund unlocks in about ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  const unlockTime = new Date(refundAfter * 1000).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  return `Refund unlocks at ${unlockTime} (about ${minutes} minute${minutes === 1 ? "" : "s"}).`;
 }
 
 function getCurrentPlayerIdentity() {
@@ -1438,6 +1446,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
             escrowResult = await createWagerEscrow({
               escrowAddress: PVP_WAGER_ESCROW_ADDRESS,
               cap: capSelection?.playerCapMeta,
+              refundSeconds: PVP_WAGER_REFUND_SECONDS,
             });
             wagerSetup = {
               enabled: true,
@@ -1747,11 +1756,13 @@ function startPvpMatchController({
       const setWagerRefundButton = () => {
         const wager = latestFinishedRoom?.setup?.wager || {};
         const refundLockMessage = getWagerRefundLockMessage(wager);
-        gameInstance.ui.resetBtn.textContent = "Refund";
-        gameInstance.ui.resetBtn.disabled = Boolean(refundLockMessage);
         if (refundLockMessage) {
-          gameInstance.setStatus("refund locked", refundLockMessage);
+          gameInstance.setStatus("match tie", refundLockMessage);
+          setWagerExitButton();
+          return;
         }
+        gameInstance.ui.resetBtn.textContent = "Refund";
+        gameInstance.ui.resetBtn.disabled = false;
         gameInstance.ui.resetBtn.onclick = async () => {
           const refundLockMessage = getWagerRefundLockMessage(wager);
           if (refundLockMessage) {
@@ -1881,7 +1892,7 @@ function startPvpMatchController({
       }
       gameInstance.lockPlayerInput = true;
       gameInstance.ui.launchBtn.disabled = true;
-      gameInstance.ui.actionButtonsEl.classList.add("show-reset");
+      gameInstance.ui.actionButtonsEl.classList.add("show-reset", "terminal");
       setWagerExitButton();
       if (isWager && final === "MATCH TIE" && (!PVP_WAGER_AUTO_SETTLE || wagerSettlementError)) {
         setWagerRefundButton();

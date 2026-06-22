@@ -680,9 +680,17 @@ canvas {
   display: none;
 }
 
+.action-buttons.terminal #launchBtn {
+  display: none;
+}
+
 .action-buttons.show-reset #resetBtn {
   display: inline-block;
   margin-top: 0.45rem;
+}
+
+.action-buttons.terminal.show-reset #resetBtn {
+  margin-top: 0;
 }
 
 .mini-map {

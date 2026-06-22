@@ -63,6 +63,11 @@ matches should be returned by `refund` after the escrow timeout. Set it to
 `true` only if you deploy the Supabase `pvp-settle-wager` Edge Function and want
 the result signer to settle matches immediately.
 
+`VITE_PVP_WAGER_REFUND_SECONDS` controls how soon a tied or abandoned wager can
+be refunded after the creator escrows the first cap. It defaults to `60`, which
+keeps room creation reliable on the deployed escrow contract while making refund
+available by the time a normal match ends.
+
 Create a free vibe.market API key:
 
 ```bash

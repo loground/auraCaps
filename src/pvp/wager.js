@@ -145,6 +145,9 @@ async function sendEscrowTransaction({ escrowAddress, functionName, args }) {
       ],
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt?.status !== "success") {
+      throw new Error(`Escrow transaction failed in tx ${hash}.`);
+    }
     return { hash, receipt };
   } catch (error) {
     throw new Error(getReadableEscrowError(error));
@@ -187,13 +190,16 @@ async function ensureCapApproved({ escrowAddress, collectionAddress, tokenId }) 
     ],
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt?.status !== "success") {
+    throw new Error(`Approval transaction failed in tx ${hash}.`);
+  }
   return { hash, receipt };
 }
 
 export async function createWagerEscrow({
   escrowAddress,
   cap,
-  refundSeconds = 45 * 60,
+  refundSeconds = 60,
 }) {
   const { tokenId, collectionAddress } = requireCap(cap);
   const matchId = makeMatchId();
