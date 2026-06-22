@@ -186,6 +186,10 @@ export class DiscDropGame {
     this.pvpTrajectoryStep = 0;
     this.pvpReplay = null;
     this.onPvpReplayComplete = null;
+    this._pvpReplayPosA = new THREE.Vector3();
+    this._pvpReplayPosB = new THREE.Vector3();
+    this._pvpReplayQuatA = new THREE.Quaternion();
+    this._pvpReplayQuatB = new THREE.Quaternion();
 
     this.lowerDiscBody = null;
     this.floorDiscBodies = [];
@@ -260,12 +264,15 @@ export class DiscDropGame {
     this.cameraHomeTarget = new THREE.Vector3();
     this.dynamicCameraLastSwitchAt = 0;
     this.dynamicCameraSubject = "upper";
+    this.defaultPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    this.replayPixelRatio = Math.min(this.defaultPixelRatio, window.innerWidth <= 760 ? 1.1 : 1.5);
   }
 
   async init() {
     this.ui = renderGameUI(this.app);
 
     this.renderer = createRenderer(this.app);
+    this.renderer.setPixelRatio(this.defaultPixelRatio);
     const worldView = createWorldScene(this.renderer, { theme: this.theme });
     this.scene = worldView.scene;
     this.camera = worldView.camera;
@@ -1567,6 +1574,7 @@ export class DiscDropGame {
     this.applySelectedCapsForThrower("cpu", { refresh: true });
     this.buildRoundBodies({ resetTurnResults: false });
     this.setStatus(`${this.pvpOpponentName}'s throw`, "watching replay");
+    this.setReplayRenderMode(true);
     this.pvpReplay = {
       frames,
       startedAt: performance.now(),
@@ -1576,29 +1584,41 @@ export class DiscDropGame {
     this.applyPvpReplayFrame(frames[0]);
   }
 
-  applyPvpReplayFrame(frame) {
-    const applyMeshFrame = (mesh, value) => {
+  applyPvpReplayFrame(frame, nextFrame = null, alpha = 0) {
+    const blend = THREE.MathUtils.clamp(Number(alpha) || 0, 0, 1);
+    const applyMeshFrame = (mesh, value, nextValue = null) => {
       if (!mesh || !value?.p || !value?.q) {
+        return;
+      }
+      if (nextValue?.p && nextValue?.q && blend > 0) {
+        this._pvpReplayPosA.set(value.p[0], value.p[1], value.p[2]);
+        this._pvpReplayPosB.set(nextValue.p[0], nextValue.p[1], nextValue.p[2]);
+        mesh.position.copy(this._pvpReplayPosA).lerp(this._pvpReplayPosB, blend);
+        this._pvpReplayQuatA.set(value.q[0], value.q[1], value.q[2], value.q[3]);
+        this._pvpReplayQuatB.set(nextValue.q[0], nextValue.q[1], nextValue.q[2], nextValue.q[3]);
+        mesh.quaternion.slerpQuaternions(this._pvpReplayQuatA, this._pvpReplayQuatB, blend);
         return;
       }
       mesh.position.set(value.p[0], value.p[1], value.p[2]);
       mesh.quaternion.set(value.q[0], value.q[1], value.q[2], value.q[3]);
     };
 
-    applyMeshFrame(this.upperDiscMesh, frame.upper);
+    applyMeshFrame(this.upperDiscMesh, frame.upper, nextFrame?.upper);
     if (this.gameMode === "slammer") {
       const floorFrames = Array.isArray(frame.floor) ? frame.floor : [];
+      const nextFloorFrames = Array.isArray(nextFrame?.floor) ? nextFrame.floor : [];
       for (let i = 0; i < Math.min(this.floorDiscMeshes.length, floorFrames.length); i += 1) {
-        applyMeshFrame(this.floorDiscMeshes[i], floorFrames[i]);
+        applyMeshFrame(this.floorDiscMeshes[i], floorFrames[i], nextFloorFrames[i]);
       }
     } else {
-      applyMeshFrame(this.lowerDiscMesh, frame.lower);
+      applyMeshFrame(this.lowerDiscMesh, frame.lower, nextFrame?.lower);
     }
   }
 
   finishPvpReplay() {
     const score = this.pvpReplay?.score ?? this.pvpReplayScore ?? 0;
     this.pvpReplay = null;
+    this.setReplayRenderMode(false);
     this.isReplayingPvpTurn = false;
     this.pvpReplayScore = null;
     this.hasLaunched = false;
@@ -1611,17 +1631,29 @@ export class DiscDropGame {
     this.onPvpReplayComplete?.();
   }
 
+  setReplayRenderMode(enabled) {
+    if (!this.renderer) {
+      return;
+    }
+    this.renderer.setPixelRatio(enabled ? this.replayPixelRatio : this.defaultPixelRatio);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, false);
+  }
+
   updatePvpTrajectoryReplay() {
     if (!this.pvpReplay?.frames?.length) {
       return;
     }
     const { frames, startedAt, frameMs } = this.pvpReplay;
     const elapsed = performance.now() - startedAt;
-    const frameIndex = Math.min(
-      frames.length - 1,
-      Math.max(0, Math.floor(elapsed / Math.max(16, frameMs || 66)))
+    const frameDuration = Math.max(16, frameMs || 66);
+    const frameProgress = Math.max(0, elapsed / frameDuration);
+    const frameIndex = Math.min(frames.length - 1, Math.floor(frameProgress));
+    const nextFrameIndex = Math.min(frames.length - 1, frameIndex + 1);
+    this.applyPvpReplayFrame(
+      frames[frameIndex],
+      frames[nextFrameIndex],
+      frameProgress - frameIndex
     );
-    this.applyPvpReplayFrame(frames[frameIndex]);
     if (frameIndex >= frames.length - 1) {
       this.finishPvpReplay();
     }
@@ -3354,21 +3386,24 @@ export class DiscDropGame {
       }
     }
 
-    if (this.upperDiscBody && this.upperDiscMesh) {
-      this.syncMesh(this.upperDiscBody, this.upperDiscMesh);
-    }
-    if (this.gameMode === "slammer") {
-      const count = Math.min(this.floorDiscBodies.length, this.floorDiscMeshes.length);
-      for (let i = 0; i < count; i += 1) {
-        this.syncMesh(this.floorDiscBodies[i], this.floorDiscMeshes[i]);
+    if (this.pvpReplay) {
+      this.updatePvpTrajectoryReplay();
+    } else {
+      if (this.upperDiscBody && this.upperDiscMesh) {
+        this.syncMesh(this.upperDiscBody, this.upperDiscMesh);
       }
-    } else if (this.lowerDiscBody && this.lowerDiscMesh) {
-      this.syncMesh(this.lowerDiscBody, this.lowerDiscMesh);
+      if (this.gameMode === "slammer") {
+        const count = Math.min(this.floorDiscBodies.length, this.floorDiscMeshes.length);
+        for (let i = 0; i < count; i += 1) {
+          this.syncMesh(this.floorDiscBodies[i], this.floorDiscMeshes[i]);
+        }
+      } else if (this.lowerDiscBody && this.lowerDiscMesh) {
+        this.syncMesh(this.lowerDiscBody, this.lowerDiscMesh);
+      }
+      this.updateMiniMap();
+      this.updateGameplayCamera(delta);
+      this.updateImpactVfx(delta);
     }
-    this.updatePvpTrajectoryReplay();
-    this.updateMiniMap();
-    this.updateGameplayCamera(delta);
-    this.updateImpactVfx(delta);
 
     this.controls.update();
 
@@ -3478,9 +3513,12 @@ export class DiscDropGame {
   }
 
   handleResize() {
+    this.defaultPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    this.replayPixelRatio = Math.min(this.defaultPixelRatio, window.innerWidth <= 760 ? 1.1 : 1.5);
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.applyResponsiveCamera();
+    this.renderer.setPixelRatio(this.pvpReplay ? this.replayPixelRatio : this.defaultPixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
