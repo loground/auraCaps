@@ -394,9 +394,25 @@ function showPlaySetupModal({ theme }) {
       <div class="play-setup-backdrop"></div>
       <div class="play-setup-panel">
         <button id="setupCloseBtn" class="play-setup-close" type="button" aria-label="Close setup">×</button>
-        <h2 id="setupTitle">Choose Game Mode</h2>
-        <p id="setupIntro">Pick the rules first. Battle type comes next.</p>
-        <div id="setupModeStep" class="setup-step">
+        <h2 id="setupTitle">Choose Battle Mode</h2>
+        <p id="setupIntro">Pick who you want to battle first.</p>
+        <div id="setupBattleStep" class="setup-step">
+          <span class="mode-label">Battle Mode</span>
+          <div class="mode-buttons">
+            ${PVP_ENABLED ? '<button id="setupBattlePvpBtn" class="mode-btn" type="button">PvP</button>' : ""}
+            <button id="setupBattleTrainingBtn" class="mode-btn" type="button">Training</button>
+            <button id="setupBattleVsAiBtn" class="mode-btn active" type="button">Vs AI</button>
+            ${
+              PVP_ENABLED
+                ? `<button id="setupBattlePvpWagerBtn" class="mode-btn wager-mode-btn" type="button">Wager</button>`
+                : ""
+            }
+          </div>
+          <p id="setupBattleHint" class="setup-hint">
+            Vs AI: 4 rounds against computer. Best score wins the match.
+          </p>
+        </div>
+        <div id="setupModeStep" class="setup-step hidden">
           <div class="mode-buttons setup-mode-buttons">
             <button id="setupModeClassicBtn" class="mode-btn setup-mode-card active" type="button">
               Classic
@@ -410,22 +426,6 @@ function showPlaySetupModal({ theme }) {
           </div>
           <p id="setupModeHint" class="setup-hint">
             Classic: 2 caps duel. Throw the caps to make both caps turn faces up. Player with the highest score wins. No borders, so aim carefully.
-          </p>
-        </div>
-        <div id="setupBattleStep" class="setup-step hidden">
-          <span class="mode-label">Battle Mode</span>
-          <div class="mode-buttons">
-            <button id="setupBattleTrainingBtn" class="mode-btn" type="button">Training</button>
-            <button id="setupBattleVsAiBtn" class="mode-btn active" type="button">Vs AI</button>
-            ${PVP_ENABLED ? '<button id="setupBattlePvpBtn" class="mode-btn" type="button">PvP</button>' : ""}
-            ${
-              PVP_ENABLED
-                ? `<button id="setupBattlePvpWagerBtn" class="mode-btn wager-mode-btn" type="button">Wager PvP</button>`
-                : ""
-            }
-          </div>
-          <p id="setupBattleHint" class="setup-hint">
-            Vs AI: 4 rounds against computer. Best score wins the match.
           </p>
         </div>
         <div class="play-setup-actions">
@@ -456,7 +456,7 @@ function showPlaySetupModal({ theme }) {
     const backdrop = overlay.querySelector(".play-setup-backdrop");
     let selectedBattleMode = "vs-ai";
     let selectedMode = "classic";
-    let setupStep = "mode";
+    let setupStep = "battle";
 
     const updateModeUI = () => {
       if (!modeHint) {
@@ -504,17 +504,17 @@ function showPlaySetupModal({ theme }) {
     updateBattleModeUI();
 
     const updateStepUI = () => {
-      const isBattleStep = setupStep === "battle";
-      modeStep?.classList.toggle("hidden", isBattleStep);
-      battleStep?.classList.toggle("hidden", !isBattleStep);
-      backBtn?.classList.toggle("hidden", !isBattleStep);
+      const isModeStep = setupStep === "mode";
+      modeStep?.classList.toggle("hidden", !isModeStep);
+      battleStep?.classList.toggle("hidden", isModeStep);
+      backBtn?.classList.toggle("hidden", !isModeStep);
       if (title) {
-        title.textContent = isBattleStep ? "Choose Battle Mode" : "Choose Game Mode";
+        title.textContent = isModeStep ? "Choose Game Mode" : "Choose Battle Mode";
       }
       if (intro) {
-        intro.textContent = isBattleStep
-          ? "Select how you want to play this battle."
-          : "Pick the rules first. Battle type comes next.";
+        intro.textContent = isModeStep
+          ? "Select Classic or Slammer."
+          : "Pick who you want to battle first.";
       }
       if (launchBtn) {
         launchBtn.textContent = "Next";
@@ -555,7 +555,7 @@ function showPlaySetupModal({ theme }) {
       }
     };
     const onBack = () => {
-      setupStep = "mode";
+      setupStep = "battle";
       updateStepUI();
     };
     battleTrainingBtn?.addEventListener("click", onBattleTraining);
@@ -586,8 +586,8 @@ function showPlaySetupModal({ theme }) {
     };
 
     const onLaunch = () => {
-      if (setupStep === "mode") {
-        setupStep = "battle";
+      if (setupStep === "battle") {
+        setupStep = "mode";
         updateStepUI();
         return;
       }
@@ -1125,7 +1125,7 @@ async function showCapSelectModal({
   });
 }
 
-async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
+async function showPvpRoomModal({ setup, playerIdentity }) {
   const {
     createPvpRoom,
     getPvpRoom,
@@ -1141,7 +1141,6 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
     const modeLabel = setup.gameMode === "slammer" ? "Slammer" : "Classic";
     const isWager = Boolean(setup.wager?.enabled);
     const wagerReady = !isWager || isPvpWagerConfigured();
-    const wagerRarity = capSelection?.playerCapMeta?.rarity || "";
     overlay.innerHTML = `
       <div class="play-setup-backdrop"></div>
       <div class="play-setup-panel pvp-room-panel">
@@ -1149,7 +1148,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
         <h2>${isWager ? "Wager PvP Room" : "PvP Room"}</h2>
         <p class="setup-hint">${
           isWager
-            ? `${modeLabel} wager room. Opponent must escrow a ${wagerRarity || "matching rarity"} cap.`
+            ? `${modeLabel} wager room. Choose the cap when you create or join. Opponent must escrow a matching rarity cap.`
             : `${modeLabel} room.`
         }</p>
         <div class="pvp-room-actions">
@@ -1177,8 +1176,8 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
               : !wagerReady
                 ? getPvpWagerConfigStatus()
                 : isWager
-                  ? "Create a wager room after escrowing your selected cap."
-                  : "Create a room or enter a code from another player."
+                  ? "Create a wager room and choose the cap to escrow."
+                  : "Create a room or click a public room to join."
           }
         </div>
         <div class="play-setup-actions">
@@ -1206,6 +1205,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
     let pollTimeoutId = null;
     let hasResolvedRoom = false;
     let hasActiveRoom = false;
+    let actionCapSelection = null;
 
     const lockRoomControls = () => {
       hasActiveRoom = true;
@@ -1238,6 +1238,28 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
       }
     };
 
+    const pickCapForRoomAction = async () => {
+      resultEl.textContent = isWager
+        ? "choose the wallet cap to escrow..."
+        : "choose your PvP cap...";
+      const nextCapSelection = await showCapSelectModal({
+        theme: currentTheme,
+        battleMode: setup.battleMode,
+        gameMode: setup.gameMode,
+        wager: setup.wager || { enabled: false },
+      });
+      if (!nextCapSelection) {
+        resultEl.textContent = mode === "join"
+          ? "Join canceled. Pick a room again when ready."
+          : isWager
+            ? "Create a wager room and choose the cap to escrow."
+            : "Create a room or click a public room to join.";
+        return null;
+      }
+      actionCapSelection = nextCapSelection;
+      return nextCapSelection;
+    };
+
     const renderPublicRooms = async () => {
       if (!publicRoomsEl || !isPvpConfigured()) {
         return;
@@ -1245,7 +1267,10 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
       publicRoomsEl.innerHTML = `<p>loading public rooms...</p>`;
       try {
         const payload = await listPvpRooms({ playerIdentity });
-        const rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
+        const rooms = (Array.isArray(payload?.rooms) ? payload.rooms : []).filter((room) => {
+          const roomIsWager = Boolean(room.setup?.wager?.enabled);
+          return room.mode === setup.gameMode && roomIsWager === isWager;
+        });
         if (rooms.length === 0) {
           publicRoomsEl.innerHTML = `<p>No public rooms yet. Create one and invite another player.</p>`;
           return;
@@ -1356,6 +1381,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
                 return;
               }
               cleanup();
+              state.clientCapSelection = actionCapSelection;
               resolve(state);
             }, 650);
             return;
@@ -1404,12 +1430,15 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
         ? event.target.closest("[data-room-code]")
         : null;
       const roomCode = button?.getAttribute("data-room-code") || "";
-      if (roomCode && codeInput) {
-        codeInput.value = roomCode;
+      if (roomCode) {
         setMode("join");
+        if (codeInput) {
+          codeInput.value = roomCode;
+        }
+        onSubmit({ roomCode });
       }
     };
-    const onSubmit = async () => {
+    const onSubmit = async ({ roomCode: requestedRoomCode = "" } = {}) => {
       if (hasActiveRoom) {
         return;
       }
@@ -1422,8 +1451,18 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
         return;
       }
       submitBtn.disabled = true;
+      const roomCode = String(requestedRoomCode || codeInput?.value || "").trim();
+      if (mode === "join" && !roomCode) {
+        resultEl.textContent = "Enter a room code or click a public room.";
+        submitBtn.disabled = false;
+        return;
+      }
       resultEl.textContent = mode === "join" ? "joining room..." : "creating room...";
       try {
+        const capSelection = await pickCapForRoomAction();
+        if (!capSelection) {
+          return;
+        }
         let escrowResult = null;
         let wagerSetup = null;
         if (isWager) {
@@ -1432,7 +1471,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
             resultEl.textContent = "loading wager room...";
             const preview = await getPvpRoom({
               playerIdentity,
-              roomCode: codeInput?.value || "",
+              roomCode,
             });
             wagerSetup = preview?.room?.setup?.wager || {};
             resultEl.textContent = "confirm opponent cap escrow in your wallet...";
@@ -1475,7 +1514,7 @@ async function showPvpRoomModal({ setup, capSelection, playerIdentity }) {
           mode === "join"
             ? await joinPvpRoom({
                 playerIdentity,
-                roomCode: codeInput?.value || "",
+                roomCode,
                 capSelection,
               })
             : await createPvpRoom({
@@ -2224,7 +2263,7 @@ async function showPlay({ pvpRoomCode = "", pvpRoomId = "" } = {}) {
     return;
   }
   let capSelection = null;
-  if (!resumePvpRoomState) {
+  if (!resumePvpRoomState && setup.battleMode !== "pvp") {
     capSelection = await showCapSelectModal({
       theme: currentTheme,
       battleMode: setup.battleMode,
@@ -2245,7 +2284,6 @@ async function showPlay({ pvpRoomCode = "", pvpRoomId = "" } = {}) {
       resumePvpRoomState ||
       (await showPvpRoomModal({
         setup,
-        capSelection,
         playerIdentity: getCurrentPlayerIdentity(),
       }));
     if (localVersion !== viewVersion || !roomState?.room) {
@@ -2254,6 +2292,7 @@ async function showPlay({ pvpRoomCode = "", pvpRoomId = "" } = {}) {
       }
       return;
     }
+    capSelection = roomState.clientCapSelection || capSelection;
     const {
       getPlayerIdentity,
       getPvpRoom,
